@@ -43,9 +43,32 @@ function AuthPage() {
       password: String(f.get("password")),
     });
     setBusy(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(
+        error.message.toLowerCase().includes("invalid")
+          ? "That email and password combination didn't work."
+          : error.message,
+      );
+      return;
+    }
     void navigate({ to: "/account" });
   }
+
+  async function forgotPassword() {
+    const email = window.prompt("Enter the email address on your account:")?.trim();
+    if (!email) return;
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("If that address has an account, a reset link is on the way.");
+  }
+
 
   async function signUp(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -66,7 +89,7 @@ function AuthPage() {
 
   async function google() {
     const result = await lovable.auth.signInWithOAuth("google", {
-      redirect_uri: window.location.origin,
+      redirect_uri: `${window.location.origin}/auth/callback`,
     });
     if (result.error) { toast.error("Google sign-in failed. Please try email instead."); return; }
     if (result.redirected) return;
@@ -108,9 +131,17 @@ function AuthPage() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
-              Sign in
+              {busy ? "Signing in…" : "Sign in"}
             </Button>
+            <button
+              type="button"
+              onClick={forgotPassword}
+              className="block w-full text-center text-sm font-medium text-primary hover:underline"
+            >
+              Forgot your password?
+            </button>
           </form>
+
         </TabsContent>
 
         <TabsContent value="signup" className="mt-6">
