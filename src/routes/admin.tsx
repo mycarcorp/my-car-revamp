@@ -3,6 +3,7 @@ import { useEffect } from "react";
 import { Car, FileText, Inbox, Settings, ExternalLink } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
+import { VerifyEmailGate } from "@/components/VerifyEmailGate";
 
 export const Route = createFileRoute("/admin")({
   head: () => ({
@@ -25,7 +26,7 @@ const NAV = [
 ] as const;
 
 function AdminLayout() {
-  const { user, isStaff, loading } = useAuth();
+  const { user, isStaff, loading, emailVerified } = useAuth();
   const navigate = useNavigate();
 
   useEffect(() => {
@@ -37,6 +38,8 @@ function AdminLayout() {
   }
 
   if (!user) return null;
+
+  if (!emailVerified) return <VerifyEmailGate email={user.email ?? ""} />;
 
   if (!isStaff) {
     return (
