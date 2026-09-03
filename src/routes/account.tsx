@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
 import { VehicleCard } from "@/components/VehicleCard";
+import { VerifyEmailGate } from "@/components/VerifyEmailGate";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/account")({
