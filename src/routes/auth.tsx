@@ -1,5 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
+import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,6 +10,7 @@ import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/useAuth";
 import { ResendVerificationButton } from "@/components/VerifyEmailGate";
+import { legacyMigrateLogin, linkLegacyProfile } from "@/lib/legacy-auth.functions";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -28,6 +30,8 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
+  const migrateLegacy = useServerFn(legacyMigrateLogin);
+  const linkLegacy = useServerFn(linkLegacyProfile);
   const { user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
