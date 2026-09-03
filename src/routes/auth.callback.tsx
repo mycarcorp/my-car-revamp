@@ -1,6 +1,7 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/client";
+import { linkLegacyProfile } from "@/lib/legacy-auth.functions";
 
 export const Route = createFileRoute("/auth/callback")({
   ssr: false,
@@ -27,6 +28,7 @@ function AuthCallbackPage() {
     const finish = (signedIn: boolean) => {
       if (done) return;
       done = true;
+      if (signedIn) void linkLegacyProfile({}).catch(() => undefined);
       void navigate({ to: signedIn ? "/account" : "/auth" });
     };
 
