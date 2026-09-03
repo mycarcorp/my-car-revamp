@@ -99,8 +99,11 @@ function AuthPage() {
         toast.error("An account with that email already exists. Try signing in instead.");
       } else if (m.includes("invalid") && m.includes("email")) {
         toast.error("That email address doesn't look valid.");
+      } else if (m.includes("pwned") || m.includes("compromised") || m.includes("leaked")) {
+        toast.error("That password has appeared in a data breach. Please choose a different one.");
       } else if (m.includes("password")) {
-        toast.error("Please choose a stronger password (at least 8 characters).");
+        toast.error(error.message || "Please choose a stronger password (at least 8 characters).");
+
       } else {
         toast.error(error.message || "We couldn't create your account. Please try again.");
       }
