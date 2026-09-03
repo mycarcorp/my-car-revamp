@@ -167,7 +167,17 @@ function AuthPage() {
         </TabsContent>
 
         <TabsContent value="signup" className="mt-6">
+          {pendingEmail && (
+            <div className="mb-6 rounded-lg border border-border bg-surface p-4 text-sm">
+              <p className="font-semibold">Check your email to confirm your account</p>
+              <p className="mt-1 text-muted-foreground">
+                We sent a confirmation link to {pendingEmail}. Click it to activate your account,
+                then sign in.
+              </p>
+            </div>
+          )}
           <form onSubmit={signUp} className="space-y-4">
+
             <div className="space-y-2">
               <Label htmlFor="su-name">Full name</Label>
               <Input id="su-name" name="full_name" required autoComplete="name" />
