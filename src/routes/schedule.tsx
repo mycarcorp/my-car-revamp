@@ -92,7 +92,7 @@ function SchedulePage() {
               </div>
               <div className="space-y-2">
                 <Label>Preferred time</Label>
-                <Select value={time} onValueChange={setTime}>
+                <Select value={time ?? ""} onValueChange={setTime}>
                   <SelectTrigger><SelectValue /></SelectTrigger>
                   <SelectContent>
                     {TIMES.map((t) => (
