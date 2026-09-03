@@ -9,7 +9,7 @@ export function VehicleCard({
   settings,
 }: {
   vehicle: VehicleWithPhotos;
-  settings?: SiteSettings | null;
+  settings?: SiteSettings | null | undefined;
 }) {
   const photos = [...(vehicle.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
   const cover = photos[0];

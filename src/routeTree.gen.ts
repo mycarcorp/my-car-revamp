@@ -19,6 +19,10 @@ import { Route as FinanceRouteImport } from './routes/finance'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SellRouteImport } from './routes/sell'
+import { Route as AdminIndexRouteImport } from './routes/admin.index'
+import { Route as AdminBlogRouteImport } from './routes/admin.blog'
+import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
+import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as InventorySlugRouteImport } from './routes/inventory.$slug'
@@ -75,6 +79,26 @@ const SellRoute = SellRouteImport.update({
   path: '/sell',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminIndexRoute = AdminIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBlogRoute = AdminBlogRouteImport.update({
+  id: '/blog',
+  path: '/blog',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminInventoryRoute = AdminInventoryRouteImport.update({
+  id: '/inventory',
+  path: '/inventory',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminSettingsRoute = AdminSettingsRouteImport.update({
+  id: '/settings',
+  path: '/settings',
+  getParentRoute: () => AdminRoute,
+} as any)
 const BlogIndexRoute = BlogIndexRouteImport.update({
   id: '/blog/',
   path: '/blog/',
@@ -105,16 +129,20 @@ export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/auth': typeof AuthRoute
   '/contact': typeof ContactRoute
   '/finance': typeof FinanceRoute
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
+  '/admin/blog': typeof AdminBlogRoute
+  '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
   '/locations/$slug': typeof LocationsSlugRoute
+  '/admin/': typeof AdminIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/locations/': typeof LocationsIndexRoute
 }
@@ -122,16 +150,19 @@ export interface FileRoutesByTo {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
-  '/admin': typeof AdminRoute
   '/auth': typeof AuthRoute
   '/contact': typeof ContactRoute
   '/finance': typeof FinanceRoute
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
+  '/admin/blog': typeof AdminBlogRoute
+  '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
   '/locations/$slug': typeof LocationsSlugRoute
+  '/admin': typeof AdminIndexRoute
   '/blog': typeof BlogIndexRoute
   '/locations': typeof LocationsIndexRoute
 }
@@ -140,16 +171,20 @@ export interface FileRoutesById {
   '/': typeof IndexRoute
   '/about': typeof AboutRoute
   '/account': typeof AccountRoute
-  '/admin': typeof AdminRoute
+  '/admin': typeof AdminRouteWithChildren
   '/auth': typeof AuthRoute
   '/contact': typeof ContactRoute
   '/finance': typeof FinanceRoute
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
+  '/admin/blog': typeof AdminBlogRoute
+  '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/settings': typeof AdminSettingsRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
   '/locations/$slug': typeof LocationsSlugRoute
+  '/admin/': typeof AdminIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/locations/': typeof LocationsIndexRoute
 }
@@ -166,9 +201,13 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/search'
     | '/sell'
+    | '/admin/blog'
+    | '/admin/inventory'
+    | '/admin/settings'
     | '/blog/$slug'
     | '/inventory/$slug'
     | '/locations/$slug'
+    | '/admin/'
     | '/blog/'
     | '/locations/'
   fileRoutesByTo: FileRoutesByTo
@@ -176,16 +215,19 @@ export interface FileRouteTypes {
     | '/'
     | '/about'
     | '/account'
-    | '/admin'
     | '/auth'
     | '/contact'
     | '/finance'
     | '/schedule'
     | '/search'
     | '/sell'
+    | '/admin/blog'
+    | '/admin/inventory'
+    | '/admin/settings'
     | '/blog/$slug'
     | '/inventory/$slug'
     | '/locations/$slug'
+    | '/admin'
     | '/blog'
     | '/locations'
   id:
@@ -200,9 +242,13 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/search'
     | '/sell'
+    | '/admin/blog'
+    | '/admin/inventory'
+    | '/admin/settings'
     | '/blog/$slug'
     | '/inventory/$slug'
     | '/locations/$slug'
+    | '/admin/'
     | '/blog/'
     | '/locations/'
   fileRoutesById: FileRoutesById
@@ -211,7 +257,7 @@ export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
   AboutRoute: typeof AboutRoute
   AccountRoute: typeof AccountRoute
-  AdminRoute: typeof AdminRoute
+  AdminRoute: typeof AdminRouteWithChildren
   AuthRoute: typeof AuthRoute
   ContactRoute: typeof ContactRoute
   FinanceRoute: typeof FinanceRoute
@@ -297,6 +343,34 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SellRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/': {
+      id: '/admin/'
+      path: '/'
+      fullPath: '/admin/'
+      preLoaderRoute: typeof AdminIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/blog': {
+      id: '/admin/blog'
+      path: '/blog'
+      fullPath: '/admin/blog'
+      preLoaderRoute: typeof AdminBlogRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/inventory': {
+      id: '/admin/inventory'
+      path: '/inventory'
+      fullPath: '/admin/inventory'
+      preLoaderRoute: typeof AdminInventoryRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/settings': {
+      id: '/admin/settings'
+      path: '/settings'
+      fullPath: '/admin/settings'
+      preLoaderRoute: typeof AdminSettingsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/blog/': {
       id: '/blog/'
       path: '/blog'
@@ -335,11 +409,27 @@ declare module '@tanstack/react-router' {
   }
 }
 
+interface AdminRouteChildren {
+  AdminBlogRoute: typeof AdminBlogRoute
+  AdminInventoryRoute: typeof AdminInventoryRoute
+  AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminIndexRoute: typeof AdminIndexRoute
+}
+
+const AdminRouteChildren: AdminRouteChildren = {
+  AdminBlogRoute: AdminBlogRoute,
+  AdminInventoryRoute: AdminInventoryRoute,
+  AdminSettingsRoute: AdminSettingsRoute,
+  AdminIndexRoute: AdminIndexRoute,
+}
+
+const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AboutRoute: AboutRoute,
   AccountRoute: AccountRoute,
-  AdminRoute: AdminRoute,
+  AdminRoute: AdminRouteWithChildren,
   AuthRoute: AuthRoute,
   ContactRoute: ContactRoute,
   FinanceRoute: FinanceRoute,

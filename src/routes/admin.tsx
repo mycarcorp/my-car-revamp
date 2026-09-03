@@ -19,9 +19,9 @@ export const Route = createFileRoute("/admin")({
 
 const NAV = [
   { to: "/admin", label: "Lead inbox", icon: Inbox, exact: true },
-  { to: "/admin/inventory", label: "Inventory", icon: Car },
-  { to: "/admin/blog", label: "Blog", icon: FileText },
-  { to: "/admin/settings", label: "Site settings", icon: Settings },
+  { to: "/admin/inventory", label: "Inventory", icon: Car, exact: false },
+  { to: "/admin/blog", label: "Blog", icon: FileText, exact: false },
+  { to: "/admin/settings", label: "Site settings", icon: Settings, exact: false },
 ] as const;
 
 function AdminLayout() {
@@ -65,7 +65,7 @@ function AdminLayout() {
             <Link
               key={item.to}
               to={item.to}
-              activeOptions={{ exact: "exact" in item ? item.exact : false }}
+              activeOptions={{ exact: item.exact }}
               activeProps={{ className: "bg-sidebar-accent" }}
               className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-sidebar-accent"
             >

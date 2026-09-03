@@ -15,22 +15,22 @@ import { VehicleCard } from "@/components/VehicleCard";
 import { PAGE_SIZE, facetsQuery, siteSettingsQuery, vehicleSearchQuery, type SearchFilters } from "@/lib/queries";
 
 type SearchParams = {
-  q?: string;
-  make?: string;
-  model?: string;
-  body?: string;
-  fuel?: string;
-  drivetrain?: string;
-  color?: string;
-  priceMin?: number;
-  priceMax?: number;
-  yearMin?: number;
-  yearMax?: number;
-  mileageMax?: number;
-  mpgMin?: number;
-  deal?: string;
-  sort?: string;
-  page?: number;
+  q?: string | undefined;
+  make?: string | undefined;
+  model?: string | undefined;
+  body?: string | undefined;
+  fuel?: string | undefined;
+  drivetrain?: string | undefined;
+  color?: string | undefined;
+  priceMin?: number | undefined;
+  priceMax?: number | undefined;
+  yearMin?: number | undefined;
+  yearMax?: number | undefined;
+  mileageMax?: number | undefined;
+  mpgMin?: number | undefined;
+  deal?: string | undefined;
+  sort?: string | undefined;
+  page?: number | undefined;
 };
 
 const str = (v: unknown) => (typeof v === "string" && v.length > 0 ? v : undefined);
@@ -110,7 +110,7 @@ function SearchPage() {
     onChange,
   }: {
     label: string;
-    value?: string;
+    value?: string | undefined;
     options: { value: string; count: number }[];
     onChange: (v?: string) => void;
   }) => (
