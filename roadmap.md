@@ -8,14 +8,12 @@
 ## Done (cont.)
 - Sign-in / registration page + Google sign-in
 - Staff admin: lead inbox, inventory manager, blog editor, site settings
-
-## Blocked
-- Load inventory from `mycarco_db.mc_cars`: that schema/table does not exist in this project's
-  Lovable Cloud backend (only `public` + Supabase system schemas). Need either the data export to
-  import into `public.vehicles`, or confirmation of which backend holds mc_cars.
-  Listing pages already read live records from the database (no mock data) with loading/empty/error states.
+- Legacy inventory import: 38 vehicles in `public.vehicles`
+- Legacy photo import: 190 images in the `vehicle-photos` storage bucket (VIN-based paths),
+  190 `vehicle_photos` rows, served through `/api/public/vehicle-photos/{vin}/photo-N.jpg`
+  (public storage buckets are blocked on this platform, so a read-only proxy route serves them)
 
 ## Still to do
-- Inventory feed/CSV import
-- Original photography for remaining stock imagery
+- Ongoing inventory feed sync
 - Security linter pass on RLS
+
