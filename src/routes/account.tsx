@@ -9,6 +9,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/client";
 import { siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
 import { VehicleCard } from "@/components/VehicleCard";
+import { VerifyEmailGate } from "@/components/VerifyEmailGate";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/account")({
@@ -28,7 +29,7 @@ export const Route = createFileRoute("/account")({
 });
 
 function AccountPage() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, emailVerified, signOut } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: settings } = useQuery(siteSettingsQuery());
@@ -77,6 +78,8 @@ function AccountPage() {
   });
 
   if (!user) return null;
+
+  if (!emailVerified) return <VerifyEmailGate email={user.email ?? ""} />;
 
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">

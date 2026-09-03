@@ -10,6 +10,7 @@ type AuthState = {
   roles: Role[];
   isStaff: boolean;
   isOwner: boolean;
+  emailVerified: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
 };
@@ -20,6 +21,7 @@ const AuthContext = createContext<AuthState>({
   roles: [],
   isStaff: false,
   isOwner: false,
+  emailVerified: false,
   loading: true,
   signOut: async () => {},
 });
@@ -67,6 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roles,
     isStaff: roles.includes("owner") || roles.includes("editor"),
     isOwner: roles.includes("owner"),
+    emailVerified: Boolean(
+      session?.user?.email_confirmed_at ?? (session?.user as { confirmed_at?: string } | undefined)?.confirmed_at,
+    ),
     loading,
     signOut: async () => {
       await supabase.auth.signOut();
