@@ -43,9 +43,32 @@ function AuthPage() {
       password: String(f.get("password")),
     });
     setBusy(false);
-    if (error) { toast.error(error.message); return; }
+    if (error) {
+      toast.error(
+        error.message.toLowerCase().includes("invalid")
+          ? "That email and password combination didn't work."
+          : error.message,
+      );
+      return;
+    }
     void navigate({ to: "/account" });
   }
+
+  async function forgotPassword() {
+    const email = window.prompt("Enter the email address on your account:")?.trim();
+    if (!email) return;
+    setBusy(true);
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    setBusy(false);
+    if (error) {
+      toast.error(error.message);
+      return;
+    }
+    toast.success("If that address has an account, a reset link is on the way.");
+  }
+
 
   async function signUp(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
