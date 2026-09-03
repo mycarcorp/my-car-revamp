@@ -8,6 +8,7 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { supabase } from "@/integrations/supabase/client";
 import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/useAuth";
+import { ResendVerificationButton } from "@/components/VerifyEmailGate";
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -39,17 +40,22 @@ function AuthPage() {
   async function signIn(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const email = String(f.get("email")).trim().toLowerCase();
     setBusy(true);
     const { error } = await supabase.auth.signInWithPassword({
-      email: String(f.get("email")),
+      email,
       password: String(f.get("password")),
     });
     setBusy(false);
     if (error) {
+      const m = error.message.toLowerCase();
+      if (m.includes("not confirmed") || m.includes("email_not_confirmed")) {
+        setPendingEmail(email);
+        toast.error("Please verify your email before signing in.");
+        return;
+      }
       toast.error(
-        error.message.toLowerCase().includes("invalid")
-          ? "That email and password combination didn't work."
-          : error.message,
+        m.includes("invalid") ? "That email and password combination didn't work." : error.message,
       );
       return;
     }
@@ -57,7 +63,7 @@ function AuthPage() {
   }
 
   async function forgotPassword() {
-    const email = window.prompt("Enter the email address on your account:")?.trim();
+    const email = window.prompt("Enter the email address on your account:")?.trim().toLowerCase();
     if (!email) return;
     setBusy(true);
     const { error } = await supabase.auth.resetPasswordForEmail(email, {
@@ -75,7 +81,7 @@ function AuthPage() {
   async function signUp(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
-    const email = String(f.get("email")).trim();
+    const email = String(f.get("email")).trim().toLowerCase();
     const password = String(f.get("password"));
     setBusy(true);
     const { data, error } = await supabase.auth.signUp({
@@ -126,6 +132,17 @@ function AuthPage() {
         send us.
       </p>
 
+      {pendingEmail && (
+        <div className="mt-6 rounded-lg border border-border bg-surface p-4 text-sm">
+          <p className="font-semibold">Waiting for verification</p>
+          <p className="mt-1 text-muted-foreground">
+            Your account has been created. Please check your email and verify your account before
+            signing in. We sent the link to {pendingEmail}.
+          </p>
+          <ResendVerificationButton email={pendingEmail} className="mt-3" />
+        </div>
+      )}
+
       <Tabs defaultValue="signin" className="mt-8">
         <TabsList className="w-full">
           <TabsTrigger value="signin" className="flex-1">
@@ -167,15 +184,6 @@ function AuthPage() {
         </TabsContent>
 
         <TabsContent value="signup" className="mt-6">
-          {pendingEmail && (
-            <div className="mb-6 rounded-lg border border-border bg-surface p-4 text-sm">
-              <p className="font-semibold">Check your email to confirm your account</p>
-              <p className="mt-1 text-muted-foreground">
-                We sent a confirmation link to {pendingEmail}. Click it to activate your account,
-                then sign in.
-              </p>
-            </div>
-          )}
           <form onSubmit={signUp} className="space-y-4">
 
             <div className="space-y-2">
