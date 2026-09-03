@@ -5,11 +5,17 @@
 - Design system, header/footer, home, search, VDP, finance, sell, schedule, contact, about, blog, locations, auth, account
 - Google sign-in enabled
 
-## In progress
+## Done (cont.)
+- Sign-in / registration page + Google sign-in
 - Staff admin: lead inbox, inventory manager, blog editor, site settings
 
-## New (from user)
-- Read real inventory from custom schema `mycarco_db.mc_cars` instead of the app's own vehicles table
-  - Inspect mc_cars columns, map to existing vehicle cards / VDP
-  - Loading, empty and error states
-  - Read-only: no writes or deletes to mc_cars
+## Blocked
+- Load inventory from `mycarco_db.mc_cars`: that schema/table does not exist in this project's
+  Lovable Cloud backend (only `public` + Supabase system schemas). Need either the data export to
+  import into `public.vehicles`, or confirmation of which backend holds mc_cars.
+  Listing pages already read live records from the database (no mock data) with loading/empty/error states.
+
+## Still to do
+- Inventory feed/CSV import
+- Original photography for remaining stock imagery
+- Security linter pass on RLS
