@@ -17,6 +17,7 @@ import { formatDate } from "@/lib/format";
 import type { Database } from "@/integrations/supabase/types";
 
 type LeadStatus = Database["public"]["Enums"]["lead_status"];
+type LeadUpdate = Database["public"]["Tables"]["leads"]["Update"];
 
 export const Route = createFileRoute("/admin/")({
   component: LeadInbox,
@@ -43,9 +44,9 @@ function LeadInbox() {
     },
   });
 
-  async function update(id: string, patch: Record<string, unknown>) {
+  async function update(id: string, patch: LeadUpdate) {
     const { error } = await supabase.from("leads").update(patch).eq("id", id);
-    if (error) return toast.error("Could not update this lead.");
+    if (error) { toast.error("Could not update this lead."); return; }
     void queryClient.invalidateQueries({ queryKey: ["admin", "leads"] });
     toast.success("Lead updated.");
   }
@@ -133,7 +134,7 @@ function LeadInbox() {
                     <div className="flex flex-wrap items-center gap-3">
                       <Select
                         value={lead.status}
-                        onValueChange={(v) => update(lead.id, { status: v })}
+                        onValueChange={(v) => update(lead.id, { status: v as LeadStatus })}
                       >
                         <SelectTrigger className="w-44">
                           <SelectValue />

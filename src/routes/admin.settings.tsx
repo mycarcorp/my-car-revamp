@@ -57,7 +57,7 @@ function AdminSettings() {
         hours: hours as never,
       })
       .eq("id", 1);
-    if (error) return toast.error("Only an owner can change site settings.");
+    if (error) { toast.error("Only an owner can change site settings."); return; }
     void queryClient.invalidateQueries({ queryKey: ["site-settings"] });
     toast.success("Settings saved.");
   }

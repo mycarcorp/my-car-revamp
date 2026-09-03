@@ -15,6 +15,7 @@ import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
 import type { Database } from "@/integrations/supabase/types";
 
 type VehicleStatus = Database["public"]["Enums"]["vehicle_status"];
+type VehicleUpdate = Database["public"]["Tables"]["vehicles"]["Update"];
 
 export const Route = createFileRoute("/admin/inventory")({
   component: AdminInventory,
@@ -37,9 +38,9 @@ function AdminInventory() {
     },
   });
 
-  async function update(id: string, patch: Record<string, unknown>) {
+  async function update(id: string, patch: VehicleUpdate) {
     const { error } = await supabase.from("vehicles").update(patch).eq("id", id);
-    if (error) return toast.error("Could not update this vehicle.");
+    if (error) { toast.error("Could not update this vehicle."); return; }
     void queryClient.invalidateQueries({ queryKey: ["admin", "vehicles"] });
     void queryClient.invalidateQueries({ queryKey: ["vehicles"] });
     toast.success("Vehicle updated.");
@@ -90,7 +91,7 @@ function AdminInventory() {
                   <td className="p-3 text-muted-foreground">{formatMiles(v.mileage)}</td>
                   <td className="p-3">{formatUsd(Number(v.price_cents))}</td>
                   <td className="p-3">
-                    <Select value={v.status} onValueChange={(s) => update(v.id, { status: s })}>
+                    <Select value={v.status} onValueChange={(s) => update(v.id, { status: s as VehicleStatus })}>
                       <SelectTrigger className="w-36">
                         <SelectValue />
                       </SelectTrigger>

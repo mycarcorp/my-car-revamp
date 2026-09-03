@@ -54,7 +54,7 @@ function AdminBlog() {
       cover_image_url: cover || null,
     });
     setSaving(false);
-    if (error) return toast.error("Could not save this post.");
+    if (error) { toast.error("Could not save this post."); return; }
     setTitle("");
     setExcerpt("");
     setBody("");
@@ -68,7 +68,7 @@ function AdminBlog() {
       .from("blog_posts")
       .update({ published, published_at: published ? new Date().toISOString() : null })
       .eq("id", id);
-    if (error) return toast.error("Could not update this post.");
+    if (error) { toast.error("Could not update this post."); return; }
     void queryClient.invalidateQueries({ queryKey: ["admin", "posts"] });
     void queryClient.invalidateQueries({ queryKey: ["blog"] });
   }
