@@ -106,6 +106,10 @@ function AuthPage() {
       }
       return;
     }
+    if (!data.user) {
+      toast.error("We couldn't create your account. Please try again.");
+      return;
+    }
     if (data.session) {
       void navigate({ to: "/account" });
       return;
