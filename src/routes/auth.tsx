@@ -1,6 +1,5 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { useServerFn } from "@tanstack/react-start";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -30,8 +29,6 @@ export const Route = createFileRoute("/auth")({
 
 function AuthPage() {
   const navigate = useNavigate();
-  const migrateLegacy = useServerFn(legacyMigrateLogin);
-  const linkLegacy = useServerFn(linkLegacyProfile);
   const { user } = useAuth();
   const [busy, setBusy] = useState(false);
   const [pendingEmail, setPendingEmail] = useState<string | null>(null);
@@ -52,7 +49,7 @@ function AuthPage() {
     // Legacy fallback: only when this email has no account in Supabase Auth yet.
     if (error && error.message.toLowerCase().includes("invalid")) {
       try {
-        const res = await migrateLegacy({ data: { email, password } });
+        const res = await legacyMigrateLogin({ data: { email, password } });
         if (res.status === "migrated") {
           ({ error } = await supabase.auth.signInWithPassword({ email, password }));
         } else if (res.status === "google_only") {
@@ -77,7 +74,7 @@ function AuthPage() {
       );
       return;
     }
-    void linkLegacy({}).catch(() => undefined);
+    void linkLegacyProfile({}).catch(() => undefined);
     void navigate({ to: "/account" });
   }
 
