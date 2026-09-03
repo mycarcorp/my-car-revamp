@@ -198,8 +198,9 @@ function AuthPage() {
               />
             </div>
             <Button type="submit" className="w-full" disabled={busy}>
-              Create account
+              {busy ? "Creating account…" : "Create account"}
             </Button>
+
           </form>
         </TabsContent>
       </Tabs>
