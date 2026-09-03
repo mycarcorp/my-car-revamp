@@ -16,7 +16,11 @@ import { Route as FinanceRouteImport } from './routes/finance'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SellRouteImport } from './routes/sell'
+import { Route as BlogIndexRouteImport } from './routes/blog.index'
+import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as InventorySlugRouteImport } from './routes/inventory.$slug'
+import { Route as LocationsIndexRouteImport } from './routes/locations.index'
+import { Route as LocationsSlugRouteImport } from './routes/locations.$slug'
 
 const IndexRoute = IndexRouteImport.update({
   id: '/',
@@ -53,9 +57,29 @@ const SellRoute = SellRouteImport.update({
   path: '/sell',
   getParentRoute: () => rootRouteImport,
 } as any)
+const BlogIndexRoute = BlogIndexRouteImport.update({
+  id: '/blog/',
+  path: '/blog/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const BlogSlugRoute = BlogSlugRouteImport.update({
+  id: '/blog/$slug',
+  path: '/blog/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const InventorySlugRoute = InventorySlugRouteImport.update({
   id: '/inventory/$slug',
   path: '/inventory/$slug',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LocationsIndexRoute = LocationsIndexRouteImport.update({
+  id: '/locations/',
+  path: '/locations/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LocationsSlugRoute = LocationsSlugRouteImport.update({
+  id: '/locations/$slug',
+  path: '/locations/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
 
@@ -67,7 +91,11 @@ export interface FileRoutesByFullPath {
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
+  '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
+  '/locations/$slug': typeof LocationsSlugRoute
+  '/blog/': typeof BlogIndexRoute
+  '/locations/': typeof LocationsIndexRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
@@ -77,7 +105,11 @@ export interface FileRoutesByTo {
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
+  '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
+  '/locations/$slug': typeof LocationsSlugRoute
+  '/blog': typeof BlogIndexRoute
+  '/locations': typeof LocationsIndexRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
@@ -88,7 +120,11 @@ export interface FileRoutesById {
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
+  '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
+  '/locations/$slug': typeof LocationsSlugRoute
+  '/blog/': typeof BlogIndexRoute
+  '/locations/': typeof LocationsIndexRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
@@ -100,7 +136,11 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/search'
     | '/sell'
+    | '/blog/$slug'
     | '/inventory/$slug'
+    | '/locations/$slug'
+    | '/blog/'
+    | '/locations/'
   fileRoutesByTo: FileRoutesByTo
   to:
     | '/'
@@ -110,7 +150,11 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/search'
     | '/sell'
+    | '/blog/$slug'
     | '/inventory/$slug'
+    | '/locations/$slug'
+    | '/blog'
+    | '/locations'
   id:
     | '__root__'
     | '/'
@@ -120,7 +164,11 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/search'
     | '/sell'
+    | '/blog/$slug'
     | '/inventory/$slug'
+    | '/locations/$slug'
+    | '/blog/'
+    | '/locations/'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
@@ -131,7 +179,11 @@ export interface RootRouteChildren {
   ScheduleRoute: typeof ScheduleRoute
   SearchRoute: typeof SearchRoute
   SellRoute: typeof SellRoute
+  BlogSlugRoute: typeof BlogSlugRoute
   InventorySlugRoute: typeof InventorySlugRoute
+  LocationsSlugRoute: typeof LocationsSlugRoute
+  BlogIndexRoute: typeof BlogIndexRoute
+  LocationsIndexRoute: typeof LocationsIndexRoute
 }
 
 declare module '@tanstack/react-router' {
@@ -185,11 +237,39 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof SellRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/blog/': {
+      id: '/blog/'
+      path: '/blog'
+      fullPath: '/blog/'
+      preLoaderRoute: typeof BlogIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/blog/$slug': {
+      id: '/blog/$slug'
+      path: '/blog/$slug'
+      fullPath: '/blog/$slug'
+      preLoaderRoute: typeof BlogSlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/inventory/$slug': {
       id: '/inventory/$slug'
       path: '/inventory/$slug'
       fullPath: '/inventory/$slug'
       preLoaderRoute: typeof InventorySlugRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/locations/': {
+      id: '/locations/'
+      path: '/locations'
+      fullPath: '/locations/'
+      preLoaderRoute: typeof LocationsIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/locations/$slug': {
+      id: '/locations/$slug'
+      path: '/locations/$slug'
+      fullPath: '/locations/$slug'
+      preLoaderRoute: typeof LocationsSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
   }
@@ -203,7 +283,11 @@ const rootRouteChildren: RootRouteChildren = {
   ScheduleRoute: ScheduleRoute,
   SearchRoute: SearchRoute,
   SellRoute: SellRoute,
+  BlogSlugRoute: BlogSlugRoute,
   InventorySlugRoute: InventorySlugRoute,
+  LocationsSlugRoute: LocationsSlugRoute,
+  BlogIndexRoute: BlogIndexRoute,
+  LocationsIndexRoute: LocationsIndexRoute,
 }
 export const routeTree = rootRouteImport
   ._addFileChildren(rootRouteChildren)
