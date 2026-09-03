@@ -41,11 +41,25 @@ function AuthPage() {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
     const email = String(f.get("email")).trim().toLowerCase();
+    const password = String(f.get("password"));
     setBusy(true);
-    const { error } = await supabase.auth.signInWithPassword({
-      email,
-      password: String(f.get("password")),
-    });
+    let { error } = await supabase.auth.signInWithPassword({ email, password });
+
+    // Legacy fallback: only when this email has no account in Supabase Auth yet.
+    if (error && error.message.toLowerCase().includes("invalid")) {
+      try {
+        const res = await migrateLegacy({ data: { email, password } });
+        if (res.status === "migrated") {
+          ({ error } = await supabase.auth.signInWithPassword({ email, password }));
+        } else if (res.status === "google_only") {
+          setBusy(false);
+          toast.error("This account uses Google sign-in. Please continue with Google.");
+          return;
+        }
+      } catch {
+        /* fall through to the normal error message */
+      }
+    }
     setBusy(false);
     if (error) {
       const m = error.message.toLowerCase();
@@ -59,8 +73,11 @@ function AuthPage() {
       );
       return;
     }
+    void linkLegacy({}).catch(() => undefined);
     void navigate({ to: "/account" });
   }
+
+
 
   async function forgotPassword() {
     const email = window.prompt("Enter the email address on your account:")?.trim().toLowerCase();
