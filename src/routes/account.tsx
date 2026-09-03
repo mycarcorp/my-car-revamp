@@ -28,7 +28,7 @@ export const Route = createFileRoute("/account")({
 });
 
 function AccountPage() {
-  const { user, loading, signOut } = useAuth();
+  const { user, loading, emailVerified, signOut } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: settings } = useQuery(siteSettingsQuery());
