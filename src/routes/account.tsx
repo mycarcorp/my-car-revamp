@@ -78,6 +78,8 @@ function AccountPage() {
 
   if (!user) return null;
 
+  if (!emailVerified) return <VerifyEmailGate email={user.email ?? ""} />;
+
   return (
     <div className="mx-auto max-w-6xl px-4 py-12">
       <div className="flex flex-wrap items-center justify-between gap-4">
