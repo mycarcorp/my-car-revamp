@@ -45,16 +45,16 @@ function AdminSettings() {
     const { error } = await supabase
       .from("site_settings")
       .update({
-        dealership_name: form["dealership_name"],
-        phone: form["phone"],
-        email: form["email"],
-        address_line: form["address_line"],
+        dealership_name: form["dealership_name"] ?? "",
+        phone: form["phone"] ?? "",
+        email: form["email"] ?? "",
+        address_line: form["address_line"] ?? "",
         finance_apr: Number(form["finance_apr"]),
         finance_term_months: Number(form["finance_term_months"]),
         finance_down_percent: Number(form["finance_down_percent"]),
-        finance_disclosure: form["finance_disclosure"],
-        trust_badges: badges as never,
-        hours: hours as never,
+        finance_disclosure: form["finance_disclosure"] ?? "",
+        trust_badges: badges as unknown as Database["public"]["Tables"]["site_settings"]["Update"]["trust_badges"],
+        hours: hours as unknown as Database["public"]["Tables"]["site_settings"]["Update"]["hours"],
       })
       .eq("id", 1);
     if (error) { toast.error("Only an owner can change site settings."); return; }
