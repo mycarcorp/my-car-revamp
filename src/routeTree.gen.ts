@@ -10,7 +10,12 @@
 
 import { Route as rootRouteImport } from './routes/__root'
 import { Route as IndexRouteImport } from './routes/index'
+import { Route as AboutRouteImport } from './routes/about'
+import { Route as ContactRouteImport } from './routes/contact'
+import { Route as FinanceRouteImport } from './routes/finance'
+import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as SearchRouteImport } from './routes/search'
+import { Route as SellRouteImport } from './routes/sell'
 import { Route as InventorySlugRouteImport } from './routes/inventory.$slug'
 
 const IndexRoute = IndexRouteImport.update({
@@ -18,9 +23,34 @@ const IndexRoute = IndexRouteImport.update({
   path: '/',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AboutRoute = AboutRouteImport.update({
+  id: '/about',
+  path: '/about',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ContactRoute = ContactRouteImport.update({
+  id: '/contact',
+  path: '/contact',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const FinanceRoute = FinanceRouteImport.update({
+  id: '/finance',
+  path: '/finance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ScheduleRoute = ScheduleRouteImport.update({
+  id: '/schedule',
+  path: '/schedule',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const SearchRoute = SearchRouteImport.update({
   id: '/search',
   path: '/search',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SellRoute = SellRouteImport.update({
+  id: '/sell',
+  path: '/sell',
   getParentRoute: () => rootRouteImport,
 } as any)
 const InventorySlugRoute = InventorySlugRouteImport.update({
@@ -31,31 +61,76 @@ const InventorySlugRoute = InventorySlugRouteImport.update({
 
 export interface FileRoutesByFullPath {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/contact': typeof ContactRoute
+  '/finance': typeof FinanceRoute
+  '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
+  '/sell': typeof SellRoute
   '/inventory/$slug': typeof InventorySlugRoute
 }
 export interface FileRoutesByTo {
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/contact': typeof ContactRoute
+  '/finance': typeof FinanceRoute
+  '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
+  '/sell': typeof SellRoute
   '/inventory/$slug': typeof InventorySlugRoute
 }
 export interface FileRoutesById {
   __root__: typeof rootRouteImport
   '/': typeof IndexRoute
+  '/about': typeof AboutRoute
+  '/contact': typeof ContactRoute
+  '/finance': typeof FinanceRoute
+  '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
+  '/sell': typeof SellRoute
   '/inventory/$slug': typeof InventorySlugRoute
 }
 export interface FileRouteTypes {
   fileRoutesByFullPath: FileRoutesByFullPath
-  fullPaths: '/' | '/search' | '/inventory/$slug'
+  fullPaths:
+    | '/'
+    | '/about'
+    | '/contact'
+    | '/finance'
+    | '/schedule'
+    | '/search'
+    | '/sell'
+    | '/inventory/$slug'
   fileRoutesByTo: FileRoutesByTo
-  to: '/' | '/search' | '/inventory/$slug'
-  id: '__root__' | '/' | '/search' | '/inventory/$slug'
+  to:
+    | '/'
+    | '/about'
+    | '/contact'
+    | '/finance'
+    | '/schedule'
+    | '/search'
+    | '/sell'
+    | '/inventory/$slug'
+  id:
+    | '__root__'
+    | '/'
+    | '/about'
+    | '/contact'
+    | '/finance'
+    | '/schedule'
+    | '/search'
+    | '/sell'
+    | '/inventory/$slug'
   fileRoutesById: FileRoutesById
 }
 export interface RootRouteChildren {
   IndexRoute: typeof IndexRoute
+  AboutRoute: typeof AboutRoute
+  ContactRoute: typeof ContactRoute
+  FinanceRoute: typeof FinanceRoute
+  ScheduleRoute: typeof ScheduleRoute
   SearchRoute: typeof SearchRoute
+  SellRoute: typeof SellRoute
   InventorySlugRoute: typeof InventorySlugRoute
 }
 
@@ -68,11 +143,46 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof IndexRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/about': {
+      id: '/about'
+      path: '/about'
+      fullPath: '/about'
+      preLoaderRoute: typeof AboutRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/contact': {
+      id: '/contact'
+      path: '/contact'
+      fullPath: '/contact'
+      preLoaderRoute: typeof ContactRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/finance': {
+      id: '/finance'
+      path: '/finance'
+      fullPath: '/finance'
+      preLoaderRoute: typeof FinanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/schedule': {
+      id: '/schedule'
+      path: '/schedule'
+      fullPath: '/schedule'
+      preLoaderRoute: typeof ScheduleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/search': {
       id: '/search'
       path: '/search'
       fullPath: '/search'
       preLoaderRoute: typeof SearchRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sell': {
+      id: '/sell'
+      path: '/sell'
+      fullPath: '/sell'
+      preLoaderRoute: typeof SellRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/inventory/$slug': {
@@ -87,7 +197,12 @@ declare module '@tanstack/react-router' {
 
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
+  AboutRoute: AboutRoute,
+  ContactRoute: ContactRoute,
+  FinanceRoute: FinanceRoute,
+  ScheduleRoute: ScheduleRoute,
   SearchRoute: SearchRoute,
+  SellRoute: SellRoute,
   InventorySlugRoute: InventorySlugRoute,
 }
 export const routeTree = rootRouteImport
