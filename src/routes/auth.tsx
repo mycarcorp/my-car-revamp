@@ -29,6 +29,8 @@ function AuthPage() {
   const navigate = useNavigate();
   const { user } = useAuth();
   const [busy, setBusy] = useState(false);
+  const [pendingEmail, setPendingEmail] = useState<string | null>(null);
+
 
   useEffect(() => {
     if (user) void navigate({ to: "/account" });
@@ -73,19 +75,39 @@ function AuthPage() {
   async function signUp(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const f = new FormData(e.currentTarget);
+    const email = String(f.get("email")).trim();
+    const password = String(f.get("password"));
     setBusy(true);
-    const { error } = await supabase.auth.signUp({
-      email: String(f.get("email")),
-      password: String(f.get("password")),
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
       options: {
-        emailRedirectTo: `${window.location.origin}/account`,
+        emailRedirectTo: `${window.location.origin}/auth/callback`,
         data: { full_name: String(f.get("full_name")) },
       },
     });
     setBusy(false);
-    if (error) { toast.error(error.message); return; }
-    toast.success("Account created. Check your email to confirm, then sign in.");
+    if (error) {
+      const m = error.message.toLowerCase();
+      if (m.includes("already registered") || m.includes("already been registered") || m.includes("user already")) {
+        toast.error("An account with that email already exists. Try signing in instead.");
+      } else if (m.includes("invalid") && m.includes("email")) {
+        toast.error("That email address doesn't look valid.");
+      } else if (m.includes("password")) {
+        toast.error("Please choose a stronger password (at least 8 characters).");
+      } else {
+        toast.error(error.message || "We couldn't create your account. Please try again.");
+      }
+      return;
+    }
+    if (data.session) {
+      void navigate({ to: "/account" });
+      return;
+    }
+    setPendingEmail(email);
+    toast.success("Check your email to confirm your account.");
   }
+
 
   async function google() {
     const result = await lovable.auth.signInWithOAuth("google", {
