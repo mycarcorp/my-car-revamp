@@ -69,6 +69,9 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     roles,
     isStaff: roles.includes("owner") || roles.includes("editor"),
     isOwner: roles.includes("owner"),
+    emailVerified: Boolean(
+      session?.user?.email_confirmed_at ?? (session?.user as { confirmed_at?: string } | undefined)?.confirmed_at,
+    ),
     loading,
     signOut: async () => {
       await supabase.auth.signOut();
