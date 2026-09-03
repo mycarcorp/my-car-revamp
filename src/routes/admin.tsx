@@ -19,9 +19,9 @@ export const Route = createFileRoute("/admin")({
 
 const NAV = [
   { to: "/admin", label: "Lead inbox", icon: Inbox, exact: true },
-  { to: "/admin/inventory", label: "Inventory", icon: Car },
-  { to: "/admin/blog", label: "Blog", icon: FileText },
-  { to: "/admin/settings", label: "Site settings", icon: Settings },
+  { to: "/admin/inventory", label: "Inventory", icon: Car, exact: false },
+  { to: "/admin/blog", label: "Blog", icon: FileText, exact: false },
+  { to: "/admin/settings", label: "Site settings", icon: Settings, exact: false },
 ] as const;
 
 function AdminLayout() {
