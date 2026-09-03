@@ -10,6 +10,7 @@ import { Switch } from "@/components/ui/switch";
 import { supabase } from "@/integrations/supabase/client";
 import { siteSettingsQuery } from "@/lib/queries";
 import { useAuth } from "@/hooks/useAuth";
+import type { Database } from "@/integrations/supabase/types";
 
 export const Route = createFileRoute("/admin/settings")({
   component: AdminSettings,
