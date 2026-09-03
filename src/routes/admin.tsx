@@ -65,7 +65,7 @@ function AdminLayout() {
             <Link
               key={item.to}
               to={item.to}
-              activeOptions={{ exact: "exact" in item ? item.exact : false }}
+              activeOptions={{ exact: item.exact }}
               activeProps={{ className: "bg-sidebar-accent" }}
               className="flex items-center gap-2 rounded-md px-3 py-2 text-sm font-medium hover:bg-sidebar-accent"
             >
