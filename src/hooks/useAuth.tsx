@@ -10,6 +10,7 @@ type AuthState = {
   roles: Role[];
   isStaff: boolean;
   isOwner: boolean;
+  emailVerified: boolean;
   loading: boolean;
   signOut: () => Promise<void>;
 };
@@ -20,6 +21,7 @@ const AuthContext = createContext<AuthState>({
   roles: [],
   isStaff: false,
   isOwner: false,
+  emailVerified: false,
   loading: true,
   signOut: async () => {},
 });
