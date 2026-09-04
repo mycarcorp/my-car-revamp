@@ -50,7 +50,7 @@ export function parseCsv(text: string): string[][] {
       } else field += c;
       continue;
     }
-    if (c === '"') inQuotes = true;
+    if (c === '"' && field === "") inQuotes = true;
     else if (c === ",") {
       row.push(field);
       field = "";
@@ -148,8 +148,9 @@ function parseDate(raw: string): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/** The dealer export separates options with 2+ spaces, commas or pipes. */
 function splitFeatures(raw: string): string[] {
-  if (!raw) return [];
+  if (!raw || !/\s{2,}|,|\|/.test(raw)) return [];
   return raw
     .split(/\s{2,}|,|\|/g)
     .map((s) => clean(s))
@@ -166,6 +167,13 @@ function splitPhotoUrls(...raw: string[]): string[] {
     }
   }
   return out.slice(0, 12);
+}
+
+function buildDescription(desc: string, equipment: string, features: string[]): string | null {
+  const parts = [desc];
+  if (equipment && features.length === 0) parts.push(`Equipment and options: ${equipment}`);
+  const out = parts.filter(Boolean).join("\n\n");
+  return out || null;
 }
 
 export function parseInventoryCsv(text: string): ParsedCsv {
@@ -222,6 +230,9 @@ export function parseInventoryCsv(text: string): ParsedCsv {
     const trim = get(r, "Trim") || null;
     const dateReceived = parseDate(get(r, "Date in stock"));
 
+    const equipment = clean(r[idx("Equipment and options")] ?? "");
+    const features = splitFeatures(equipment);
+
     const photoUrls = splitPhotoUrls(get(r, "Primary photo URL"), get(r, "Additional photo URLs"));
 
     if (errors.length > 0) return { rowNumber, vehicle: null, photoUrls, errors };
@@ -245,8 +256,8 @@ export function parseInventoryCsv(text: string): ParsedCsv {
       fuel_type: fuel,
       drivetrain: drive,
       mpg_combined: mpg,
-      description: get(r, "Vehicle description") || null,
-      features: splitFeatures(get(r, "Equipment and options")),
+      description: buildDescription(get(r, "Vehicle description"), equipment, features),
+      features,
       ...(dateReceived ? { date_received: dateReceived } : {}),
     };
 
