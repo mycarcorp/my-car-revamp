@@ -1,4 +1,8 @@
 import { createFileRoute } from "@tanstack/react-router";
+import {
+  APP_SUPABASE_PUBLISHABLE_KEY,
+  APP_SUPABASE_URL,
+} from "@/integrations/supabase/runtime-config";
 
 const ALLOWED = /^[a-z0-9-]+\/photo-\d+\.jpg$/i;
 
