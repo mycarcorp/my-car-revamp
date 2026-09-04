@@ -1,0 +1,535 @@
+import { useEffect, useMemo, useState } from "react";
+import { GripVertical, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { toast } from "sonner";
+import { Button } from "@/components/ui/button";
+import {
+  Dialog,
+  DialogContent,
+  DialogDescription,
+  DialogFooter,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
+import { Switch } from "@/components/ui/switch";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import { supabase } from "@/integrations/supabase/app-client";
+import type { Database } from "@/integrations/supabase/types";
+import {
+  MAX_PHOTOS,
+  syncVehiclePhotos,
+  type PhotoDraft,
+  type Vehicle,
+  type VehiclePhoto,
+} from "@/lib/admin-inventory";
+import { VIN_RE, vehicleSlug } from "@/lib/inventory-csv";
+
+type BodyStyle = Database["public"]["Enums"]["body_style"];
+type FuelType = Database["public"]["Enums"]["fuel_type"];
+type Drivetrain = Database["public"]["Enums"]["drivetrain"];
+type VehicleStatus = Database["public"]["Enums"]["vehicle_status"];
+
+export const BODY_STYLES: BodyStyle[] = [
+  "SUV",
+  "Sedan",
+  "Truck",
+  "Coupe",
+  "Hatchback",
+  "Convertible",
+  "Minivan",
+  "Wagon",
+  "Van",
+];
+export const FUEL_TYPES: FuelType[] = ["Gas", "Electric", "Hybrid", "Plug-in Hybrid", "Diesel"];
+export const DRIVETRAINS: Drivetrain[] = ["AWD/4WD", "FWD", "RWD"];
+export const STATUSES: VehicleStatus[] = ["available", "pending", "sold", "draft"];
+
+type FormState = {
+  vin: string;
+  stock_number: string;
+  year: string;
+  make: string;
+  model: string;
+  trim: string;
+  body_style: BodyStyle;
+  mileage: string;
+  price: string;
+  exterior_color: string;
+  interior_color: string;
+  transmission: string;
+  engine: string;
+  fuel_type: string;
+  drivetrain: string;
+  mpg_combined: string;
+  description: string;
+  features: string;
+  status: VehicleStatus;
+  is_featured: boolean;
+  slug: string;
+};
+
+const empty: FormState = {
+  vin: "",
+  stock_number: "",
+  year: String(new Date().getFullYear()),
+  make: "",
+  model: "",
+  trim: "",
+  body_style: "SUV",
+  mileage: "",
+  price: "",
+  exterior_color: "",
+  interior_color: "",
+  transmission: "",
+  engine: "",
+  fuel_type: "none",
+  drivetrain: "none",
+  mpg_combined: "",
+  description: "",
+  features: "",
+  status: "available",
+  is_featured: false,
+  slug: "",
+};
+
+function fromVehicle(v: Vehicle): FormState {
+  return {
+    vin: v.vin,
+    stock_number: v.stock_number,
+    year: String(v.year),
+    make: v.make,
+    model: v.model,
+    trim: v.trim ?? "",
+    body_style: v.body_style,
+    mileage: String(v.mileage),
+    price: (Number(v.price_cents) / 100).toFixed(2),
+    exterior_color: v.exterior_color ?? "",
+    interior_color: v.interior_color ?? "",
+    transmission: v.transmission ?? "",
+    engine: v.engine ?? "",
+    fuel_type: v.fuel_type ?? "none",
+    drivetrain: v.drivetrain ?? "none",
+    mpg_combined: v.mpg_combined === null ? "" : String(v.mpg_combined),
+    description: v.description ?? "",
+    features: (v.features ?? []).join("\n"),
+    status: v.status,
+    is_featured: v.is_featured,
+    slug: v.slug,
+  };
+}
+
+export function VehicleFormDialog({
+  open,
+  onOpenChange,
+  vehicle,
+  onSaved,
+}: {
+  open: boolean;
+  onOpenChange: (v: boolean) => void;
+  vehicle: Vehicle | null;
+  onSaved: () => void;
+}) {
+  const [form, setForm] = useState<FormState>(empty);
+  const [photos, setPhotos] = useState<PhotoDraft[]>([]);
+  const [existing, setExisting] = useState<VehiclePhoto[]>([]);
+  const [saving, setSaving] = useState(false);
+
+  useEffect(() => {
+    if (!open) return;
+    setForm(vehicle ? fromVehicle(vehicle) : empty);
+    setPhotos([]);
+    setExisting([]);
+    if (!vehicle) return;
+    void (async () => {
+      const { data } = await supabase
+        .from("vehicle_photos")
+        .select("*")
+        .eq("vehicle_id", vehicle.id)
+        .order("position");
+      setExisting(data ?? []);
+      setPhotos(
+        (data ?? []).map((p) => ({ kind: "existing" as const, id: p.id, url: p.url, alt: p.alt })),
+      );
+    })();
+  }, [open, vehicle]);
+
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
+    setForm((f) => ({ ...f, [k]: v }));
+
+  const title = useMemo(
+    () => `${form.year} ${form.make} ${form.model} ${form.trim}`.trim(),
+    [form.year, form.make, form.model, form.trim],
+  );
+
+  function addFiles(list: FileList | null) {
+    if (!list) return;
+    const room = MAX_PHOTOS - photos.length;
+    const files = Array.from(list)
+      .filter((f) => f.type.startsWith("image/"))
+      .slice(0, Math.max(0, room));
+    if (files.length < list.length) toast.warning(`Up to ${MAX_PHOTOS} photos per vehicle.`);
+    setPhotos((p) => [
+      ...p,
+      ...files.map((file) => ({
+        kind: "new" as const,
+        file,
+        previewUrl: URL.createObjectURL(file),
+      })),
+    ]);
+  }
+
+  function move(index: number, delta: number) {
+    setPhotos((p) => {
+      const next = [...p];
+      const target = index + delta;
+      if (target < 0 || target >= next.length) return p;
+      [next[index], next[target]] = [next[target]!, next[index]!];
+      return next;
+    });
+  }
+
+  async function submit() {
+    const vin = form.vin.trim().toUpperCase();
+    if (!VIN_RE.test(vin)) {
+      toast.error("Enter a valid 17-character VIN.");
+      return;
+    }
+    const year = Number(form.year);
+    const mileage = Number(form.mileage);
+    const price = Number(form.price);
+    if (!form.make.trim() || !form.model.trim()) {
+      toast.error("Make and model are required.");
+      return;
+    }
+    if (!Number.isFinite(year) || year < 1900) return toast.error("Enter a valid year.");
+    if (!Number.isFinite(mileage) || mileage < 0) return toast.error("Enter a valid mileage.");
+    if (!Number.isFinite(price) || price <= 0) return toast.error("Enter a valid price.");
+
+    setSaving(true);
+    try {
+      const dupe = await supabase
+        .from("vehicles")
+        .select("id")
+        .eq("vin", vin)
+        .maybeSingle();
+      if (dupe.data && dupe.data.id !== vehicle?.id) {
+        toast.error("Another vehicle already uses this VIN.");
+        return;
+      }
+
+      const payload = {
+        vin,
+        stock_number: form.stock_number.trim() || vin.slice(-8),
+        year,
+        make: form.make.trim(),
+        model: form.model.trim(),
+        trim: form.trim.trim() || null,
+        body_style: form.body_style,
+        mileage,
+        price_cents: Math.round(price * 100),
+        exterior_color: form.exterior_color.trim() || null,
+        interior_color: form.interior_color.trim() || null,
+        transmission: form.transmission.trim() || null,
+        engine: form.engine.trim() || null,
+        fuel_type: form.fuel_type === "none" ? null : (form.fuel_type as FuelType),
+        drivetrain: form.drivetrain === "none" ? null : (form.drivetrain as Drivetrain),
+        mpg_combined: form.mpg_combined ? Number(form.mpg_combined) : null,
+        description: form.description.trim() || null,
+        features: form.features
+          .split("\n")
+          .map((s) => s.trim())
+          .filter(Boolean),
+        status: form.status,
+        is_featured: form.is_featured,
+        slug:
+          form.slug.trim() ||
+          vehicleSlug({ year, make: form.make, model: form.model, trim: form.trim, vin }),
+      };
+
+      let saved: Vehicle;
+      if (vehicle) {
+        const { data, error } = await supabase
+          .from("vehicles")
+          .update(payload)
+          .eq("id", vehicle.id)
+          .select()
+          .single();
+        if (error) throw new Error(error.message);
+        saved = data;
+      } else {
+        const { data, error } = await supabase
+          .from("vehicles")
+          .insert(payload)
+          .select()
+          .single();
+        if (error) throw new Error(error.message);
+        saved = data;
+      }
+
+      await syncVehiclePhotos(saved, photos, existing, title);
+      toast.success(vehicle ? "Vehicle updated." : "Vehicle added.");
+      onSaved();
+      onOpenChange(false);
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save this vehicle.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
+        <DialogHeader>
+          <DialogTitle>{vehicle ? "Edit vehicle" : "Add vehicle"}</DialogTitle>
+          <DialogDescription>
+            Details here appear on the public inventory once the status is set to available.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="grid gap-4 sm:grid-cols-2">
+          <Field label="VIN">
+            <Input
+              value={form.vin}
+              onChange={(e) => set("vin", e.target.value.toUpperCase())}
+              maxLength={17}
+            />
+          </Field>
+          <Field label="Stock number">
+            <Input value={form.stock_number} onChange={(e) => set("stock_number", e.target.value)} />
+          </Field>
+          <Field label="Year">
+            <Input type="number" value={form.year} onChange={(e) => set("year", e.target.value)} />
+          </Field>
+          <Field label="Make">
+            <Input value={form.make} onChange={(e) => set("make", e.target.value)} />
+          </Field>
+          <Field label="Model">
+            <Input value={form.model} onChange={(e) => set("model", e.target.value)} />
+          </Field>
+          <Field label="Trim">
+            <Input value={form.trim} onChange={(e) => set("trim", e.target.value)} />
+          </Field>
+          <Field label="Body style">
+            <Choice
+              value={form.body_style}
+              options={BODY_STYLES}
+              onChange={(v) => set("body_style", v as BodyStyle)}
+            />
+          </Field>
+          <Field label="Mileage">
+            <Input
+              type="number"
+              value={form.mileage}
+              onChange={(e) => set("mileage", e.target.value)}
+            />
+          </Field>
+          <Field label="Price (USD)">
+            <Input
+              type="number"
+              step="0.01"
+              value={form.price}
+              onChange={(e) => set("price", e.target.value)}
+            />
+          </Field>
+          <Field label="Status">
+            <Choice
+              value={form.status}
+              options={STATUSES}
+              onChange={(v) => set("status", v as VehicleStatus)}
+            />
+          </Field>
+          <Field label="Fuel type">
+            <Choice
+              value={form.fuel_type}
+              options={FUEL_TYPES}
+              allowNone
+              onChange={(v) => set("fuel_type", v)}
+            />
+          </Field>
+          <Field label="Drivetrain">
+            <Choice
+              value={form.drivetrain}
+              options={DRIVETRAINS}
+              allowNone
+              onChange={(v) => set("drivetrain", v)}
+            />
+          </Field>
+          <Field label="Transmission">
+            <Input value={form.transmission} onChange={(e) => set("transmission", e.target.value)} />
+          </Field>
+          <Field label="Engine">
+            <Input value={form.engine} onChange={(e) => set("engine", e.target.value)} />
+          </Field>
+          <Field label="Exterior color">
+            <Input
+              value={form.exterior_color}
+              onChange={(e) => set("exterior_color", e.target.value)}
+            />
+          </Field>
+          <Field label="Interior color">
+            <Input
+              value={form.interior_color}
+              onChange={(e) => set("interior_color", e.target.value)}
+            />
+          </Field>
+          <Field label="Combined MPG">
+            <Input
+              type="number"
+              value={form.mpg_combined}
+              onChange={(e) => set("mpg_combined", e.target.value)}
+            />
+          </Field>
+          <Field label="URL slug">
+            <Input
+              value={form.slug}
+              placeholder="auto-generated"
+              onChange={(e) => set("slug", e.target.value)}
+            />
+          </Field>
+        </div>
+
+        <Field label="Description">
+          <Textarea
+            rows={4}
+            value={form.description}
+            onChange={(e) => set("description", e.target.value)}
+          />
+        </Field>
+        <Field label="Features (one per line)">
+          <Textarea
+            rows={3}
+            value={form.features}
+            onChange={(e) => set("features", e.target.value)}
+          />
+        </Field>
+
+        <div className="flex items-center gap-3">
+          <Switch
+            id="featured"
+            checked={form.is_featured}
+            onCheckedChange={(v) => set("is_featured", v)}
+          />
+          <Label htmlFor="featured">Feature this vehicle on the homepage</Label>
+        </div>
+
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium">Photos</p>
+              <p className="text-xs text-muted-foreground">
+                Up to {MAX_PHOTOS}. The first photo is the main image.
+              </p>
+            </div>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
+              <Upload className="size-4" />
+              Add photos
+              <input
+                type="file"
+                accept="image/*"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  addFiles(e.target.files);
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          {photos.length === 0 ? (
+            <p className="text-xs text-muted-foreground">No photos yet.</p>
+          ) : (
+            <ul className="grid gap-3 sm:grid-cols-3">
+              {photos.map((p, i) => (
+                <li
+                  key={p.kind === "existing" ? p.id : p.previewUrl}
+                  className="overflow-hidden rounded-md border border-border"
+                >
+                  <img
+                    src={p.kind === "existing" ? p.url : p.previewUrl}
+                    alt={`Photo ${i + 1}`}
+                    className="h-24 w-full object-cover"
+                  />
+                  <div className="flex items-center justify-between gap-1 p-1">
+                    <span className="pl-1 text-xs text-muted-foreground">#{i + 1}</span>
+                    <div className="flex">
+                      <Button size="icon" variant="ghost" onClick={() => move(i, -1)} aria-label="Move earlier">
+                        <GripVertical className="size-3 rotate-180" />
+                      </Button>
+                      <Button size="icon" variant="ghost" onClick={() => move(i, 1)} aria-label="Move later">
+                        <GripVertical className="size-3" />
+                      </Button>
+                      <Button
+                        size="icon"
+                        variant="ghost"
+                        onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
+                        aria-label="Remove photo"
+                      >
+                        <Trash2 className="size-3 text-destructive" />
+                      </Button>
+                    </div>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+
+        <DialogFooter>
+          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
+            Cancel
+          </Button>
+          <Button onClick={() => void submit()} disabled={saving}>
+            {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
+            {vehicle ? "Save changes" : "Add vehicle"}
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  );
+}
+
+function Field({ label, children }: { label: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label>{label}</Label>
+      {children}
+    </div>
+  );
+}
+
+function Choice({
+  value,
+  options,
+  onChange,
+  allowNone,
+}: {
+  value: string;
+  options: readonly string[];
+  onChange: (v: string) => void;
+  allowNone?: boolean;
+}) {
+  return (
+    <Select value={value} onValueChange={onChange}>
+      <SelectTrigger>
+        <SelectValue />
+      </SelectTrigger>
+      <SelectContent>
+        {allowNone && <SelectItem value="none">Not specified</SelectItem>}
+        {options.map((o) => (
+          <SelectItem key={o} value={o} className="capitalize">
+            {o}
+          </SelectItem>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
