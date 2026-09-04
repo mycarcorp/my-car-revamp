@@ -6,33 +6,40 @@ const BUCKET = "logo";
 const OBJECT = "mycar-logo.png";
 const PUBLIC_URL = `${APP_SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${OBJECT}`;
 
+function preload(url: string): Promise<boolean> {
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(true);
+    img.onerror = () => resolve(false);
+    img.src = url;
+  });
+}
+
 /**
- * MyCar wordmark. Loads the logo from Storage; if the bucket is private the
- * public URL 4xx's and we fall back to a signed URL from the Supabase client.
- * If neither works, the original text wordmark is shown.
+ * MyCar wordmark. Loads mycar-logo.png from Storage: public URL first, then a
+ * signed URL if the bucket is private. Falls back to the text wordmark while
+ * loading or if the file can't be read.
  */
 export function BrandLogo({ className = "h-9 w-auto" }: { className?: string }) {
-  const [src, setSrc] = useState<string>(PUBLIC_URL);
-  const [failed, setFailed] = useState(false);
-  const [triedSigned, setTriedSigned] = useState(false);
+  const [src, setSrc] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!triedSigned) return;
     let active = true;
-    void supabase.storage
-      .from(BUCKET)
-      .createSignedUrl(OBJECT, 60 * 60)
-      .then(({ data }) => {
-        if (!active) return;
-        if (data?.signedUrl) setSrc(data.signedUrl);
-        else setFailed(true);
-      });
+    void (async () => {
+      if (await preload(PUBLIC_URL)) {
+        if (active) setSrc(PUBLIC_URL);
+        return;
+      }
+      const { data } = await supabase.storage.from(BUCKET).createSignedUrl(OBJECT, 60 * 60);
+      const signed = data?.signedUrl;
+      if (signed && (await preload(signed)) && active) setSrc(signed);
+    })();
     return () => {
       active = false;
     };
-  }, [triedSigned]);
+  }, []);
 
-  if (failed) {
+  if (!src) {
     return (
       <span className="rounded bg-primary px-2 py-1 font-display text-lg font-extrabold tracking-tight text-primary-foreground">
         My<span className="text-accent">Car</span>
@@ -40,15 +47,5 @@ export function BrandLogo({ className = "h-9 w-auto" }: { className?: string }) 
     );
   }
 
-  return (
-    <img
-      src={src}
-      alt="MyCar"
-      className={className}
-      onError={() => {
-        if (triedSigned) setFailed(true);
-        else setTriedSigned(true);
-      }}
-    />
-  );
+  return <img src={src} alt="MyCar" className={className} />;
 }
