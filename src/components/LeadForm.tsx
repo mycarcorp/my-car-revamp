@@ -8,13 +8,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/app-client";
 import { useAuth } from "@/hooks/useAuth";
 import { mirrorLeadToLegacy } from "@/lib/legacy-mirror.functions";
+import { sendLeadToGhl } from "@/lib/ghl-webhook.functions";
 import type { Database } from "@/integrations/supabase/types";
 
 type LeadType = Database["public"]["Enums"]["lead_type"];
 
+export type LeadVehicleSummary = {
+  id?: string | null;
+  vin?: string | null;
+  stock_number?: string | null;
+  year?: number | string | null;
+  make?: string | null;
+  model?: string | null;
+  trim?: string | null;
+};
+
 export type LeadFormProps = {
   leadType: LeadType;
   vehicleId?: string | null;
+  /** Vehicle context sent along with the lead (used by the CRM webhook). */
+  vehicle?: LeadVehicleSummary | null;
   submitLabel?: string;
   successTitle?: string;
   successBody?: string;
