@@ -9,6 +9,7 @@ export async function postToGhl(payload: Record<string, unknown>): Promise<numbe
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(payload),
   });
+  console.log("[ghl-webhook] delivered", payload["event_type"], res.status);
   if (!res.ok) {
     const text = await res.text().catch(() => "");
     console.error("[ghl-webhook] delivery failed", res.status, text.slice(0, 500));
