@@ -7,7 +7,6 @@ import { siteSettingsQuery } from "@/lib/queries";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandLogo } from "@/components/BrandLogo";
 
-
 const NAV = [
   { to: "/search", label: "Shop inventory" },
   { to: "/finance", label: "Financing" },
@@ -28,11 +27,7 @@ export function SiteHeader() {
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4">
         <Link to="/" className="flex items-center gap-2">
           <BrandLogo className="h-9 w-auto" />
-          <span className="hidden text-xs font-medium text-muted-foreground sm:block">
-            Fredericksburg, VA
-          </span>
         </Link>
-
 
         <nav className="ml-6 hidden items-center gap-5 lg:flex">
           {NAV.map((item) => (
