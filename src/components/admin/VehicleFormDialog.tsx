@@ -209,9 +209,18 @@ export function VehicleFormDialog({
       toast.error("Make and model are required.");
       return;
     }
-    if (!Number.isFinite(year) || year < 1900) return toast.error("Enter a valid year.");
-    if (!Number.isFinite(mileage) || mileage < 0) return toast.error("Enter a valid mileage.");
-    if (!Number.isFinite(price) || price <= 0) return toast.error("Enter a valid price.");
+    if (!Number.isFinite(year) || year < 1900) {
+      toast.error("Enter a valid year.");
+      return;
+    }
+    if (!Number.isFinite(mileage) || mileage < 0) {
+      toast.error("Enter a valid mileage.");
+      return;
+    }
+    if (!Number.isFinite(price) || price <= 0) {
+      toast.error("Enter a valid price.");
+      return;
+    }
 
     setSaving(true);
     try {
