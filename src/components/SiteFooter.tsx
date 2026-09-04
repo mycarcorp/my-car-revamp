@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { siteSettingsQuery, serviceAreasQuery } from "@/lib/queries";
+import { BrandLogo } from "@/components/BrandLogo";
+
 
 export function SiteFooter() {
   const { data: settings } = useQuery(siteSettingsQuery());
@@ -11,9 +13,8 @@ export function SiteFooter() {
     <footer className="mt-20 border-t border-border bg-surface">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-4">
         <div>
-          <span className="rounded bg-primary px-2 py-1 font-display text-lg font-extrabold text-primary-foreground">
-            My<span className="text-accent">Car</span>
-          </span>
+          <BrandLogo className="h-9 w-auto" />
+
           <p className="mt-4 text-sm text-muted-foreground">
             My Car Business Services LLC — independent used-vehicle dealership serving
             Fredericksburg and the surrounding Virginia counties.

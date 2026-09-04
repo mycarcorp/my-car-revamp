@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { siteSettingsQuery } from "@/lib/queries";
 import { useAuth } from "@/hooks/useAuth";
+import { BrandLogo } from "@/components/BrandLogo";
+
 
 const NAV = [
   { to: "/search", label: "Shop inventory" },
@@ -25,13 +27,12 @@ export function SiteHeader() {
       <div className="accent-bar h-1 w-full" />
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4">
         <Link to="/" className="flex items-center gap-2">
-          <span className="rounded bg-primary px-2 py-1 font-display text-lg font-extrabold tracking-tight text-primary-foreground">
-            My<span className="text-accent">Car</span>
-          </span>
+          <BrandLogo className="h-9 w-auto" />
           <span className="hidden text-xs font-medium text-muted-foreground sm:block">
             Fredericksburg, VA
           </span>
         </Link>
+
 
         <nav className="ml-6 hidden items-center gap-5 lg:flex">
           {NAV.map((item) => (
