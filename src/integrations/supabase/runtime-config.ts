@@ -1,18 +1,32 @@
 // Runtime backend selection for this app.
 //
-// The generated .env in this workspace is managed by the platform and keeps
-// getting reset to the built-in backend, so the external project the site must
-// actually run against is pinned here. Publishable keys are safe in source.
+// Preferred source of truth: the environment variables in .env
+// (VITE_SUPABASE_URL / VITE_SUPABASE_PUBLISHABLE_KEY).
 //
-// Override at build time with VITE_APP_SUPABASE_URL / VITE_APP_SUPABASE_PUBLISHABLE_KEY.
+// The platform periodically rewrites .env back to its built-in backend
+// (project ref "zqwnvktukyrtqnbvsmrg"). When that happens the env value is
+// ignored and the external project below is used instead, so the app never
+// silently falls back to the old backend. Publishable keys are safe in source.
 
-export const APP_SUPABASE_PROJECT_ID = "rpmmlzyeqpvczuuobddt";
+const LEGACY_CLOUD_REF = "zqwnvktukyrtqnbvsmrg";
 
-export const APP_SUPABASE_URL =
-  (typeof import.meta !== "undefined" && import.meta.env?.["VITE_APP_SUPABASE_URL"]) ||
-  "https://rpmmlzyeqpvczuuobddt.supabase.co";
+const FALLBACK_URL = "https://rpmmlzyeqpvczuuobddt.supabase.co";
+const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_ICvC1OElVVZV7jJ14ppRaA_w5oxHYyc";
 
-export const APP_SUPABASE_PUBLISHABLE_KEY =
-  (typeof import.meta !== "undefined" &&
-    import.meta.env?.["VITE_APP_SUPABASE_PUBLISHABLE_KEY"]) ||
-  "sb_publishable_ICvC1OElVVZV7jJ14ppRaA_w5oxHYyc";
+function envValue(name: string): string | undefined {
+  const fromVite =
+    typeof import.meta !== "undefined" ? (import.meta.env?.[name] as string | undefined) : undefined;
+  if (fromVite) return fromVite;
+  const serverName = name.replace(/^VITE_/, "");
+  return typeof process !== "undefined" ? process.env?.[serverName] : undefined;
+}
+
+const envUrl = envValue("VITE_SUPABASE_URL");
+const envKey = envValue("VITE_SUPABASE_PUBLISHABLE_KEY");
+
+const useEnv = Boolean(envUrl && envKey && !envUrl.includes(LEGACY_CLOUD_REF));
+
+export const APP_SUPABASE_URL = useEnv ? envUrl! : FALLBACK_URL;
+export const APP_SUPABASE_PUBLISHABLE_KEY = useEnv ? envKey! : FALLBACK_PUBLISHABLE_KEY;
+export const APP_SUPABASE_PROJECT_ID =
+  APP_SUPABASE_URL.replace("https://", "").split(".")[0] ?? "";
