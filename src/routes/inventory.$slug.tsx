@@ -322,6 +322,15 @@ function VehicleDetail() {
               <LeadForm
                 leadType="availability"
                 vehicleId={v.id}
+                vehicle={{
+                  id: v.id,
+                  vin: v.vin,
+                  stock_number: v.stock_number,
+                  year: v.year,
+                  make: v.make,
+                  model: v.model,
+                  trim: v.trim,
+                }}
                 submitLabel="Check availability"
                 messageLabel="Questions about this vehicle"
                 successTitle="We're on it"
