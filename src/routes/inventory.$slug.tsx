@@ -1,6 +1,6 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Camera, Check, Heart, Phone } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -8,6 +8,7 @@ import { Badge } from "@/components/ui/badge";
 import { LeadForm } from "@/components/LeadForm";
 import { VehicleCard } from "@/components/VehicleCard";
 import { useAuth } from "@/hooks/useAuth";
+import { mirrorSavedVehicleToLegacy } from "@/lib/legacy-mirror.functions";
 import { supabase } from "@/integrations/supabase/app-client";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 import {
@@ -57,6 +58,7 @@ function VehicleDetail() {
   const photos = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
   const [active, setActive] = useState(0);
   const [saved, setSaved] = useState(false);
+  const [savingBusy, setSavingBusy] = useState(false);
 
   const payment = settings
     ? monthlyPayment(Number(v.price_cents), {
@@ -66,19 +68,67 @@ function VehicleDetail() {
       })
     : null;
 
-  async function save() {
+  useEffect(() => {
+    let active = true;
+    if (!user) {
+      setSaved(false);
+      return;
+    }
+    void (async () => {
+      const { data } = await supabase
+        .from("saved_vehicles")
+        .select("id")
+        .eq("user_id", user.id)
+        .eq("vehicle_id", v.id)
+        .maybeSingle();
+      if (active) setSaved(!!data);
+    })();
+    return () => {
+      active = false;
+    };
+  }, [user, v.id]);
+
+  async function mirrorSave(action: "save" | "unsave") {
+    const { data: session } = await supabase.auth.getSession();
+    const accessToken = session.session?.access_token;
+    if (!accessToken) return;
+    await mirrorSavedVehicleToLegacy({ data: { accessToken, vehicleId: v.id, action } }).catch(
+      () => undefined,
+    );
+  }
+
+  async function toggleSave() {
     if (!user) {
       toast.info("Sign in to save this vehicle to your account.");
+      return;
+    }
+    setSavingBusy(true);
+    if (saved) {
+      const { error } = await supabase
+        .from("saved_vehicles")
+        .delete()
+        .eq("user_id", user.id)
+        .eq("vehicle_id", v.id);
+      setSavingBusy(false);
+      if (error) {
+        toast.error("Could not remove this vehicle.");
+        return;
+      }
+      setSaved(false);
+      void mirrorSave("unsave");
+      toast.success("Removed from your saved vehicles.");
       return;
     }
     const { error } = await supabase
       .from("saved_vehicles")
       .insert({ user_id: user.id, vehicle_id: v.id });
+    setSavingBusy(false);
     if (error && !error.message.includes("duplicate")) {
       toast.error("Could not save this vehicle.");
       return;
     }
     setSaved(true);
+    void mirrorSave("save");
     toast.success("Saved to your account.");
   }
 
@@ -250,9 +300,9 @@ function VehicleDetail() {
               <Button asChild variant="outline">
                 <Link to="/sell">Value my trade</Link>
               </Button>
-              <Button variant="ghost" onClick={save} disabled={saved}>
+              <Button variant="ghost" onClick={toggleSave} disabled={savingBusy}>
                 <Heart className={saved ? "size-4 fill-accent text-accent" : "size-4"} />
-                {saved ? "Saved" : "Save this vehicle"}
+                {saved ? "Saved — remove" : "Save this vehicle"}
               </Button>
               <a
                 href={`tel:${(settings?.phone ?? "").replace(/\D/g, "")}`}

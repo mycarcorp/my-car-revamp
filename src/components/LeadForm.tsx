@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/app-client";
 import { useAuth } from "@/hooks/useAuth";
+import { mirrorLeadToLegacy } from "@/lib/legacy-mirror.functions";
 import type { Database } from "@/integrations/supabase/types";
 
 type LeadType = Database["public"]["Enums"]["lead_type"];
@@ -49,21 +50,37 @@ export function LeadForm({
       return;
     }
     setSubmitting(true);
+    const phone = String(form.get("phone") ?? "") || null;
+    const message = String(form.get("message") ?? "") || null;
+    const details = collectDetails?.() ?? {};
     const { error } = await supabase.from("leads").insert({
       lead_type: leadType,
       full_name,
       email,
-      phone: String(form.get("phone") ?? "") || null,
-      message: String(form.get("message") ?? "") || null,
+      phone,
+      message,
       vehicle_id: vehicleId,
       user_id: user?.id ?? null,
-      details: (collectDetails?.() ?? {}) as never,
+      details: details as never,
     });
     setSubmitting(false);
     if (error) {
       toast.error("We couldn't send that. Please call us at (540) 426-3322.");
       return;
     }
+    // Mirror into the legacy tables. Never blocks or fails the submission.
+    void mirrorLeadToLegacy({
+      data: {
+        leadType,
+        fullName: full_name,
+        email,
+        phone,
+        message,
+        vehicleId,
+        userId: user?.id ?? null,
+        details,
+      },
+    }).catch(() => undefined);
     setDone(true);
   }
 
