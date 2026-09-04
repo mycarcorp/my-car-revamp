@@ -337,7 +337,8 @@ CREATE POLICY "own saved searches" ON public.saved_searches FOR ALL TO authentic
 INSERT INTO public.site_settings (id, hours, social, trust_badges) VALUES (1,
  '{"mon_fri":"9:00 AM - 7:00 PM","sat":"9:00 AM - 6:00 PM","sun":"Closed"}'::jsonb,
  '{"facebook":"","instagram":""}'::jsonb,
- '[{"label":"Family owned in Fredericksburg","enabled":true},{"label":"Every vehicle inspected before sale","enabled":true},{"label":"Financing for all credit types","enabled":true},{"label":"Trade-ins welcome","enabled":true}]'::jsonb);
+ '[{"label":"Family owned in Fredericksburg","enabled":true},{"label":"Every vehicle inspected before sale","enabled":true},{"label":"Financing for all credit types","enabled":true},{"label":"Trade-ins welcome","enabled":true}]'::jsonb)
+ON CONFLICT DO NOTHING;
 
 INSERT INTO public.service_areas (slug, name, intro, position) VALUES
  ('fredericksburg','Fredericksburg','Our home lot. Used cars, trucks and SUVs minutes from downtown Fredericksburg.',1),
@@ -345,13 +346,15 @@ INSERT INTO public.service_areas (slug, name, intro, position) VALUES
  ('stafford','Stafford','Used vehicle sales and financing for Stafford County commuters.',3),
  ('king-george','King George','Quality pre-owned inventory a short drive from King George.',4),
  ('richmond','Richmond','Richmond-area shoppers travel to us for straightforward used-car pricing.',5),
- ('northern-virginia','Northern Virginia','Northern Virginia buyers save on the same inventory without the metro markup.',6);
+ ('northern-virginia','Northern Virginia','Northern Virginia buyers save on the same inventory without the metro markup.',6)
+ON CONFLICT DO NOTHING;
 
 INSERT INTO public.collections (slug, title, description, filter_query, position) VALUES
  ('under-20k','Cars under $20K','Great rides with quality you can count on — at a price you will love.','?priceMax=20000',1),
  ('price-drops','Recent price drops','Vehicles we have repriced in the last 30 days.','?deal=price-drop',2),
  ('fuel-efficient','Go the distance','Vehicles rated 40 MPG/MPGe or greater.','?mpgMin=40',3),
- ('trucks','Work-ready trucks','Pickups inspected and ready for the job site.','?body=Truck',4);
+ ('trucks','Work-ready trucks','Pickups inspected and ready for the job site.','?body=Truck',4)
+ON CONFLICT DO NOTHING;
 
 
 -- ---------------------------------------------------------------------
