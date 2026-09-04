@@ -1,6 +1,8 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { siteSettingsQuery, serviceAreasQuery } from "@/lib/queries";
+import { BrandLogo } from "@/components/BrandLogo";
+
 
 export function SiteFooter() {
   const { data: settings } = useQuery(siteSettingsQuery());
