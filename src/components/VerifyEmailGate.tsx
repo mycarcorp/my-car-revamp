@@ -2,7 +2,7 @@ import { useState } from "react";
 import { toast } from "sonner";
 import { Link } from "@tanstack/react-router";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/app-client";
 
 export function resendVerification(email: string) {
   return supabase.auth.resend({

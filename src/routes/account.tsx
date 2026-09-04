@@ -6,7 +6,7 @@ import { Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/app-client";
 import { siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
 import { VehicleCard } from "@/components/VehicleCard";
 import { VerifyEmailGate } from "@/components/VerifyEmailGate";
