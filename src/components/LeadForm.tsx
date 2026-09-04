@@ -8,13 +8,26 @@ import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/app-client";
 import { useAuth } from "@/hooks/useAuth";
 import { mirrorLeadToLegacy } from "@/lib/legacy-mirror.functions";
+import { sendLeadToGhl } from "@/lib/ghl-webhook.functions";
 import type { Database } from "@/integrations/supabase/types";
 
 type LeadType = Database["public"]["Enums"]["lead_type"];
 
+export type LeadVehicleSummary = {
+  id?: string | null;
+  vin?: string | null;
+  stock_number?: string | null;
+  year?: number | string | null;
+  make?: string | null;
+  model?: string | null;
+  trim?: string | null;
+};
+
 export type LeadFormProps = {
   leadType: LeadType;
   vehicleId?: string | null;
+  /** Vehicle context sent along with the lead (used by the CRM webhook). */
+  vehicle?: LeadVehicleSummary | null;
   submitLabel?: string;
   successTitle?: string;
   successBody?: string;
@@ -28,6 +41,7 @@ export type LeadFormProps = {
 export function LeadForm({
   leadType,
   vehicleId = null,
+  vehicle = null,
   submitLabel = "Send request",
   successTitle = "Request received",
   successBody = "A member of our team will reach out shortly during business hours.",
@@ -81,6 +95,21 @@ export function LeadForm({
         details,
       },
     }).catch(() => undefined);
+    // Mirror to the CRM webhook, only after the database save succeeded.
+    if (leadType === "finance" || leadType === "availability" || leadType === "trade" || leadType === "appointment") {
+      void sendLeadToGhl({
+        data: {
+          leadType,
+          fullName: full_name,
+          email,
+          phone,
+          message,
+          vehicleUrl: typeof window !== "undefined" ? window.location.href : null,
+          vehicle: vehicle ?? (vehicleId ? { id: vehicleId } : null),
+          details,
+        },
+      }).catch((err) => console.error("[ghl-webhook] client call failed", err));
+    }
     setDone(true);
   }
 
