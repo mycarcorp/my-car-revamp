@@ -10,7 +10,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/app-client";
 import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
 import type { Database } from "@/integrations/supabase/types";
 

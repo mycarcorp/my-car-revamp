@@ -1,6 +1,6 @@
 import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { supabase } from "@/integrations/supabase/client";
+import { supabase } from "@/integrations/supabase/app-client";
 import { linkLegacyProfile } from "@/lib/legacy-auth.functions";
 
 export const Route = createFileRoute("/auth/callback")({
