@@ -387,8 +387,15 @@ INSERT INTO storage.buckets (id, name, public)
 VALUES ('vehicle-photos', 'vehicle-photos', false)
 ON CONFLICT (id) DO NOTHING;
 
--- Staff may manage photo objects; the site itself reads them through the
--- server-side proxy route /api/public/vehicle-photos/*, so no anon policy.
+-- The site serves photos through the server-side proxy route
+-- /api/public/vehicle-photos/*, which reads the object with the anon key,
+-- so a read policy for anon on this bucket is required.
+DROP POLICY IF EXISTS "public reads vehicle photo files" ON storage.objects;
+CREATE POLICY "public reads vehicle photo files"
+  ON storage.objects FOR SELECT TO anon, authenticated
+  USING (bucket_id = 'vehicle-photos');
+
+-- Staff may upload/replace/remove photo objects.
 DROP POLICY IF EXISTS "staff manage vehicle photo objects" ON storage.objects;
 CREATE POLICY "staff manage vehicle photo objects"
   ON storage.objects FOR ALL TO authenticated
