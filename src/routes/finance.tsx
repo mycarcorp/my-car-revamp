@@ -69,7 +69,16 @@ function FinancePage() {
               successTitle="Finance request received"
               successBody="Our finance manager will call to walk through options and next steps."
               messageLabel="Anything else we should know?"
-              collectDetails={() => ({ employment, income_band: income, desired_payment: desired, vehicle_of_interest: interest })}
+              collectDetails={() => ({
+                employment,
+                income_band: income,
+                desired_payment: desired,
+                vehicle_of_interest: interest,
+                vehicle_price: price,
+                down_payment: down,
+                loan_term: term,
+                apr,
+              })}
             >
               <div className="grid gap-4 sm:grid-cols-2">
                 <div className="space-y-2">
