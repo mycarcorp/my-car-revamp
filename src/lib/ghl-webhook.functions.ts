@@ -104,11 +104,12 @@ export const sendLeadToGhl = createServerFn({ method: "POST" })
     } else if (event_type === "check_availability") {
       payload = { ...base, ...vehicleFields };
     } else if (event_type === "sell_or_trade") {
+      const ymmParts = str(d["year_make_model"]).trim().split(/\s+/).filter(Boolean);
       payload = {
         ...base,
-        vehicle_year: str(d["year_make_model"]).split(" ")[0] ?? "",
-        vehicle_make: "",
-        vehicle_model: "",
+        vehicle_year: ymmParts[0] ?? "",
+        vehicle_make: ymmParts[1] ?? "",
+        vehicle_model: ymmParts.slice(2).join(" "),
         year_make_model: str(d["year_make_model"]),
         vin: str(d["vin"]),
         license_plate: str(d["plate"]),
