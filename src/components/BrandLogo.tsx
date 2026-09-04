@@ -1,10 +1,7 @@
 import { useEffect, useState } from "react";
-import { supabase } from "@/integrations/supabase/app-client";
-import { APP_SUPABASE_URL } from "@/integrations/supabase/runtime-config";
 
-const BUCKET = "logo";
-const OBJECT = "mycar-logo.png";
-const PUBLIC_URL = `${APP_SUPABASE_URL}/storage/v1/object/public/${BUCKET}/${OBJECT}`;
+const LOGO_URL =
+  "https://rpmmlzyeqpvczuuobddt.supabase.co/storage/v1/object/public/logo/mycar-logo.png";
 
 function preload(url: string): Promise<boolean> {
   return new Promise((resolve) => {
@@ -16,30 +13,25 @@ function preload(url: string): Promise<boolean> {
 }
 
 /**
- * MyCar wordmark. Loads mycar-logo.png from Storage: public URL first, then a
- * signed URL if the bucket is private. Falls back to the text wordmark while
- * loading or if the file can't be read.
+ * MyCar wordmark. Loads the dealership logo from the dedicated Storage bucket.
+ * Falls back to the text wordmark while loading or if the file can't be read.
  */
 export function BrandLogo({ className = "h-9 w-auto" }: { className?: string }) {
-  const [src, setSrc] = useState<string | null>(null);
+  const [ok, setOk] = useState(false);
 
   useEffect(() => {
     let active = true;
     void (async () => {
-      if (await preload(PUBLIC_URL)) {
-        if (active) setSrc(PUBLIC_URL);
-        return;
+      if (await preload(LOGO_URL)) {
+        if (active) setOk(true);
       }
-      const { data } = await supabase.storage.from(BUCKET).createSignedUrl(OBJECT, 60 * 60);
-      const signed = data?.signedUrl;
-      if (signed && (await preload(signed)) && active) setSrc(signed);
     })();
     return () => {
       active = false;
     };
   }, []);
 
-  if (!src) {
+  if (!ok) {
     return (
       <span className="rounded bg-primary px-2 py-1 font-display text-lg font-extrabold tracking-tight text-primary-foreground">
         My<span className="text-accent">Car</span>
@@ -47,5 +39,5 @@ export function BrandLogo({ className = "h-9 w-auto" }: { className?: string }) 
     );
   }
 
-  return <img src={src} alt="MyCar" className={className} />;
+  return <img src={LOGO_URL} alt="MyCar" className={className} />;
 }
