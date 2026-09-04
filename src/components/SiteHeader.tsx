@@ -5,6 +5,8 @@ import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { siteSettingsQuery } from "@/lib/queries";
 import { useAuth } from "@/hooks/useAuth";
+import { BrandLogo } from "@/components/BrandLogo";
+
 
 const NAV = [
   { to: "/search", label: "Shop inventory" },
