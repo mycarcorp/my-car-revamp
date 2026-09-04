@@ -721,11 +721,11 @@ JOIN mycarco_db.mc_users u
   ON lower(btrim(u.email)) = lower(btrim(au.email))
 ORDER BY au.id, u.id
 ON CONFLICT (id) DO UPDATE SET
-  full_name      = coalesce(public.profiles.full_name, EXCLUDED.full_name),
-  email          = coalesce(EXCLUDED.email, public.profiles.email),
-  phone          = coalesce(public.profiles.phone, EXCLUDED.phone),
-  avatar_url     = coalesce(public.profiles.avatar_url, EXCLUDED.avatar_url),
-  legacy_user_id = coalesce(public.profiles.legacy_user_id, EXCLUDED.legacy_user_id);
+  full_name      = coalesce(profiles.full_name, EXCLUDED.full_name),
+  email          = coalesce(EXCLUDED.email, profiles.email),
+  phone          = coalesce(profiles.phone, EXCLUDED.phone),
+  avatar_url     = coalesce(profiles.avatar_url, EXCLUDED.avatar_url),
+  legacy_user_id = coalesce(profiles.legacy_user_id, EXCLUDED.legacy_user_id);
 
 -- Profiles for any other existing Auth user (no legacy match), so the
 -- app never sees a signed-in user without a profile row.
