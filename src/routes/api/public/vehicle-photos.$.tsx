@@ -11,8 +11,8 @@ export const Route = createFileRoute("/api/public/vehicle-photos/$")({
           return new Response("Not found", { status: 404 });
         }
 
-        const url = process.env["SUPABASE_URL"];
-        const key = process.env["SUPABASE_PUBLISHABLE_KEY"];
+        const url = APP_SUPABASE_URL;
+        const key = APP_SUPABASE_PUBLISHABLE_KEY;
         if (!url || !key) return new Response("Not configured", { status: 500 });
 
         const upstream = await fetch(
