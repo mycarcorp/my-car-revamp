@@ -41,6 +41,7 @@ export type LeadFormProps = {
 export function LeadForm({
   leadType,
   vehicleId = null,
+  vehicle = null,
   submitLabel = "Send request",
   successTitle = "Request received",
   successBody = "A member of our team will reach out shortly during business hours.",
@@ -94,6 +95,21 @@ export function LeadForm({
         details,
       },
     }).catch(() => undefined);
+    // Mirror to the CRM webhook, only after the database save succeeded.
+    if (leadType === "finance" || leadType === "availability" || leadType === "trade" || leadType === "appointment") {
+      void sendLeadToGhl({
+        data: {
+          leadType,
+          fullName: full_name,
+          email,
+          phone,
+          message,
+          vehicleUrl: typeof window !== "undefined" ? window.location.href : null,
+          vehicle: vehicle ?? (vehicleId ? { id: vehicleId } : null),
+          details,
+        },
+      }).catch((err) => console.error("[ghl-webhook] client call failed", err));
+    }
     setDone(true);
   }
 
