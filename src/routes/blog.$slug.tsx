@@ -56,7 +56,7 @@ function extractFaq(body: string) {
     const heading = /^(#{2,4})\s+(.*\?)\s*$/.exec(line.trim());
     if (heading) {
       if (current) out.push({ question: current.question, answer: current.answer.join(" ").trim() });
-      current = { question: heading[2], answer: [] };
+      current = { question: heading[2] ?? "", answer: [] };
       continue;
     }
     if (/^#{1,4}\s+/.test(line.trim())) {
