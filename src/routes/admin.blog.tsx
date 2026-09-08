@@ -332,8 +332,11 @@ function PostFormDialog({
     };
 
     const { error } = post
-      ? await supabase.from("blog_posts").update(values).eq("id", post.id)
-      : await supabase.from("blog_posts").insert(values);
+      ? await supabase
+          .from("blog_posts")
+          .update(values as never)
+          .eq("id", post.id)
+      : await supabase.from("blog_posts").insert(values as never);
     setSaving(false);
 
     if (error) {
