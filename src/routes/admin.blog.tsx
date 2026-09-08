@@ -47,6 +47,10 @@ type Draft = {
   body: string;
   author_name: string;
   cover_image_url: string;
+  category: string;
+  tags: string;
+  seo_title: string;
+  meta_description: string;
   published: boolean;
 };
 
@@ -57,8 +61,14 @@ const emptyDraft: Draft = {
   body: "",
   author_name: "",
   cover_image_url: "",
+  category: "",
+  tags: "",
+  seo_title: "",
+  meta_description: "",
   published: false,
 };
+
+const IMAGE_BUCKET = "blog-images";
 
 function AdminBlog() {
   const queryClient = useQueryClient();
@@ -246,6 +256,7 @@ function PostFormDialog({
 }) {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -258,6 +269,10 @@ function PostFormDialog({
             body: post.body ?? "",
             author_name: post.author_name ?? "",
             cover_image_url: post.cover_image_url ?? "",
+            category: post.category ?? "",
+            tags: (post.tags ?? []).join(", "),
+            seo_title: post.seo_title ?? "",
+            meta_description: post.meta_description ?? "",
             published: post.published,
           }
         : emptyDraft,
@@ -266,6 +281,27 @@ function PostFormDialog({
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
+
+  async function uploadCover(file: File) {
+    setUploading(true);
+    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${slugify(draft.slug || draft.title) || "post"}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage
+      .from(IMAGE_BUCKET)
+      .upload(path, file, { upsert: true, contentType: file.type });
+    setUploading(false);
+    if (error) {
+      toast.error(
+        error.message.toLowerCase().includes("bucket")
+          ? `Image storage "${IMAGE_BUCKET}" isn't set up yet — paste an image address instead.`
+          : "Could not upload that image.",
+      );
+      return;
+    }
+    const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+    set("cover_image_url", data.publicUrl);
+    toast.success("Image uploaded.");
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
@@ -284,13 +320,23 @@ function PostFormDialog({
       body: draft.body,
       author_name: draft.author_name.trim() || null,
       cover_image_url: draft.cover_image_url.trim() || null,
+      category: draft.category.trim() || null,
+      tags: draft.tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+      seo_title: draft.seo_title.trim() || null,
+      meta_description: draft.meta_description.trim() || null,
       published: draft.published,
       published_at: draft.published ? (post?.published_at ?? new Date().toISOString()) : null,
     };
 
     const { error } = post
-      ? await supabase.from("blog_posts").update(values).eq("id", post.id)
-      : await supabase.from("blog_posts").insert(values);
+      ? await supabase
+          .from("blog_posts")
+          .update(values as never)
+          .eq("id", post.id)
+      : await supabase.from("blog_posts").insert(values as never);
     setSaving(false);
 
     if (error) {
@@ -344,13 +390,70 @@ function PostFormDialog({
               onChange={(e) => set("slug", e.target.value)}
             />
           </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="category">Category</Label>
+              <Input
+                id="category"
+                placeholder="Auto Financing"
+                value={draft.category}
+                onChange={(e) => set("category", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tags">Tags (comma separated)</Label>
+              <Input
+                id="tags"
+                value={draft.tags}
+                onChange={(e) => set("tags", e.target.value)}
+              />
+            </div>
+          </div>
           <div className="space-y-2">
-            <Label htmlFor="cover">Cover image URL</Label>
+            <Label htmlFor="cover">Featured image</Label>
             <Input
               id="cover"
+              placeholder="Image address, or upload below"
               value={draft.cover_image_url}
               onChange={(e) => set("cover_image_url", e.target.value)}
             />
+            <Input
+              id="cover-file"
+              type="file"
+              accept="image/*"
+              disabled={uploading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void uploadCover(f);
+                e.target.value = "";
+              }}
+            />
+            {uploading && <p className="text-xs text-muted-foreground">Uploading…</p>}
+            {draft.cover_image_url && (
+              <img
+                src={draft.cover_image_url}
+                alt="Featured"
+                className="aspect-[16/9] w-full max-w-sm rounded-lg object-cover"
+              />
+            )}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="seo_title">SEO title</Label>
+              <Input
+                id="seo_title"
+                value={draft.seo_title}
+                onChange={(e) => set("seo_title", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="meta_description">Meta description</Label>
+              <Input
+                id="meta_description"
+                value={draft.meta_description}
+                onChange={(e) => set("meta_description", e.target.value)}
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="excerpt">Excerpt</Label>
