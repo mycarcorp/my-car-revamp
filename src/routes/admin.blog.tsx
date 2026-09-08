@@ -309,6 +309,25 @@ function AdminBlog() {
                     onChange={(e) => setDraft({ ...draft, author_initials: e.target.value })}
                   />
                 </div>
+                <div className="space-y-2">
+                  <Label htmlFor="author_color">Author color</Label>
+                  <div className="flex items-center gap-2">
+                    <Input
+                      id="author_color"
+                      type="color"
+                      className="h-9 w-14 cursor-pointer p-1"
+                      value={draft.author_color || "#1b3a5c"}
+                      onChange={(e) => setDraft({ ...draft, author_color: e.target.value })}
+                    />
+                    <Input
+                      aria-label="Author color hex"
+                      maxLength={7}
+                      placeholder="#1b3a5c"
+                      value={draft.author_color}
+                      onChange={(e) => setDraft({ ...draft, author_color: e.target.value })}
+                    />
+                  </div>
+                </div>
               </div>
               <div className="space-y-2">
                 <Label htmlFor="image">Cover image URL</Label>
