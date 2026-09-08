@@ -390,13 +390,70 @@ function PostFormDialog({
               onChange={(e) => set("slug", e.target.value)}
             />
           </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="category">Category</Label>
+              <Input
+                id="category"
+                placeholder="Auto Financing"
+                value={draft.category}
+                onChange={(e) => set("category", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="tags">Tags (comma separated)</Label>
+              <Input
+                id="tags"
+                value={draft.tags}
+                onChange={(e) => set("tags", e.target.value)}
+              />
+            </div>
+          </div>
           <div className="space-y-2">
-            <Label htmlFor="cover">Cover image URL</Label>
+            <Label htmlFor="cover">Featured image</Label>
             <Input
               id="cover"
+              placeholder="Image address, or upload below"
               value={draft.cover_image_url}
               onChange={(e) => set("cover_image_url", e.target.value)}
             />
+            <Input
+              id="cover-file"
+              type="file"
+              accept="image/*"
+              disabled={uploading}
+              onChange={(e) => {
+                const f = e.target.files?.[0];
+                if (f) void uploadCover(f);
+                e.target.value = "";
+              }}
+            />
+            {uploading && <p className="text-xs text-muted-foreground">Uploading…</p>}
+            {draft.cover_image_url && (
+              <img
+                src={draft.cover_image_url}
+                alt="Featured"
+                className="aspect-[16/9] w-full max-w-sm rounded-lg object-cover"
+              />
+            )}
+          </div>
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label htmlFor="seo_title">SEO title</Label>
+              <Input
+                id="seo_title"
+                value={draft.seo_title}
+                onChange={(e) => set("seo_title", e.target.value)}
+              />
+            </div>
+            <div className="space-y-2">
+              <Label htmlFor="meta_description">Meta description</Label>
+              <Input
+                id="meta_description"
+                value={draft.meta_description}
+                onChange={(e) => set("meta_description", e.target.value)}
+              />
+            </div>
           </div>
           <div className="space-y-2">
             <Label htmlFor="excerpt">Excerpt</Label>
