@@ -124,9 +124,7 @@ function AdminBlog() {
         read_time: d.read_time || null,
         status: d.published ? "published" : "draft",
       };
-      return d.id
-        ? updateLegacyPost({ data: { ...payload, id: d.id } })
-        : createLegacyPost({ data: payload });
+      return d.id ? updateLegacyPost({ data: { ...payload, id: d.id } }) : createLegacyPost({ data: payload });
     },
     onSuccess: (_r, d) => {
       setDraft(null);
@@ -173,7 +171,7 @@ function AdminBlog() {
     <div className="p-6">
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="font-display text-2xl font-bold">Blog</h1>
+          <h1 className="font-display text-2xl font-bold">Blogs</h1>
           <p className="text-sm text-muted-foreground">
             Create, view, edit and delete posts. Everything is saved to your blog table.
           </p>
@@ -200,37 +198,22 @@ function AdminBlog() {
                 <p className="text-xs text-muted-foreground">
                   /{p.slug}
                   {p.category ? ` · ${p.category}` : ""}
-                  {p.status === "published"
-                    ? ` · published ${formatDate(p.published_at)}`
-                    : " · draft"}
+                  {p.status === "published" ? ` · published ${formatDate(p.published_at)}` : " · draft"}
                 </p>
               </div>
               <div className="flex items-center gap-3">
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-muted-foreground">Published</span>
-                  <Switch
-                    checked={p.status === "published"}
-                    onCheckedChange={() => togglePublish.mutate(p)}
-                  />
+                  <Switch checked={p.status === "published"} onCheckedChange={() => togglePublish.mutate(p)} />
                 </div>
                 <div className="flex items-center gap-1">
                   <Button variant="ghost" size="icon" aria-label="View post" onClick={() => setViewing(p)}>
                     <Eye className="size-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Edit post"
-                    onClick={() => setDraft(draftFrom(p))}
-                  >
+                  <Button variant="ghost" size="icon" aria-label="Edit post" onClick={() => setDraft(draftFrom(p))}>
                     <Pencil className="size-4" />
                   </Button>
-                  <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label="Delete post"
-                    onClick={() => setDeleting(p)}
-                  >
+                  <Button variant="ghost" size="icon" aria-label="Delete post" onClick={() => setDeleting(p)}>
                     <Trash2 className="size-4 text-destructive" />
                   </Button>
                 </div>
