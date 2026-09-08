@@ -256,6 +256,7 @@ function PostFormDialog({
 }) {
   const [draft, setDraft] = useState<Draft>(emptyDraft);
   const [saving, setSaving] = useState(false);
+  const [uploading, setUploading] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -268,6 +269,10 @@ function PostFormDialog({
             body: post.body ?? "",
             author_name: post.author_name ?? "",
             cover_image_url: post.cover_image_url ?? "",
+            category: post.category ?? "",
+            tags: (post.tags ?? []).join(", "),
+            seo_title: post.seo_title ?? "",
+            meta_description: post.meta_description ?? "",
             published: post.published,
           }
         : emptyDraft,
@@ -276,6 +281,27 @@ function PostFormDialog({
 
   const set = <K extends keyof Draft>(key: K, value: Draft[K]) =>
     setDraft((d) => ({ ...d, [key]: value }));
+
+  async function uploadCover(file: File) {
+    setUploading(true);
+    const ext = file.name.split(".").pop()?.toLowerCase() || "jpg";
+    const path = `${slugify(draft.slug || draft.title) || "post"}-${Date.now()}.${ext}`;
+    const { error } = await supabase.storage
+      .from(IMAGE_BUCKET)
+      .upload(path, file, { upsert: true, contentType: file.type });
+    setUploading(false);
+    if (error) {
+      toast.error(
+        error.message.toLowerCase().includes("bucket")
+          ? `Image storage "${IMAGE_BUCKET}" isn't set up yet — paste an image address instead.`
+          : "Could not upload that image.",
+      );
+      return;
+    }
+    const { data } = supabase.storage.from(IMAGE_BUCKET).getPublicUrl(path);
+    set("cover_image_url", data.publicUrl);
+    toast.success("Image uploaded.");
+  }
 
   async function submit(e: React.FormEvent) {
     e.preventDefault();
