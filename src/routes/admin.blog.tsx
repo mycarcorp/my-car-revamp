@@ -320,6 +320,13 @@ function PostFormDialog({
       body: draft.body,
       author_name: draft.author_name.trim() || null,
       cover_image_url: draft.cover_image_url.trim() || null,
+      category: draft.category.trim() || null,
+      tags: draft.tags
+        .split(",")
+        .map((t) => t.trim())
+        .filter(Boolean),
+      seo_title: draft.seo_title.trim() || null,
+      meta_description: draft.meta_description.trim() || null,
       published: draft.published,
       published_at: draft.published ? (post?.published_at ?? new Date().toISOString()) : null,
     };
