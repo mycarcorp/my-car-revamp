@@ -5,12 +5,7 @@ import type { Database } from "@/integrations/supabase/types";
 export type Vehicle = Database["public"]["Tables"]["vehicles"]["Row"];
 export type VehiclePhoto = Database["public"]["Tables"]["vehicle_photos"]["Row"];
 export type SiteSettings = Database["public"]["Tables"]["site_settings"]["Row"];
-export type BlogPost = Database["public"]["Tables"]["blog_posts"]["Row"] & {
-  category?: string | null;
-  tags?: string[] | null;
-  seo_title?: string | null;
-  meta_description?: string | null;
-};
+export type BlogPost = Database["public"]["Tables"]["blog_posts"]["Row"];
 export type Collection = Database["public"]["Tables"]["collections"]["Row"];
 export type ServiceArea = Database["public"]["Tables"]["service_areas"]["Row"];
 export type Lead = Database["public"]["Tables"]["leads"]["Row"];
