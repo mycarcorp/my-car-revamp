@@ -47,6 +47,10 @@ type Draft = {
   body: string;
   author_name: string;
   cover_image_url: string;
+  category: string;
+  tags: string;
+  seo_title: string;
+  meta_description: string;
   published: boolean;
 };
 
@@ -57,8 +61,14 @@ const emptyDraft: Draft = {
   body: "",
   author_name: "",
   cover_image_url: "",
+  category: "",
+  tags: "",
+  seo_title: "",
+  meta_description: "",
   published: false,
 };
+
+const IMAGE_BUCKET = "blog-images";
 
 function AdminBlog() {
   const queryClient = useQueryClient();
