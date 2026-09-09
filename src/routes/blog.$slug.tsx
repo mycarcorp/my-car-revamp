@@ -58,7 +58,7 @@ export const Route = createFileRoute("/blog/$slug")({
 });
 
 const rule = (selector: string, s: HeadingStyle) =>
-  `${selector}{font-size:${s.fontSize};font-weight:${s.fontWeight};line-height:${s.lineHeight};text-align:${s.textAlign};color:${s.color};}`;
+  `${selector}{font-size:${s.fontSize};font-weight:${s.fontWeight};line-height:${s.lineHeight};text-align:${s.textAlign};color:${s.color};background-color:${s.backgroundColor ?? "transparent"};}`;
 
 function BlogPost() {
   const { post } = Route.useLoaderData();
@@ -84,44 +84,67 @@ function BlogPost() {
   ].join("");
 
   return (
-    <article className="mx-auto max-w-3xl px-4 py-12">
+    <article className="w-full overflow-x-hidden">
       <style dangerouslySetInnerHTML={{ __html: css }} />
-      <Link to="/blog" className="text-sm text-muted-foreground hover:text-primary">
-        ← All articles
-      </Link>
-      <h1 className="mt-4 font-display text-4xl font-bold">{post.title}</h1>
-      <p className="mt-2 text-sm text-muted-foreground">
-        {formatDate(post.published_at)}
-        {post.author_name ? ` · ${post.author_name}` : ""}
-        {post.category ? ` · ${post.category}` : ""}
-        {post.read_time ? ` · ${post.read_time} min read` : ""}
-      </p>
-      {post.image_url && (
-        <img
-          src={post.image_url}
-          alt={post.title}
-          className="mt-8 aspect-[16/9] w-full rounded-xl object-cover"
-        />
-      )}
-      <div
-        className="blog-body mt-8 text-base text-foreground/90"
-        dangerouslySetInnerHTML={{ __html: bodyHtml }}
-      />
 
-      {cta.enabled && (cta.headline || cta.button_text) && (
-        <aside className="mt-12 rounded-xl border border-border bg-card p-8 text-center">
-          {cta.headline && <h2 className="font-display text-2xl font-bold">{cta.headline}</h2>}
-          {cta.button_text && cta.url && (
-            <a
-              href={cta.url}
-              {...(/^https?:/i.test(cta.url) ? { target: "_blank", rel: "noopener noreferrer" } : {})}
-              className="mt-5 inline-flex items-center rounded-md bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground"
-            >
-              {cta.button_text}
-            </a>
+      <div className="relative -mx-[50vw] left-1/2 w-screen">
+        <div className="relative h-[72vh] min-h-[440px] overflow-hidden bg-muted">
+          {post.image_url && (
+            <img
+              src={post.image_url}
+              alt={post.title}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
           )}
-        </aside>
-      )}
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/20" />
+
+          <div className="relative mx-auto flex h-full max-w-6xl items-end px-4 pb-8 sm:px-8 lg:px-12">
+            <div className="max-w-4xl text-left text-white">
+              {post.category && (
+                <span className="inline-flex rounded-full border border-white/40 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-white/90 backdrop-blur-sm">
+                  {post.category}
+                </span>
+              )}
+
+              <h1 className="mt-4 font-display text-4xl font-bold leading-none tracking-tight sm:text-5xl lg:text-7xl">
+                {post.title}
+              </h1>
+
+              <p className="mt-4 flex flex-wrap items-center gap-3 text-sm text-white/85 sm:text-base">
+                <span>{formatDate(post.published_at)}</span>
+                {post.author_name && <span>• {post.author_name}</span>}
+                {post.read_time ? <span>• {post.read_time} min read</span> : null}
+              </p>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-8 lg:px-12">
+        <Link to="/blog" className="text-sm text-muted-foreground hover:text-primary">
+          ← All articles
+        </Link>
+
+        <div
+          className="blog-body mt-8 text-base text-foreground/90"
+          dangerouslySetInnerHTML={{ __html: bodyHtml }}
+        />
+
+        {cta.enabled && (cta.headline || cta.button_text) && (
+          <aside className="mt-12 rounded-xl border border-border bg-card p-8 text-center">
+            {cta.headline && <h2 className="font-display text-2xl font-bold">{cta.headline}</h2>}
+            {cta.button_text && cta.url && (
+              <a
+                href={cta.url}
+                {...(/^https?:/i.test(cta.url) ? { target: "_blank", rel: "noopener noreferrer" } : {})}
+                className="mt-5 inline-flex items-center rounded-md bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground"
+              >
+                {cta.button_text}
+              </a>
+            )}
+          </aside>
+        )}
+      </div>
     </article>
   );
 }

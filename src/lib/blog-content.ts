@@ -15,6 +15,7 @@ export type HeadingStyle = {
   lineHeight: number;
   textAlign: "left" | "center" | "right";
   color: string;
+  backgroundColor?: string;
 };
 
 export type HeadingStyles = {
@@ -182,5 +183,6 @@ export function headingStyleAttr(style: HeadingStyle): Record<string, string> {
     lineHeight: String(style.lineHeight),
     textAlign: style.textAlign,
     color: style.color,
+    backgroundColor: style.backgroundColor ?? "transparent",
   };
 }

@@ -1,7 +1,9 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/app-client";
+import { APP_SUPABASE_URL } from "@/integrations/supabase/runtime-config";
 import {
   ArrowLeft,
   Bold,
@@ -37,6 +39,7 @@ import {
   normalizeCta,
   normalizeHeadingStyles,
   readTimeFromHtml,
+  sanitizeHtml,
   slugify,
   type Block,
   type BlockType,
@@ -54,6 +57,85 @@ import {
 
 const TYPE_LABEL: Record<BlockType, string> = { h1: "H1", h2: "H2", h3: "H3", p: "Body" };
 
+const BLOG_COVER_BUCKET = "blog photo";
+const BLOG_COVER_PREFIX = "blog-covers";
+
+const buildBlogCoverPath = (file: File, fallbackTitle: string) => {
+  const ext = (file.name.split(".").pop() || "jpg").toLowerCase();
+  const base = slugify(fallbackTitle || "blog-cover");
+  return `${BLOG_COVER_PREFIX}/${base || "blog-cover"}-${Date.now()}.${ext}`;
+};
+
+const encodeStoragePath = (value: string) =>
+  value
+    .split("/")
+    .map((segment) => encodeURIComponent(segment))
+    .join("/");
+
+const uploadBlogCover = async (file: File, fallbackTitle: string) => {
+  const path = buildBlogCoverPath(file, fallbackTitle);
+  const { error } = await supabase.storage
+    .from(BLOG_COVER_BUCKET)
+    .upload(path, file, { upsert: true, contentType: file.type || "image/jpeg" });
+
+  if (error) throw new Error(`Cover image upload failed: ${error.message}`);
+
+  return `${APP_SUPABASE_URL}/storage/v1/object/public/${encodeURIComponent(BLOG_COVER_BUCKET)}/${encodeStoragePath(path)}`;
+};
+
+const fragmentToHtml = (fragment: DocumentFragment | null) => {
+  if (!fragment) return "";
+  const wrapper = document.createElement("div");
+  wrapper.appendChild(fragment.cloneNode(true));
+  return wrapper.innerHTML;
+};
+
+const splitPlainTextIntoParagraphs = (text: string) =>
+  text
+    .replace(/\r\n/g, "\n")
+    .split(/\n\s*\n+/)
+    .map((segment) => segment.trim())
+    .filter(Boolean);
+
+const extractPastedBlocks = (clipboardData: DataTransfer | null): string[] => {
+  const html = clipboardData?.getData("text/html");
+  const plain = clipboardData?.getData("text/plain");
+
+  if (html) {
+    const temp = document.createElement("div");
+    temp.innerHTML = html;
+    const parsed = Array.from(temp.querySelectorAll("p,div,li"))
+      .map((node) => node.innerHTML.trim())
+      .filter(Boolean);
+    if (parsed.length > 0) return parsed;
+  }
+
+  return plain ? splitPlainTextIntoParagraphs(plain) : [];
+};
+
+const getPresetStyle = (presetId: string, type: keyof HeadingStyles): HeadingStyle => {
+  const base = DEFAULT_HEADING_STYLES[type];
+
+  switch (presetId) {
+    case "plain":
+      return { ...base, fontWeight: 500, lineHeight: 1.4 };
+    case "muted":
+      return { ...base, color: "#5b6471" };
+    case "eyebrow":
+      return { ...base, fontSize: type === "h1" ? "28px" : type === "h2" ? "24px" : "20px", fontWeight: 700, lineHeight: 1.2 };
+    case "quote":
+      return { ...base, fontSize: type === "h1" ? "40px" : type === "h2" ? "32px" : "24px", fontWeight: 500, lineHeight: 1.4, color: "#1f2937" };
+    case "display":
+      return { ...base, fontSize: type === "h1" ? "64px" : type === "h2" ? "48px" : "36px", fontWeight: type === "h1" ? 800 : type === "h2" ? 800 : 700, lineHeight: type === "h1" ? 1.1 : type === "h2" ? 1.1 : 1.2 };
+    case "highlight":
+      return { ...base, fontSize: type === "h1" ? "52px" : type === "h2" ? "38px" : "28px", fontWeight: 700, lineHeight: 1.2, color: "#1b3a5c" };
+    case "overline":
+      return { ...base, fontSize: type === "h1" ? "26px" : type === "h2" ? "22px" : "18px", fontWeight: 800, lineHeight: 1.1 };
+    default:
+      return base;
+  }
+};
+
 /* -------------------------------------------------------------------------- */
 /* Single editable section                                                     */
 /* -------------------------------------------------------------------------- */
@@ -66,6 +148,9 @@ function SectionEditor({
   onDelete,
   onMove,
   registerRef,
+  onFocus,
+  onSplit,
+  onPasteBlocks,
 }: {
   block: Block;
   styles: HeadingStyles;
@@ -74,9 +159,21 @@ function SectionEditor({
   onDelete: () => void;
   onMove: (dir: -1 | 1) => void;
   registerRef: (el: HTMLDivElement | null) => void;
+  onFocus?: (id: string, type: BlockType) => void;
+  onSplit?: (payload: { beforeHtml: string; afterHtml: string; currentType: BlockType }) => void;
+  onPasteBlocks?: (payload: { id: string; pieces: string[] }) => void;
 }) {
-  const initial = useMemo(() => block.html, [block.id, block.type]); // eslint-disable-line react-hooks/exhaustive-deps
-  const style: HeadingStyle | null = block.type === "p" ? null : styles[block.type];
+  const contentRef = useRef<HTMLDivElement | null>(null);
+  const style: HeadingStyle | null = block.type === "p" ? null : styles[block.type as keyof HeadingStyles];
+
+  useEffect(() => {
+    const el = contentRef.current;
+    if (!el) return;
+
+    if (el.innerHTML !== block.html) {
+      el.innerHTML = block.html;
+    }
+  }, [block.html, block.id, block.type]);
 
   return (
     <div className="group relative">
@@ -105,7 +202,10 @@ function SectionEditor({
       </div>
 
       <div
-        ref={registerRef}
+        ref={(node) => {
+          contentRef.current = node;
+          registerRef(node);
+        }}
         data-block-id={block.id}
         contentEditable
         suppressContentEditableWarning
@@ -113,6 +213,38 @@ function SectionEditor({
         aria-label={`${TYPE_LABEL[block.type]} section`}
         onInput={(e) => onChange((e.target as HTMLDivElement).innerHTML)}
         onBlur={(e) => onChange((e.target as HTMLDivElement).innerHTML)}
+        onFocus={() => onFocus?.(block.id, block.type)}
+        onKeyDown={(e) => {
+          if (e.key !== "Enter") return;
+          const selection = window.getSelection();
+          if (!selection || selection.rangeCount === 0 || !contentRef.current) return;
+
+          const range = selection.getRangeAt(0);
+          if (!contentRef.current.contains(range.startContainer)) return;
+
+          e.preventDefault();
+
+          const beforeRange = range.cloneRange();
+          beforeRange.selectNodeContents(contentRef.current);
+          beforeRange.setEnd(range.startContainer, range.startOffset);
+
+          const afterRange = range.cloneRange();
+          afterRange.selectNodeContents(contentRef.current);
+          afterRange.setStart(range.startContainer, range.startOffset);
+
+          onSplit?.({
+            beforeHtml: fragmentToHtml(beforeRange.cloneContents()),
+            afterHtml: fragmentToHtml(afterRange.cloneContents()),
+            currentType: block.type,
+          });
+        }}
+        onPaste={(e) => {
+          const pieces = extractPastedBlocks(e.clipboardData);
+          if (pieces.length <= 1) return;
+
+          e.preventDefault();
+          onPasteBlocks?.({ id: block.id, pieces });
+        }}
         className="prose-blog min-h-[1.6em] rounded px-1 py-0.5 outline-none focus:bg-muted/40"
         style={
           style
@@ -122,10 +254,10 @@ function SectionEditor({
                 lineHeight: style.lineHeight,
                 textAlign: style.textAlign,
                 color: style.color,
+                backgroundColor: style.backgroundColor ?? "transparent",
               }
             : { fontSize: "18px", lineHeight: 1.75 }
         }
-        dangerouslySetInnerHTML={{ __html: initial }}
       />
     </div>
   );
@@ -177,15 +309,15 @@ function AddSection({ onAdd }: { onAdd: (type: BlockType) => void }) {
 /* Main editor                                                                 */
 /* -------------------------------------------------------------------------- */
 
-type Tab = "content" | "design";
-
 export function BlogEditor({ postId }: { postId?: number }) {
   const { session } = useAuth();
   const accessToken = session?.access_token ?? "";
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
-  const [tab, setTab] = useState<Tab>("content");
+  const [sidebarTab, setSidebarTab] = useState<"post" | "design">("post");
+  const [activeBlock, setActiveBlock] = useState<{ id: string; type: BlockType } | null>(null);
+  const [colorMode, setColorMode] = useState<"text" | "background">("text");
   const [title, setTitle] = useState("");
   const [slug, setSlug] = useState("");
   const [slugTouched, setSlugTouched] = useState(false);
@@ -193,6 +325,10 @@ export function BlogEditor({ postId }: { postId?: number }) {
   const [category, setCategory] = useState("");
   const [excerpt, setExcerpt] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [coverPickerKey, setCoverPickerKey] = useState(0);
+  const coverInputRef = useRef<HTMLInputElement | null>(null);
+  const titleInputRef = useRef<HTMLTextAreaElement | null>(null);
+  const [coverUploading, setCoverUploading] = useState(false);
   const [authorName, setAuthorName] = useState("");
   const [authorInitials, setAuthorInitials] = useState("");
   const [authorColor, setAuthorColor] = useState("#1b3a5c");
@@ -204,6 +340,7 @@ export function BlogEditor({ postId }: { postId?: number }) {
   const [publishedAt, setPublishedAt] = useState<string | null>(null);
   const [newCategory, setNewCategory] = useState<string | null>(null);
 
+  const sectionRefs = useRef<Map<string, HTMLDivElement>>(new Map());
   const canvasRef = useRef<HTMLDivElement | null>(null);
   const [toolbar, setToolbar] = useState<{ top: number; left: number } | null>(null);
   const [linkOpen, setLinkOpen] = useState(false);
@@ -246,7 +383,19 @@ export function BlogEditor({ postId }: { postId?: number }) {
     setPublishedAt(existing.published_at ?? null);
   }, [existing]);
 
+  useEffect(() => {
+    const el = titleInputRef.current;
+    if (!el) return;
+
+    el.style.height = "auto";
+    el.style.height = `${el.scrollHeight}px`;
+  }, [title]);
+
   const effectiveSlug = slugTouched && slug ? slugify(slug) : slugify(title);
+  const activeType: keyof HeadingStyles =
+    activeBlock?.type === "h1" || activeBlock?.type === "h2" || activeBlock?.type === "h3"
+      ? activeBlock.type
+      : "h1";
 
   /* ----------------------------- block helpers ---------------------------- */
 
@@ -270,12 +419,117 @@ export function BlogEditor({ postId }: { postId?: number }) {
       return copy;
     });
 
+  const focusBlockById = (id: string) => {
+    const el = sectionRefs.current.get(id);
+    if (!el) return;
+    el.focus();
+
+    const selection = window.getSelection();
+    const range = document.createRange();
+    range.selectNodeContents(el);
+    range.collapse(true);
+    selection?.removeAllRanges();
+    selection?.addRange(range);
+  };
+
   const insertAt = (index: number, type: BlockType) =>
     setBlocks((b) => {
       const copy = [...b];
       copy.splice(index, 0, makeBlock(type));
       return copy;
     });
+
+  const splitBlockAtSelection = ({
+    beforeHtml,
+    afterHtml,
+    currentType,
+  }: {
+    beforeHtml: string;
+    afterHtml: string;
+    currentType: BlockType;
+  }) => {
+    const trimmedBefore = beforeHtml.trim();
+    const trimmedAfter = afterHtml.trim();
+
+    if (!trimmedBefore && !trimmedAfter) {
+      return;
+    }
+
+    const nextId = makeBlock(currentType).id;
+
+    setBlocks((b) => {
+      const index = b.findIndex((x) => x.id === activeBlock?.id);
+      if (index < 0) return b;
+
+      const current = b[index];
+      if (!current) return b;
+
+      const before = sanitizeHtml(trimmedBefore || "");
+      const after = sanitizeHtml(trimmedAfter || "");
+
+      if (!before && !after) return b;
+
+      const updated = [...b];
+      updated[index] = { ...current, html: before || "<br>" };
+
+      const next: Block = {
+        id: nextId,
+        type: currentType,
+        html: after || "",
+      };
+
+      updated.splice(index + 1, 0, next);
+      return updated;
+    });
+
+    window.requestAnimationFrame(() => {
+      focusBlockById(nextId);
+      setActiveBlock({ id: nextId, type: currentType });
+    });
+  };
+
+  const handlePasteBlocks = ({ id, pieces }: { id: string; pieces: string[] }) => {
+    if (pieces.length <= 1) return;
+
+    setBlocks((b) => {
+      const index = b.findIndex((x) => x.id === id);
+      if (index < 0) return b;
+
+      const current = b[index];
+      if (!current) return b;
+
+      const existing = sanitizeHtml(current.html || "");
+      const firstPiece = sanitizeHtml(pieces[0] ?? "") || existing;
+      const remainder = pieces.slice(1).map((piece) => sanitizeHtml(piece)).filter(Boolean);
+
+      const nextBlocks = [...b];
+      nextBlocks.splice(index, 1, { ...current, html: firstPiece }, ...remainder.map((piece) => makeBlock("p", piece)));
+      return nextBlocks;
+    });
+  };
+
+  const handleCoverUpload = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setCoverUploading(true);
+      const uploadedUrl = await uploadBlogCover(file, title || "Blog post");
+      setImageUrl(uploadedUrl);
+      toast.success("Cover image uploaded.");
+      setCoverPickerKey((v) => v + 1);
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Cover image upload failed.");
+    } finally {
+      setCoverUploading(false);
+      event.target.value = "";
+    }
+  };
+
+  const clearCoverImage = () => {
+    setImageUrl("");
+    setCoverPickerKey((v) => v + 1);
+  };
 
   /* -------------------------- selection / linking ------------------------- */
 
@@ -405,7 +659,7 @@ export function BlogEditor({ postId }: { postId?: number }) {
   const categoryOptions = [...new Set([...(categories ?? []), ...(category ? [category] : [])])];
 
   return (
-    <div className="min-h-screen">
+    <div className="min-h-screen overflow-hidden">
       {/* Top bar */}
       <div className="sticky top-0 z-20 border-b border-border bg-background/95 backdrop-blur">
         <div className="flex flex-wrap items-center justify-between gap-3 px-6 py-3">
@@ -424,331 +678,426 @@ export function BlogEditor({ postId }: { postId?: number }) {
             </Button>
           </div>
         </div>
-        <div className="flex gap-6 px-6">
-          {(["content", "design"] as Tab[]).map((t) => (
-            <button
-              key={t}
-              type="button"
-              onClick={() => setTab(t)}
-              className={`-mb-px border-b-2 px-1 pb-2 text-sm font-medium capitalize ${
-                tab === t ? "border-primary text-foreground" : "border-transparent text-muted-foreground"
-              }`}
-            >
-              {t}
-            </button>
-          ))}
-        </div>
       </div>
 
-      <div className="grid gap-8 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_320px]">
+      <div className="grid gap-8 px-6 py-8 lg:grid-cols-[minmax(0,1fr)_320px] lg:h-[calc(100vh-73px)] lg:min-h-0 lg:overflow-hidden">
         {/* Canvas */}
-        <div className="mx-auto w-full max-w-3xl">
-          {tab === "content" ? (
-            <>
-              <input
-                value={title}
-                onChange={(e) => {
-                  setTitle(e.target.value);
-                  if (!slugTouched) setSlug(slugify(e.target.value));
-                }}
-                placeholder="Add title"
-                aria-label="Post title"
-                className="w-full border-0 bg-transparent font-display text-4xl font-bold outline-none placeholder:text-muted-foreground/50"
-              />
-              <div className="mt-4 h-px w-full bg-border" />
+        <div className="mx-auto h-full w-full max-w-3xl min-h-0 overflow-y-auto pr-1">
+          <>
+            <textarea
+              ref={titleInputRef}
+              value={title}
+              rows={1}
+              onChange={(e) => {
+                setTitle(e.target.value);
+                if (!slugTouched) setSlug(slugify(e.target.value));
+              }}
+              placeholder="Add title"
+              aria-label="Post title"
+              className="w-full resize-none border-0 bg-transparent font-display text-4xl font-bold leading-tight outline-none placeholder:text-muted-foreground/50"
+              style={{ overflow: "hidden" }}
+            />
+            <div className="mt-4 h-px w-full bg-border" />
 
-              <div ref={canvasRef} className="mt-2">
-                <AddSection onAdd={(t) => insertAt(0, t)} />
-                {blocks.map((b, i) => (
-                  <div key={b.id}>
-                    <SectionEditor
-                      block={b}
-                      styles={styles}
-                      onChange={(html) => updateBlock(b.id, html)}
-                      onType={(t) => changeType(b.id, t)}
-                      onDelete={() => removeBlock(b.id)}
-                      onMove={(d) => moveBlock(b.id, d)}
-                      registerRef={() => {}}
-                    />
-                    <AddSection onAdd={(t) => insertAt(i + 1, t)} />
-                  </div>
-                ))}
-              </div>
-            </>
-          ) : (
-            <div className="space-y-8">
-              <h2 className="font-display text-xl font-bold">Design</h2>
-              {(["h1", "h2", "h3"] as const).map((k) => (
-                <div key={k} className="rounded-lg border border-border p-4">
-                  <p className="font-semibold uppercase">{k}</p>
-                  <div className="mt-3 grid gap-3 sm:grid-cols-2">
-                    <div className="space-y-1">
-                      <Label>Font size</Label>
-                      <Input
-                        value={styles[k].fontSize}
-                        onChange={(e) =>
-                          setStyles({ ...styles, [k]: { ...styles[k], fontSize: e.target.value } })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Font weight</Label>
-                      <Select
-                        value={String(styles[k].fontWeight)}
-                        onValueChange={(v) =>
-                          setStyles({ ...styles, [k]: { ...styles[k], fontWeight: Number(v) } })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {[300, 400, 500, 600, 700, 800].map((w) => (
-                            <SelectItem key={w} value={String(w)}>
-                              {w}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Line height</Label>
-                      <Input
-                        value={String(styles[k].lineHeight)}
-                        onChange={(e) =>
-                          setStyles({
-                            ...styles,
-                            [k]: { ...styles[k], lineHeight: Number(e.target.value) || 1.2 },
-                          })
-                        }
-                      />
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Alignment</Label>
-                      <Select
-                        value={styles[k].textAlign}
-                        onValueChange={(v) =>
-                          setStyles({
-                            ...styles,
-                            [k]: { ...styles[k], textAlign: v as HeadingStyle["textAlign"] },
-                          })
-                        }
-                      >
-                        <SelectTrigger>
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {["left", "center", "right"].map((a) => (
-                            <SelectItem key={a} value={a}>
-                              {a}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                    </div>
-                    <div className="space-y-1">
-                      <Label>Text color</Label>
-                      <div className="flex gap-2">
-                        <Input
-                          type="color"
-                          className="h-9 w-14 cursor-pointer p-1"
-                          value={styles[k].color}
-                          onChange={(e) =>
-                            setStyles({ ...styles, [k]: { ...styles[k], color: e.target.value } })
-                          }
-                        />
-                        <Input
-                          value={styles[k].color}
-                          onChange={(e) =>
-                            setStyles({ ...styles, [k]: { ...styles[k], color: e.target.value } })
-                          }
-                        />
-                      </div>
-                    </div>
-                  </div>
+            <div ref={canvasRef} className="mt-2">
+              <AddSection onAdd={(t) => insertAt(0, t)} />
+              {blocks.map((b, i) => (
+                <div key={b.id}>
+                  <SectionEditor
+                    block={b}
+                    styles={styles}
+                    onChange={(html) => updateBlock(b.id, html)}
+                    onType={(t) => changeType(b.id, t)}
+                    onDelete={() => removeBlock(b.id)}
+                    onMove={(d) => moveBlock(b.id, d)}
+                    registerRef={(el) => {
+                      if (el) {
+                        sectionRefs.current.set(b.id, el);
+                      } else {
+                        sectionRefs.current.delete(b.id);
+                      }
+                    }}
+                    onFocus={(id, type) => setActiveBlock({ id, type })}
+                    onSplit={splitBlockAtSelection}
+                    onPasteBlocks={handlePasteBlocks}
+                  />
+                  <AddSection onAdd={(t) => insertAt(i + 1, t)} />
                 </div>
               ))}
             </div>
-          )}
+          </>
         </div>
 
         {/* Settings sidebar */}
-        <aside className="space-y-6 lg:sticky lg:top-32 lg:self-start">
-          <section className="rounded-lg border border-border bg-background p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Post</h3>
-            <div className="mt-3 space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="image">Featured image URL</Label>
-                <Input id="image" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} />
-                {imageUrl && (
-                  <img src={imageUrl} alt="" className="mt-2 w-full rounded-md object-cover" />
-                )}
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="author">Author</Label>
-                <Input id="author" value={authorName} onChange={(e) => setAuthorName(e.target.value)} />
-              </div>
-              <div className="grid grid-cols-2 gap-2">
-                <div className="space-y-1">
-                  <Label htmlFor="initials">Initials</Label>
-                  <Input
-                    id="initials"
-                    maxLength={4}
-                    value={authorInitials}
-                    onChange={(e) => setAuthorInitials(e.target.value)}
-                  />
-                </div>
-                <div className="space-y-1">
-                  <Label htmlFor="acolor">Author color</Label>
-                  <Input
-                    id="acolor"
-                    type="color"
-                    className="h-9 w-full cursor-pointer p-1"
-                    value={authorColor}
-                    onChange={(e) => setAuthorColor(e.target.value)}
-                  />
-                </div>
-              </div>
-              <div className="space-y-1">
-                <Label>Category</Label>
-                {newCategory === null ? (
-                  <Select
-                    value={category || "__none"}
-                    onValueChange={(v) => (v === "__add" ? setNewCategory("") : setCategory(v === "__none" ? "" : v))}
-                  >
-                    <SelectTrigger>
-                      <SelectValue placeholder="Select a category" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      <SelectItem value="__none">No category</SelectItem>
-                      {categoryOptions.map((c) => (
-                        <SelectItem key={c} value={c}>
-                          {c}
-                        </SelectItem>
-                      ))}
-                      <SelectItem value="__add">+ Add Category</SelectItem>
-                    </SelectContent>
-                  </Select>
-                ) : (
-                  <div className="space-y-2">
-                    <Input
-                      autoFocus
-                      placeholder="New category"
-                      value={newCategory}
-                      onChange={(e) => setNewCategory(e.target.value)}
-                    />
-                    <div className="flex gap-2">
-                      <Button size="sm" variant="outline" onClick={() => setNewCategory(null)}>
-                        Cancel
-                      </Button>
-                      <Button
-                        size="sm"
-                        disabled={!newCategory.trim() || addCategoryMut.isPending}
-                        onClick={() => addCategoryMut.mutate(newCategory.trim())}
-                      >
-                        Add Category
-                      </Button>
+        <aside className="flex h-full w-full flex-col overflow-hidden border border-border bg-white shadow-sm lg:sticky lg:top-[73px] lg:h-[calc(100vh-73px)] lg:w-[320px] lg:self-stretch">
+          <div className="flex gap-1 border-b border-border bg-muted/50 p-1">
+            {(["post", "design"] as const).map((item) => (
+              <button
+                key={item}
+                type="button"
+                onClick={() => setSidebarTab(item)}
+                className={`flex-1 rounded-md px-3 py-2 text-sm font-medium capitalize transition-colors ${
+                  sidebarTab === item
+                    ? "bg-background text-foreground shadow-sm"
+                    : "text-muted-foreground hover:text-foreground"
+                }`}
+              >
+                {item}
+              </button>
+            ))}
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto">
+            {sidebarTab === "post" ? (
+              <>
+                <section className="border-b border-border bg-background p-4">
+                  <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Post</h3>
+                  <div className="mt-3 space-y-3">
+                    <div className="space-y-2">
+                      <Label>Cover image</Label>
+
+                      <input
+                        key={coverPickerKey}
+                        ref={coverInputRef}
+                        type="file"
+                        accept="image/*"
+                        className="hidden"
+                        onChange={handleCoverUpload}
+                      />
+
+                      {!imageUrl ? (
+                        <button
+                          type="button"
+                          onClick={() => coverInputRef.current?.click()}
+                          disabled={coverUploading}
+                          className="flex h-28 w-full cursor-pointer flex-col items-center justify-center rounded-xl border border-dashed border-border bg-muted/30 text-center text-sm text-muted-foreground transition hover:border-primary hover:bg-muted/50"
+                        >
+                          <span className="font-medium text-foreground">{coverUploading ? "Uploading…" : "Upload Image"}</span>
+                          <span className="mt-1 text-xs">Blog cover / featured image</span>
+                        </button>
+                      ) : (
+                        <div className="overflow-hidden rounded-xl border border-border bg-muted/20">
+                          <div className="relative aspect-[16/9] w-full overflow-hidden bg-muted">
+                            <img src={imageUrl} alt="Cover preview" className="h-full w-full object-cover" />
+                            <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-4">
+                              <p className="text-lg font-semibold text-white">{title || "Blog Post Title"}</p>
+                            </div>
+                          </div>
+                          <div className="flex gap-2 p-3">
+                            <Button type="button" variant="outline" size="sm" onClick={() => coverInputRef.current?.click()}>
+                              Replace
+                            </Button>
+                            <Button type="button" variant="ghost" size="sm" onClick={clearCoverImage}>
+                              Remove
+                            </Button>
+                          </div>
+                        </div>
+                      )}
+                    </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="image">Featured image URL</Label>
+                    <Input id="image" value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} />
+                    {imageUrl && (
+                      <img src={imageUrl} alt="" className="mt-2 w-full rounded-md object-cover" />
+                    )}
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="author">Author</Label>
+                    <Input id="author" value={authorName} onChange={(e) => setAuthorName(e.target.value)} />
+                  </div>
+                  <div className="grid grid-cols-2 gap-2">
+                    <div className="space-y-1">
+                      <Label htmlFor="initials">Initials</Label>
+                      <Input
+                        id="initials"
+                        maxLength={4}
+                        value={authorInitials}
+                        onChange={(e) => setAuthorInitials(e.target.value)}
+                      />
+                    </div>
+                    <div className="space-y-1">
+                      <Label htmlFor="acolor">Author color</Label>
+                      <Input
+                        id="acolor"
+                        type="color"
+                        className="h-9 w-full cursor-pointer p-1"
+                        value={authorColor}
+                        onChange={(e) => setAuthorColor(e.target.value)}
+                      />
                     </div>
                   </div>
-                )}
-              </div>
-              <p className="text-xs text-muted-foreground">
-                Status: {status === "published" ? "Published" : "Draft"}
-                {publishedAt ? ` · ${formatDate(publishedAt)}` : ""}
-                {" · "}
-                {readTimeFromHtml(blocksToHtml(blocks))} min read
-              </p>
-            </div>
-          </section>
+                  <div className="space-y-1">
+                    <Label>Category</Label>
+                    {newCategory === null ? (
+                      <Select
+                        value={category || "__none"}
+                        onValueChange={(v) =>
+                          v === "__add" ? setNewCategory("") : setCategory(v === "__none" ? "" : v)
+                        }
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a category" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="__none">No category</SelectItem>
+                          {categoryOptions.map((c) => (
+                            <SelectItem key={c} value={c}>
+                              {c}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="__add">+ Add Category</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    ) : (
+                      <div className="space-y-2">
+                        <Input
+                          autoFocus
+                          placeholder="New category"
+                          value={newCategory}
+                          onChange={(e) => setNewCategory(e.target.value)}
+                        />
+                        <div className="flex gap-2">
+                          <Button size="sm" variant="outline" onClick={() => setNewCategory(null)}>
+                            Cancel
+                          </Button>
+                          <Button
+                            size="sm"
+                            disabled={!newCategory.trim() || addCategoryMut.isPending}
+                            onClick={() => addCategoryMut.mutate(newCategory.trim())}
+                          >
+                            Add Category
+                          </Button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground">
+                    Status: {status === "published" ? "Published" : "Draft"}
+                    {publishedAt ? ` · ${formatDate(publishedAt)}` : ""}
+                    {" · "}
+                    {readTimeFromHtml(blocksToHtml(blocks))} min read
+                  </p>
+                </div>
+              </section>
 
-          <section className="rounded-lg border border-border bg-background p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">SEO</h3>
-            <div className="mt-3 space-y-3">
-              <div className="space-y-1">
-                <Label htmlFor="slug">Slug</Label>
-                <Input
-                  id="slug"
-                  value={slugTouched ? slug : effectiveSlug}
-                  onChange={(e) => {
-                    setSlugTouched(true);
-                    setSlug(e.target.value);
-                  }}
-                  onBlur={() => setSlug(slugify(slug))}
-                />
-                <p className="break-all text-xs text-muted-foreground">
-                  mycarcorporation.com/blog/{effectiveSlug || "…"}
-                </p>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="mtitle">Meta title</Label>
-                <Input id="mtitle" value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="mdesc">Meta description</Label>
-                <Textarea
-                  id="mdesc"
-                  rows={3}
-                  value={metaDescription}
-                  onChange={(e) => setMetaDescription(e.target.value)}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="excerpt">Excerpt</Label>
-                <Textarea
-                  id="excerpt"
-                  rows={3}
-                  value={excerpt}
-                  onChange={(e) => setExcerpt(e.target.value)}
-                />
-              </div>
-            </div>
-          </section>
+              <section className="border-b border-border bg-background p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">SEO</h3>
+                <div className="mt-3 space-y-3">
+                  <div className="space-y-1">
+                    <Label htmlFor="slug">Slug</Label>
+                    <Input
+                      id="slug"
+                      value={slugTouched ? slug : effectiveSlug}
+                      onChange={(e) => {
+                        setSlugTouched(true);
+                        setSlug(e.target.value);
+                      }}
+                      onBlur={() => setSlug(slugify(slug))}
+                    />
+                    <p className="break-all text-xs text-muted-foreground">
+                      mycarcorporation.com/blog/{effectiveSlug || "…"}
+                    </p>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="mtitle">Meta title</Label>
+                    <Input id="mtitle" value={metaTitle} onChange={(e) => setMetaTitle(e.target.value)} />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="mdesc">Meta description</Label>
+                    <Textarea
+                      id="mdesc"
+                      rows={3}
+                      value={metaDescription}
+                      onChange={(e) => setMetaDescription(e.target.value)}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="excerpt">Excerpt</Label>
+                    <Textarea
+                      id="excerpt"
+                      rows={3}
+                      value={excerpt}
+                      onChange={(e) => setExcerpt(e.target.value)}
+                    />
+                  </div>
+                </div>
+              </section>
 
-          <section className="rounded-lg border border-border bg-background p-4">
-            <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-              Primary CTA
-            </h3>
-            <div className="mt-3 space-y-3">
-              <div className="flex items-center gap-2">
-                <Switch
-                  id="cta"
-                  checked={cta.enabled}
-                  onCheckedChange={(v) => setCta({ ...cta, enabled: v })}
-                />
-                <Label htmlFor="cta">Enable CTA</Label>
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="ctah">Headline</Label>
-                <Input
-                  id="ctah"
-                  value={cta.headline}
-                  onChange={(e) => setCta({ ...cta, headline: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="ctab">Button text</Label>
-                <Input
-                  id="ctab"
-                  value={cta.button_text}
-                  onChange={(e) => setCta({ ...cta, button_text: e.target.value })}
-                />
-              </div>
-              <div className="space-y-1">
-                <Label htmlFor="ctau">Button link</Label>
-                <Input
-                  id="ctau"
-                  placeholder="/inventory"
-                  value={cta.url}
-                  onChange={(e) => setCta({ ...cta, url: e.target.value })}
-                />
-              </div>
-            </div>
-          </section>
+              <section className="bg-background p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Primary CTA
+                </h3>
+                <div className="mt-3 space-y-3">
+                  <div className="flex items-center gap-2">
+                    <Switch
+                      id="cta"
+                      checked={cta.enabled}
+                      onCheckedChange={(v) => setCta({ ...cta, enabled: v })}
+                    />
+                    <Label htmlFor="cta">Enable CTA</Label>
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="ctah">Headline</Label>
+                    <Input
+                      id="ctah"
+                      value={cta.headline}
+                      onChange={(e) => setCta({ ...cta, headline: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="ctab">Button text</Label>
+                    <Input
+                      id="ctab"
+                      value={cta.button_text}
+                      onChange={(e) => setCta({ ...cta, button_text: e.target.value })}
+                    />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="ctau">Button link</Label>
+                    <Input
+                      id="ctau"
+                      placeholder="/inventory"
+                      value={cta.url}
+                      onChange={(e) => setCta({ ...cta, url: e.target.value })}
+                    />
+                  </div>
+                </div>
+              </section>
+            </>
+          ) : (
+            <>
+              <section className="border-b border-border bg-background p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Styles
+                </h3>
+                <div className="mt-3 grid grid-cols-2 gap-2">
+                  {[
+                    { id: "default", label: "Default" },
+                    { id: "plain", label: "Plain" },
+                    { id: "muted", label: "Muted" },
+                    { id: "eyebrow", label: "Eyebrow" },
+                    { id: "quote", label: "Quote" },
+                    { id: "display", label: "Display" },
+                    { id: "highlight", label: "Highlight" },
+                    { id: "overline", label: "Overline" },
+                  ].map((preset) => (
+                    <button
+                      key={preset.id}
+                      type="button"
+                      onClick={() =>
+                        setStyles((prev) => ({
+                          ...prev,
+                          [activeType]: getPresetStyle(preset.id, activeType),
+                        }))
+                      }
+                      className="rounded-md border border-border bg-muted/40 px-2 py-3 text-left text-sm font-medium text-foreground transition hover:border-primary hover:bg-muted"
+                    >
+                      {preset.label}
+                    </button>
+                  ))}
+                </div>
+              </section>
+
+              <section className="border-b border-border bg-background p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Color</h3>
+                <div className="mt-3 space-y-3">
+                  <div className="flex gap-1 rounded-md border border-border bg-muted/50 p-1">
+                    {(["text", "background"] as const).map((mode) => (
+                      <button
+                        key={mode}
+                        type="button"
+                        onClick={() => setColorMode(mode)}
+                        className={`flex-1 rounded-md px-2 py-1.5 text-sm capitalize transition-colors ${
+                          colorMode === mode ? "bg-background text-foreground" : "text-muted-foreground"
+                        }`}
+                      >
+                        {mode}
+                      </button>
+                    ))}
+                  </div>
+                  <div className="flex gap-2">
+                    <Input
+                      type="color"
+                      className="h-9 w-14 cursor-pointer p-1"
+                      value={
+                        colorMode === "text"
+                          ? styles[activeType].color
+                          : styles[activeType].backgroundColor ?? "#ffffff"
+                      }
+                      onChange={(e) =>
+                        setStyles((prev) => ({
+                          ...prev,
+                          [activeType]: {
+                            ...prev[activeType],
+                            ...(colorMode === "text"
+                              ? { color: e.target.value }
+                              : { backgroundColor: e.target.value }),
+                          },
+                        }))
+                      }
+                    />
+                    <Input
+                      value={
+                        colorMode === "text"
+                          ? styles[activeType].color
+                          : styles[activeType].backgroundColor ?? "#ffffff"
+                      }
+                      onChange={(e) =>
+                        setStyles((prev) => ({
+                          ...prev,
+                          [activeType]: {
+                            ...prev[activeType],
+                            ...(colorMode === "text"
+                              ? { color: e.target.value }
+                              : { backgroundColor: e.target.value }),
+                          },
+                        }))
+                      }
+                    />
+                  </div>
+                </div>
+              </section>
+
+              <section className="bg-background p-4">
+                <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                  Typography
+                </h3>
+                <div className="mt-3 space-y-3">
+                  <div className="flex gap-2">
+                    {[
+                      { label: "S", size: "32px" },
+                      { label: "M", size: "40px" },
+                      { label: "L", size: "48px" },
+                      { label: "XL", size: "64px" },
+                    ].map((sizePreset) => (
+                      <button
+                        key={sizePreset.label}
+                        type="button"
+                        onClick={() =>
+                          setStyles((prev) => ({
+                            ...prev,
+                            [activeType]: {
+                              ...prev[activeType],
+                              fontSize: sizePreset.size,
+                            },
+                          }))
+                        }
+                        className="flex-1 rounded-md border border-border bg-muted/40 px-2 py-2 text-sm font-medium transition hover:border-primary"
+                      >
+                        {sizePreset.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              </section>
+            </>
+          )}
+          </div>
         </aside>
       </div>
 
       {/* Floating formatting toolbar */}
-      {tab === "content" && toolbar && (
+      {toolbar && (
         <div
           className="absolute z-30 flex items-center gap-1 rounded-md border border-border bg-background p-1 shadow-lg"
           style={{ top: toolbar.top, left: toolbar.left }}

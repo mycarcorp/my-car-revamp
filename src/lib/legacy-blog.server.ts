@@ -1,13 +1,21 @@
-// Server-only CRUD helpers for the legacy `mycarco_db.mc_blog` table.
-// The service-role key never leaves the server and the legacy schema is never
-// exposed to the browser.
+// Server-only CRUD helpers for `mycarco_db.mc_blog`.
+// If the legacy-specific env vars are absent, this falls back to the current
+// project's Supabase URL and service-role key so the editor can use the
+// configured mycarco_db table in this workspace.
 
 import type { HeadingStyles, PrimaryCta } from "./blog-content";
 
 function creds() {
-  const url = process.env["LEGACY_SUPABASE_URL"];
-  const key = process.env["LEGACY_SUPABASE_SERVICE_ROLE_KEY"];
-  if (!url || !key) throw new Error("Legacy backend credentials are not configured.");
+  const url = process.env["LEGACY_SUPABASE_URL"] ?? process.env["SUPABASE_URL"];
+  const key =
+    process.env["LEGACY_SUPABASE_SERVICE_ROLE_KEY"] ?? process.env["SUPABASE_SERVICE_ROLE_KEY"];
+
+  if (!url || !key) {
+    throw new Error(
+      "Blog backend credentials are not configured. Add SUPABASE_URL and SUPABASE_SERVICE_ROLE_KEY for the project that hosts mycarco_db.mc_blog, or set LEGACY_SUPABASE_URL / LEGACY_SUPABASE_SERVICE_ROLE_KEY explicitly.",
+    );
+  }
+
   return { url, key };
 }
 

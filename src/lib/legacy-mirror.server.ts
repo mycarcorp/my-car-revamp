@@ -18,7 +18,11 @@ async function rest(
   init: { method?: string; body?: unknown; profile?: Profile; prefer?: string } = {},
 ): Promise<unknown> {
   const c = creds();
-  if (!c) throw new Error("Legacy backend credentials are not configured.");
+  if (!c) {
+    throw new Error(
+      "Legacy backend credentials are not configured. Add LEGACY_SUPABASE_URL and LEGACY_SUPABASE_SERVICE_ROLE_KEY for the old Supabase project that hosts mycarco_db.mc_blog (not the public blog_posts table).",
+    );
+  }
 
   const method = init.method ?? "GET";
   const headers: Record<string, string> = {
