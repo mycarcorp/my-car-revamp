@@ -21,7 +21,6 @@ import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SellRouteImport } from './routes/sell'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
-import { Route as AdminBlogRouteImport } from './routes/admin.blog'
 import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
@@ -30,6 +29,9 @@ import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as InventorySlugRouteImport } from './routes/inventory.$slug'
 import { Route as LocationsIndexRouteImport } from './routes/locations.index'
 import { Route as LocationsSlugRouteImport } from './routes/locations.$slug'
+import { Route as AdminBlogIndexRouteImport } from './routes/admin.blog.index'
+import { Route as AdminBlogNewRouteImport } from './routes/admin.blog.new'
+import { Route as AdminBlogIdEditRouteImport } from './routes/admin.blog.$id.edit'
 import { Route as ApiPublicVehiclePhotosSplatRouteImport } from './routes/api/public/vehicle-photos.$'
 
 const IndexRoute = IndexRouteImport.update({
@@ -92,11 +94,6 @@ const AdminIndexRoute = AdminIndexRouteImport.update({
   path: '/',
   getParentRoute: () => AdminRoute,
 } as any)
-const AdminBlogRoute = AdminBlogRouteImport.update({
-  id: '/blog',
-  path: '/blog',
-  getParentRoute: () => AdminRoute,
-} as any)
 const AdminInventoryRoute = AdminInventoryRouteImport.update({
   id: '/inventory',
   path: '/inventory',
@@ -137,6 +134,21 @@ const LocationsSlugRoute = LocationsSlugRouteImport.update({
   path: '/locations/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const AdminBlogIndexRoute = AdminBlogIndexRouteImport.update({
+  id: '/blog/',
+  path: '/blog/',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBlogNewRoute = AdminBlogNewRouteImport.update({
+  id: '/blog/new',
+  path: '/blog/new',
+  getParentRoute: () => AdminRoute,
+} as any)
+const AdminBlogIdEditRoute = AdminBlogIdEditRouteImport.update({
+  id: '/blog/$id/edit',
+  path: '/blog/$id/edit',
+  getParentRoute: () => AdminRoute,
+} as any)
 const ApiPublicVehiclePhotosSplatRoute =
   ApiPublicVehiclePhotosSplatRouteImport.update({
     id: '/api/public/vehicle-photos/$',
@@ -156,7 +168,6 @@ export interface FileRoutesByFullPath {
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
-  '/admin/blog': typeof AdminBlogRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -166,6 +177,9 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AdminIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/locations/': typeof LocationsIndexRoute
+  '/admin/blog/new': typeof AdminBlogNewRoute
+  '/admin/blog/': typeof AdminBlogIndexRoute
+  '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
 export interface FileRoutesByTo {
@@ -179,7 +193,6 @@ export interface FileRoutesByTo {
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
-  '/admin/blog': typeof AdminBlogRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -189,6 +202,9 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminIndexRoute
   '/blog': typeof BlogIndexRoute
   '/locations': typeof LocationsIndexRoute
+  '/admin/blog/new': typeof AdminBlogNewRoute
+  '/admin/blog': typeof AdminBlogIndexRoute
+  '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
 export interface FileRoutesById {
@@ -204,7 +220,6 @@ export interface FileRoutesById {
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
-  '/admin/blog': typeof AdminBlogRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -214,6 +229,9 @@ export interface FileRoutesById {
   '/admin/': typeof AdminIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/locations/': typeof LocationsIndexRoute
+  '/admin/blog/new': typeof AdminBlogNewRoute
+  '/admin/blog/': typeof AdminBlogIndexRoute
+  '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
 export interface FileRouteTypes {
@@ -230,7 +248,6 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/search'
     | '/sell'
-    | '/admin/blog'
     | '/admin/inventory'
     | '/admin/settings'
     | '/auth/callback'
@@ -240,6 +257,9 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/blog/'
     | '/locations/'
+    | '/admin/blog/new'
+    | '/admin/blog/'
+    | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -253,7 +273,6 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/search'
     | '/sell'
-    | '/admin/blog'
     | '/admin/inventory'
     | '/admin/settings'
     | '/auth/callback'
@@ -263,6 +282,9 @@ export interface FileRouteTypes {
     | '/admin'
     | '/blog'
     | '/locations'
+    | '/admin/blog/new'
+    | '/admin/blog'
+    | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
   id:
     | '__root__'
@@ -277,7 +299,6 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/search'
     | '/sell'
-    | '/admin/blog'
     | '/admin/inventory'
     | '/admin/settings'
     | '/auth/callback'
@@ -287,6 +308,9 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/blog/'
     | '/locations/'
+    | '/admin/blog/new'
+    | '/admin/blog/'
+    | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
   fileRoutesById: FileRoutesById
 }
@@ -396,13 +420,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminIndexRouteImport
       parentRoute: typeof AdminRoute
     }
-    '/admin/blog': {
-      id: '/admin/blog'
-      path: '/blog'
-      fullPath: '/admin/blog'
-      preLoaderRoute: typeof AdminBlogRouteImport
-      parentRoute: typeof AdminRoute
-    }
     '/admin/inventory': {
       id: '/admin/inventory'
       path: '/inventory'
@@ -459,6 +476,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocationsSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/admin/blog/': {
+      id: '/admin/blog/'
+      path: '/blog'
+      fullPath: '/admin/blog/'
+      preLoaderRoute: typeof AdminBlogIndexRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/blog/new': {
+      id: '/admin/blog/new'
+      path: '/blog/new'
+      fullPath: '/admin/blog/new'
+      preLoaderRoute: typeof AdminBlogNewRouteImport
+      parentRoute: typeof AdminRoute
+    }
+    '/admin/blog/$id/edit': {
+      id: '/admin/blog/$id/edit'
+      path: '/blog/$id/edit'
+      fullPath: '/admin/blog/$id/edit'
+      preLoaderRoute: typeof AdminBlogIdEditRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/api/public/vehicle-photos/$': {
       id: '/api/public/vehicle-photos/$'
       path: '/api/public/vehicle-photos/$'
@@ -470,17 +508,21 @@ declare module '@tanstack/react-router' {
 }
 
 interface AdminRouteChildren {
-  AdminBlogRoute: typeof AdminBlogRoute
   AdminInventoryRoute: typeof AdminInventoryRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminIndexRoute: typeof AdminIndexRoute
+  AdminBlogNewRoute: typeof AdminBlogNewRoute
+  AdminBlogIndexRoute: typeof AdminBlogIndexRoute
+  AdminBlogIdEditRoute: typeof AdminBlogIdEditRoute
 }
 
 const AdminRouteChildren: AdminRouteChildren = {
-  AdminBlogRoute: AdminBlogRoute,
   AdminInventoryRoute: AdminInventoryRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminIndexRoute: AdminIndexRoute,
+  AdminBlogNewRoute: AdminBlogNewRoute,
+  AdminBlogIndexRoute: AdminBlogIndexRoute,
+  AdminBlogIdEditRoute: AdminBlogIdEditRoute,
 }
 
 const AdminRouteWithChildren = AdminRoute._addFileChildren(AdminRouteChildren)
