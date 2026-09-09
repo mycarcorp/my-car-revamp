@@ -1,9 +1,19 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { blogListQuery } from "@/lib/queries";
 import { formatDate } from "@/lib/format";
+import { publicBlogList } from "@/lib/legacy-blog.functions";
 
 export const Route = createFileRoute("/blog/")({
+  loader: async () => ({ posts: await publicBlogList() }),
+  errorComponent: () => (
+    <div className="mx-auto max-w-3xl px-4 py-24 text-center text-sm text-muted-foreground">
+      Articles are unavailable right now. Please try again shortly.
+    </div>
+  ),
+  notFoundComponent: () => (
+    <div className="mx-auto max-w-3xl px-4 py-24 text-center text-sm text-muted-foreground">
+      Nothing here yet.
+    </div>
+  ),
   head: () => ({
     meta: [
       { title: "Car Buying Advice & Dealership News — MyCar Blog" },
@@ -17,13 +27,15 @@ export const Route = createFileRoute("/blog/")({
         property: "og:description",
         content: "Used-car buying, financing and trade-in advice from our Fredericksburg team.",
       },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
   }),
   component: BlogIndex,
 });
 
 function BlogIndex() {
-  const { data: posts, isLoading } = useQuery(blogListQuery());
+  const { posts } = Route.useLoaderData();
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12">
@@ -32,28 +44,22 @@ function BlogIndex() {
         Straight answers about buying, financing and trading a used vehicle in Virginia.
       </p>
 
-      {isLoading ? (
-        <div className="mt-10 space-y-4">
-          {Array.from({ length: 3 }).map((_, i) => (
-            <div key={i} className="h-28 animate-pulse rounded-xl bg-muted" />
-          ))}
-        </div>
-      ) : (posts?.length ?? 0) === 0 ? (
+      {posts.length === 0 ? (
         <p className="mt-10 rounded-xl border border-dashed border-border p-10 text-center text-sm text-muted-foreground">
           No articles published yet. Check back soon.
         </p>
       ) : (
         <div className="mt-10 grid gap-6 sm:grid-cols-2">
-          {posts?.map((p) => (
+          {posts.map((p) => (
             <Link
               key={p.id}
               to="/blog/$slug"
               params={{ slug: p.slug }}
               className="card-lift overflow-hidden rounded-xl border border-border bg-card"
             >
-              {p.cover_image_url && (
+              {p.image_url && (
                 <img
-                  src={p.cover_image_url}
+                  src={p.image_url}
                   alt={p.title}
                   loading="lazy"
                   className="aspect-[16/9] w-full object-cover"
@@ -62,9 +68,13 @@ function BlogIndex() {
               <div className="p-5">
                 <p className="text-xs uppercase tracking-wide text-muted-foreground">
                   {formatDate(p.published_at)}
+                  {p.category ? ` · ${p.category}` : ""}
+                  {p.read_time ? ` · ${p.read_time} min read` : ""}
                 </p>
                 <h2 className="mt-2 font-display text-lg font-semibold">{p.title}</h2>
-                <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">{p.excerpt}</p>
+                {p.excerpt && (
+                  <p className="mt-2 line-clamp-3 text-sm text-muted-foreground">{p.excerpt}</p>
+                )}
               </div>
             </Link>
           ))}

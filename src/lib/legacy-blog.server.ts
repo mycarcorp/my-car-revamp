@@ -2,6 +2,8 @@
 // The service-role key never leaves the server and the legacy schema is never
 // exposed to the browser.
 
+import type { HeadingStyles, PrimaryCta } from "./blog-content";
+
 function creds() {
   const url = process.env["LEGACY_SUPABASE_URL"];
   const key = process.env["LEGACY_SUPABASE_SERVICE_ROLE_KEY"];
@@ -53,10 +55,10 @@ export type LegacyBlogPost = {
   published_at: string | null;
   created_at: string | null;
   updated_at: string | null;
-  meta_title?: string | null;
-  meta_description?: string | null;
-  primary_cta?: unknown;
-  heading_styles?: unknown;
+  meta_title?: string | null | undefined;
+  meta_description?: string | null | undefined;
+  primary_cta?: PrimaryCta | null | undefined;
+  heading_styles?: HeadingStyles | null | undefined;
 };
 
 /* -------------------------------------------------------------------------- */
@@ -150,10 +152,10 @@ export type BlogInput = {
   author_color: string | null;
   read_time: number | null;
   status: string;
-  meta_title?: string | null;
-  meta_description?: string | null;
-  primary_cta?: unknown;
-  heading_styles?: unknown;
+  meta_title?: string | null | undefined;
+  meta_description?: string | null | undefined;
+  primary_cta?: PrimaryCta | null | undefined;
+  heading_styles?: HeadingStyles | null | undefined;
 };
 
 export async function listPosts(): Promise<LegacyBlogPost[]> {

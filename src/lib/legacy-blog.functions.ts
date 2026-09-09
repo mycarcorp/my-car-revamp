@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
-import { sanitizeHtml, readTimeFromHtml, slugify } from "./blog-content";
+import { normalizeCta, normalizeHeadingStyles, readTimeFromHtml, sanitizeHtml, slugify } from "./blog-content";
+import type { HeadingStyles, PrimaryCta } from "./blog-content";
 import type { LegacyBlogPost } from "./legacy-blog.server";
 
 export type { LegacyBlogPost };
@@ -25,8 +26,8 @@ type RawInput = {
   status?: string;
   meta_title?: string | null;
   meta_description?: string | null;
-  primary_cta?: unknown;
-  heading_styles?: unknown;
+  primary_cta?: PrimaryCta | null;
+  heading_styles?: HeadingStyles | null;
 };
 
 function validate(input: RawInput) {
@@ -37,7 +38,6 @@ function validate(input: RawInput) {
   const slug = slugify(str(input?.slug, 255) ?? title);
   const body = sanitizeHtml(String(input?.body ?? ""));
   const readTimeNum = Number(input?.read_time);
-  const cta = (input?.primary_cta ?? null) as { enabled?: boolean; url?: string } | null;
 
   return {
     accessToken,
@@ -59,8 +59,8 @@ function validate(input: RawInput) {
       status: input?.status === "published" ? "published" : "draft",
       meta_title: str(input?.meta_title, 255),
       meta_description: str(input?.meta_description, 500),
-      primary_cta: cta && typeof cta === "object" ? cta : null,
-      heading_styles: input?.heading_styles ?? null,
+      primary_cta: input?.primary_cta ? normalizeCta(input.primary_cta) : null,
+      heading_styles: input?.heading_styles ? normalizeHeadingStyles(input.heading_styles) : null,
     },
   };
 }
