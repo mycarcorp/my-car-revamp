@@ -58,8 +58,8 @@ function AdminLayout() {
   }
 
   return (
-    <div className="flex min-h-screen w-full overflow-hidden">
-      <aside className="hidden w-52 shrink-0 flex-col overflow-hidden bg-sidebar p-3 text-sidebar-foreground md:flex">
+    <div className="flex min-h-screen w-full">
+      <aside className="hidden w-52 shrink-0 flex-col bg-sidebar p-3 text-sidebar-foreground md:flex">
         <Link to="/" className="font-display text-lg font-extrabold">
           My<span className="text-sidebar-primary">Car</span>{" "}
           <span className="text-xs font-medium opacity-70">admin</span>
