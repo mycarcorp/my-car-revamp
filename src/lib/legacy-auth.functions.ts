@@ -45,7 +45,8 @@ async function fetchLegacyUser(email: string): Promise<LegacyUser | null> {
 
 /** Copy approved legacy details onto the profile the signup trigger already created. */
 async function applyLegacyProfile(userId: string, legacy: LegacyUser) {
-  const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+  const { appAdmin } = await import("./app-admin.server");
+  const supabaseAdmin = appAdmin();
 
   const patch: Record<string, unknown> = { legacy_user_id: legacy.id };
   if (legacy.name) patch["full_name"] = legacy.name;
@@ -103,7 +104,8 @@ export const legacyMigrateLogin = createServerFn({ method: "POST" })
     }
     if (!ok) return { status: "invalid_password" };
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { appAdmin } = await import("./app-admin.server");
+    const supabaseAdmin = appAdmin();
     const { data: created, error } = await supabaseAdmin.auth.admin.createUser({
       email: legacy.email.trim().toLowerCase(),
       password: data.password,
@@ -137,7 +139,8 @@ export const linkLegacyProfile = createServerFn({ method: "POST" })
       .toLowerCase();
     if (!email) return { linked: false };
 
-    const { supabaseAdmin } = await import("@/integrations/supabase/client.server");
+    const { appAdmin } = await import("./app-admin.server");
+    const supabaseAdmin = appAdmin();
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("legacy_user_id")
