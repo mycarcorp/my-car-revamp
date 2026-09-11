@@ -13,6 +13,11 @@ const LEGACY_CLOUD_REF = "zqwnvktukyrtqnbvsmrg";
 const FALLBACK_URL = "https://rpmmlzyeqpvczuuobddt.supabase.co";
 const FALLBACK_PUBLISHABLE_KEY = "sb_publishable_ICvC1OElVVZV7jJ14ppRaA_w5oxHYyc";
 
+// Publishable keys that belong to the old platform backend. If one of these is
+// injected into the env it must never be paired with the external project URL,
+// because the external project rejects it with 401 on every auth request.
+const LEGACY_PUBLISHABLE_KEYS = new Set(["sb_publishable_oqfjBAu3Ozfa_sTVIMXdQw_X753X_PI"]);
+
 function envValue(name: string): string | undefined {
   const fromVite =
     typeof import.meta !== "undefined" ? (import.meta.env?.[name] as string | undefined) : undefined;
