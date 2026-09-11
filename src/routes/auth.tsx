@@ -10,6 +10,8 @@ import { lovable } from "@/integrations/lovable/index";
 import { useAuth } from "@/hooks/useAuth";
 import { ResendVerificationButton } from "@/components/VerifyEmailGate";
 import { legacyMigrateLogin, linkLegacyProfile } from "@/lib/legacy-auth.functions";
+import { registerAccount } from "@/lib/account.functions";
+
 
 export const Route = createFileRoute("/auth")({
   head: () => ({
@@ -101,43 +103,40 @@ function AuthPage() {
     const f = new FormData(e.currentTarget);
     const email = String(f.get("email")).trim().toLowerCase();
     const password = String(f.get("password"));
+    const fullName = String(f.get("full_name") ?? "");
     setBusy(true);
-    const { data, error } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-        data: { full_name: String(f.get("full_name")) },
-      },
-    });
+
+    const res = await registerAccount({ data: { email, password, fullName } }).catch(
+      (err: Error) => ({ status: "error" as const, message: err.message }),
+    );
+
+    if (res.status === "exists") {
+      setBusy(false);
+      toast.error("An account with that email already exists. Try signing in instead.");
+      return;
+    }
+    if (res.status === "weak_password") {
+      setBusy(false);
+      toast.error(res.message || "Please choose a stronger password.");
+      return;
+    }
+    if (res.status === "error") {
+      setBusy(false);
+      toast.error(res.message || "We couldn't create your account. Please try again.");
+      return;
+    }
+
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
     setBusy(false);
     if (error) {
-      const m = error.message.toLowerCase();
-      if (m.includes("already registered") || m.includes("already been registered") || m.includes("user already")) {
-        toast.error("An account with that email already exists. Try signing in instead.");
-      } else if (m.includes("invalid") && m.includes("email")) {
-        toast.error("That email address doesn't look valid.");
-      } else if (m.includes("pwned") || m.includes("compromised") || m.includes("leaked")) {
-        toast.error("That password has appeared in a data breach. Please choose a different one.");
-      } else if (m.includes("password")) {
-        toast.error(error.message || "Please choose a stronger password (at least 8 characters).");
-
-      } else {
-        toast.error(error.message || "We couldn't create your account. Please try again.");
-      }
+      toast.error("Your account was created. Please sign in.");
       return;
     }
-    if (!data.user) {
-      toast.error("We couldn't create your account. Please try again.");
-      return;
-    }
-    if (data.session) {
-      void navigate({ to: "/search" });
-      return;
-    }
-    setPendingEmail(email);
-    toast.success("Check your email to confirm your account.");
+    void linkLegacyProfile({}).catch(() => undefined);
+    toast.success("Welcome to MyCar!");
+    void navigate({ to: "/search" });
   }
+
 
 
   async function google() {
