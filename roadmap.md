@@ -17,3 +17,8 @@
 - Ongoing inventory feed sync
 - Security linter pass on RLS
 
+
+## Auth (Sep 11)
+- Fixed: account creation + sign-in now run against project rpmmlzyeqpvczuuobddt
+- Open: password-reset / verification emails fail (project email sending returns 500) — needs SMTP setup
+- Open: Google sign-in provider is disabled on that project
