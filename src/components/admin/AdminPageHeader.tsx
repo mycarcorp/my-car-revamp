@@ -13,7 +13,7 @@ export function AdminPageHeader({
 }) {
   return (
     <header
-      className={`border-b border-border bg-background px-4 py-2.5 ${className}`.trim()}
+      className={`sticky top-0 z-20 border-b border-border bg-background/95 px-4 py-2.5 backdrop-blur ${className}`.trim()}
     >
       <div className="flex w-full flex-wrap items-center justify-between gap-2">
         <div className="min-w-0">
