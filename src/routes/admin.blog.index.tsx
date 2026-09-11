@@ -109,7 +109,14 @@ function AdminBlog() {
     <div className="w-full">
       <AdminPageHeader
         title="Blog"
-       
+        actions={
+          <Button asChild size="sm">
+            <Link to="/admin/blog/new">
+              <Plus className="size-4" />
+              New post
+            </Link>
+          </Button>
+        }
       />
 
       <div className="p-6">

@@ -58,14 +58,14 @@ export const Route = createFileRoute("/blog/$slug")({
 });
 
 const rule = (selector: string, s: HeadingStyle) =>
-  `${selector}{font-size:${s.fontSize};font-weight:${s.fontWeight};line-height:${s.lineHeight};text-align:${s.textAlign};color:${s.color};background-color:${s.backgroundColor ?? "transparent"};}`;
+  `${selector}{font-size:${s.fontSize};font-weight:${s.fontWeight};line-height:${s.lineHeight};text-align:${s.textAlign};color:${s.color};background-color:${s.backgroundColor ?? "transparent"};${s.marginTop ? `margin-top:${s.marginTop};` : ""}${s.marginBottom ? `margin-bottom:${s.marginBottom};` : ""}${s.paddingLeft ? `padding-left:${s.paddingLeft};` : ""}}`;
 
 function BlogPost() {
   const { post } = Route.useLoaderData();
   const styles = normalizeHeadingStyles(post.heading_styles);
   const cta = normalizeCta(post.primary_cta);
 
-  const bodyHtml = /<(h1|h2|h3|p)[\s>]/i.test(post.body ?? "")
+  const bodyHtml = /<(h1|h2|h3|h4|p|ul|ol|blockquote|table)[\s>]/i.test(post.body ?? "")
     ? sanitizeHtml(post.body ?? "")
     : String(post.body ?? "")
         .split(/\n\s*\n/)
@@ -73,14 +73,23 @@ function BlogPost() {
         .map((p) => `<p>${escapeHtml(p.trim()).replace(/\n/g, "<br>")}</p>`)
         .join("");
 
+  const responsiveBodyHtml = bodyHtml.replace(/<table\b/gi, '<div class="blog-table-wrap"><table').replace(/<\/table>/gi, '</table></div>');
+
   const css = [
     rule(".blog-body h1", styles.h1),
     rule(".blog-body h2", styles.h2),
     rule(".blog-body h3", styles.h3),
-    ".blog-body h1,.blog-body h2,.blog-body h3{margin-top:1.6em;margin-bottom:.5em;}",
+    rule(".blog-body h4", styles.h4),
+    ".blog-body h1,.blog-body h2,.blog-body h3,.blog-body h4{margin-top:1.6em;margin-bottom:.5em;}",
     ".blog-body p{margin-bottom:1.1em;line-height:1.75;}",
     ".blog-body a{color:hsl(var(--primary));text-decoration:underline;}",
     ".blog-body ul,.blog-body ol{margin:0 0 1.1em 1.25em;list-style:disc;}",
+    ".blog-body .blog-table-wrap{margin:1.5em 0;overflow-x:auto;border:1px solid hsl(var(--border));border-radius:0.75rem;background:rgba(148,163,184,0.04);-webkit-overflow-scrolling:touch;}",
+    ".blog-body table{width:100%;min-width:640px;border-collapse:collapse;table-layout:fixed;}",
+    ".blog-body th,.blog-body td{padding:0.75rem;border:1px solid hsl(var(--border));vertical-align:top;text-align:left;}",
+    ".blog-body th{font-weight:700;background:rgba(148,163,184,0.06);}",
+    ".blog-body td p,.blog-body th p{margin:0;}",
+    ".blog-body td ul,.blog-body td ol,.blog-body th ul,.blog-body th ol{margin:0.5em 0 0 1.1rem;}",
   ].join("");
 
   return (
@@ -127,7 +136,7 @@ function BlogPost() {
 
         <div
           className="blog-body mt-8 text-base text-foreground/90"
-          dangerouslySetInnerHTML={{ __html: bodyHtml }}
+          dangerouslySetInnerHTML={{ __html: responsiveBodyHtml }}
         />
 
         {cta.enabled && (cta.headline || cta.button_text) && (

@@ -6,6 +6,9 @@ import { supabase } from "@/integrations/supabase/app-client";
 import { APP_SUPABASE_URL } from "@/integrations/supabase/runtime-config";
 import {
   ArrowLeft,
+  AlignCenter,
+  AlignLeft,
+  AlignRight,
   Bold,
   ChevronUp,
   ChevronDown,
@@ -14,7 +17,9 @@ import {
   Link2,
   Link2Off,
   Plus,
+  Table2,
   Trash2,
+  Underline,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -55,7 +60,17 @@ import {
   updateLegacyPost,
 } from "@/lib/legacy-blog.functions";
 
-const TYPE_LABEL: Record<BlockType, string> = { h1: "H1", h2: "H2", h3: "H3", p: "Body" };
+const TYPE_LABEL: Record<BlockType, string> = {
+  h1: "H1",
+  h2: "H2",
+  h3: "H3",
+  h4: "H4",
+  p: "Body",
+  table: "Table",
+};
+
+const SECTION_TYPES: BlockType[] = ["h1", "h2", "h3", "h4", "p"];
+const ADD_SECTION_TYPES: BlockType[] = [...SECTION_TYPES, "table"];
 
 const BLOG_COVER_BUCKET = "blog photo";
 const BLOG_COVER_PREFIX = "blog-covers";
@@ -97,20 +112,71 @@ const splitPlainTextIntoParagraphs = (text: string) =>
     .map((segment) => segment.trim())
     .filter(Boolean);
 
-const extractPastedBlocks = (clipboardData: DataTransfer | null): string[] => {
+type PastedBlock = { type: BlockType; html: string; style?: Partial<HeadingStyle> };
+
+const readPastedStyle = (node: Element): Partial<HeadingStyle> => {
+  const style = node.getAttribute("style") ?? "";
+  const result: Partial<HeadingStyle> = {};
+  style.split(";").forEach((declaration) => {
+    const [rawKey, ...rawValue] = declaration.split(":");
+    const value = rawValue.join(":").trim();
+    if (!value) return;
+    const key = rawKey?.trim().toLowerCase();
+    if (key === "font-size") result.fontSize = value;
+    if (key === "font-weight") result.fontWeight = Number(value) || 400;
+    if (key === "line-height") result.lineHeight = Number.parseFloat(value) || 1.5;
+    if (key === "text-align" && ["left", "center", "right"].includes(value)) {
+      result.textAlign = value as HeadingStyle["textAlign"];
+    }
+    if (key === "color") result.color = value;
+    if (key === "background-color") result.backgroundColor = value;
+    if (key === "margin-top") result.marginTop = value;
+    if (key === "margin-bottom") result.marginBottom = value;
+    if (key === "padding-left") result.paddingLeft = value;
+  });
+  return result;
+};
+
+const extractPastedBlocks = (clipboardData: DataTransfer | null): PastedBlock[] => {
   const html = clipboardData?.getData("text/html");
   const plain = clipboardData?.getData("text/plain");
 
   if (html) {
     const temp = document.createElement("div");
     temp.innerHTML = html;
-    const parsed = Array.from(temp.querySelectorAll("p,div,li"))
-      .map((node) => node.innerHTML.trim())
-      .filter(Boolean);
+    const parsed: PastedBlock[] = [];
+
+    const tables = Array.from(temp.querySelectorAll("table"));
+    if (tables.length) {
+      tables.forEach((table) => {
+        parsed.push({
+          type: "table",
+          html: sanitizeHtml(table.outerHTML),
+        });
+      });
+      return parsed;
+    }
+
+    const collect = (node: Element) => {
+      const tag = node.tagName.toLowerCase();
+      if (["h1", "h2", "h3", "h4", "p", "ul", "ol", "blockquote"].includes(tag)) {
+        parsed.push({
+          type: tag === "h1" || tag === "h2" || tag === "h3" || tag === "h4" ? tag : "p",
+          html: tag === "ul" || tag === "ol" || tag === "blockquote" ? node.outerHTML : node.innerHTML,
+          style: readPastedStyle(node),
+        });
+        return;
+      }
+      Array.from(node.children).forEach(collect);
+      if (!node.children.length && node.textContent?.trim()) {
+        parsed.push({ type: "p", html: node.innerHTML });
+      }
+    };
+    Array.from(temp.children).forEach(collect);
     if (parsed.length > 0) return parsed;
   }
 
-  return plain ? splitPlainTextIntoParagraphs(plain) : [];
+  return plain ? splitPlainTextIntoParagraphs(plain).map((html) => ({ type: "p", html })) : [];
 };
 
 const getPresetStyle = (presetId: string, type: keyof HeadingStyles): HeadingStyle => {
@@ -151,6 +217,7 @@ function SectionEditor({
   onFocus,
   onSplit,
   onPasteBlocks,
+  onTableAction,
 }: {
   block: Block;
   styles: HeadingStyles;
@@ -161,10 +228,16 @@ function SectionEditor({
   registerRef: (el: HTMLDivElement | null) => void;
   onFocus?: (id: string, type: BlockType) => void;
   onSplit?: (payload: { beforeHtml: string; afterHtml: string; currentType: BlockType }) => void;
-  onPasteBlocks?: (payload: { id: string; pieces: string[] }) => void;
+  onPasteBlocks?: (payload: { id: string; pieces: PastedBlock[] }) => void;
+  onTableAction?: (action: "add-row" | "remove-row" | "add-column" | "remove-column" | "delete-table") => void;
 }) {
   const contentRef = useRef<HTMLDivElement | null>(null);
-  const style: HeadingStyle | null = block.type === "p" ? null : styles[block.type as keyof HeadingStyles];
+  const style: HeadingStyle = {
+    ...(block.type === "p"
+      ? { fontSize: "18px", fontWeight: 400, lineHeight: 1.75, textAlign: "left" as const, color: "inherit" }
+      : styles[block.type as keyof HeadingStyles]),
+    ...(block.style ?? {}),
+  };
 
   useEffect(() => {
     const el = contentRef.current;
@@ -175,30 +248,55 @@ function SectionEditor({
     }
   }, [block.html, block.id, block.type]);
 
+  const handleInput = (e: React.FormEvent<HTMLDivElement>) => onChange((e.currentTarget as HTMLDivElement).innerHTML);
+
   return (
     <div className="group relative">
       <div className="absolute -left-2 top-1 flex -translate-x-full items-center gap-1 opacity-0 transition group-focus-within:opacity-100 group-hover:opacity-100">
-        <select
-          aria-label="Section type"
-          className="rounded border border-border bg-background px-1 py-0.5 text-xs"
-          value={block.type}
-          onChange={(e) => onType(e.target.value as BlockType)}
-        >
-          {(["h1", "h2", "h3", "p"] as BlockType[]).map((t) => (
-            <option key={t} value={t}>
-              {TYPE_LABEL[t]}
-            </option>
-          ))}
-        </select>
+        {block.type === "table" ? (
+          <>
+            <button type="button" onClick={() => onTableAction?.("add-row")} className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground">
+              + Row
+            </button>
+            <button type="button" onClick={() => onTableAction?.("remove-row")} className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground">
+              - Row
+            </button>
+            <button type="button" onClick={() => onTableAction?.("add-column")} className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground">
+              + Col
+            </button>
+            <button type="button" onClick={() => onTableAction?.("remove-column")} className="rounded border border-border bg-background px-1.5 py-0.5 text-[10px] text-foreground">
+              - Col
+            </button>
+          </>
+        ) : (
+          <select
+            aria-label="Section type"
+            className="rounded border border-border bg-background px-1 py-0.5 text-xs"
+            value={block.type}
+            onChange={(e) => onType(e.target.value as BlockType)}
+          >
+            {SECTION_TYPES.map((t) => (
+              <option key={t} value={t}>
+                {TYPE_LABEL[t]}
+              </option>
+            ))}
+          </select>
+        )}
         <button type="button" aria-label="Move section up" onClick={() => onMove(-1)} className="p-1">
           <ChevronUp className="size-3.5" />
         </button>
         <button type="button" aria-label="Move section down" onClick={() => onMove(1)} className="p-1">
           <ChevronDown className="size-3.5" />
         </button>
-        <button type="button" aria-label="Delete section" onClick={onDelete} className="p-1">
-          <Trash2 className="size-3.5 text-destructive" />
-        </button>
+        {block.type === "table" ? (
+          <button type="button" aria-label="Delete table" onClick={() => onTableAction?.("delete-table")} className="p-1">
+            <Trash2 className="size-3.5 text-destructive" />
+          </button>
+        ) : (
+          <button type="button" aria-label="Delete section" onClick={onDelete} className="p-1">
+            <Trash2 className="size-3.5 text-destructive" />
+          </button>
+        )}
       </div>
 
       <div
@@ -207,15 +305,16 @@ function SectionEditor({
           registerRef(node);
         }}
         data-block-id={block.id}
+        data-block-type={block.type}
         contentEditable
         suppressContentEditableWarning
         role="textbox"
         aria-label={`${TYPE_LABEL[block.type]} section`}
-        onInput={(e) => onChange((e.target as HTMLDivElement).innerHTML)}
-        onBlur={(e) => onChange((e.target as HTMLDivElement).innerHTML)}
+        onInput={handleInput}
+        onBlur={handleInput}
         onFocus={() => onFocus?.(block.id, block.type)}
         onKeyDown={(e) => {
-          if (e.key !== "Enter") return;
+          if (block.type === "table" || e.key !== "Enter") return;
           const selection = window.getSelection();
           if (!selection || selection.rangeCount === 0 || !contentRef.current) return;
 
@@ -240,23 +339,36 @@ function SectionEditor({
         }}
         onPaste={(e) => {
           const pieces = extractPastedBlocks(e.clipboardData);
-          if (pieces.length <= 1) return;
+          const hasStructuredContent = pieces.some(
+            (piece) => piece.type !== "p" || /<(ul|ol|blockquote)\b/i.test(piece.html),
+          );
+          if (pieces.length <= 1 && !hasStructuredContent) return;
 
           e.preventDefault();
           onPasteBlocks?.({ id: block.id, pieces });
         }}
         className="prose-blog min-h-[1.6em] rounded px-1 py-0.5 outline-none focus:bg-muted/40"
         style={
-          style
+          block.type === "table"
             ? {
-                fontSize: style.fontSize,
-                fontWeight: style.fontWeight,
-                lineHeight: style.lineHeight,
-                textAlign: style.textAlign,
-                color: style.color,
-                backgroundColor: style.backgroundColor ?? "transparent",
+                overflowX: "auto",
+                border: "1px solid hsl(var(--border))",
+                borderRadius: "0.75rem",
+                backgroundColor: "rgba(148, 163, 184, 0.04)",
               }
-            : { fontSize: "18px", lineHeight: 1.75 }
+            : style
+              ? {
+                  fontSize: style.fontSize,
+                  fontWeight: style.fontWeight,
+                  lineHeight: style.lineHeight,
+                  textAlign: style.textAlign,
+                  color: style.color,
+                  backgroundColor: style.backgroundColor ?? "transparent",
+                  marginTop: style.marginTop,
+                  marginBottom: style.marginBottom,
+                  paddingLeft: style.paddingLeft,
+                }
+              : { fontSize: "18px", lineHeight: 1.75 }
         }
       />
     </div>
@@ -274,7 +386,7 @@ function AddSection({ onAdd }: { onAdd: (type: BlockType) => void }) {
       <div className="h-px w-full bg-border" />
       {open ? (
         <div className="absolute left-1/2 top-1/2 z-10 flex -translate-x-1/2 -translate-y-1/2 gap-1 rounded-lg border border-border bg-background p-1 shadow-md">
-          {(["h1", "h2", "h3", "p"] as BlockType[]).map((t) => (
+          {ADD_SECTION_TYPES.map((t) => (
             <Button
               key={t}
               type="button"
@@ -393,7 +505,7 @@ export function BlogEditor({ postId }: { postId?: number }) {
 
   const effectiveSlug = slugTouched && slug ? slugify(slug) : slugify(title);
   const activeType: keyof HeadingStyles =
-    activeBlock?.type === "h1" || activeBlock?.type === "h2" || activeBlock?.type === "h3"
+    activeBlock?.type === "h1" || activeBlock?.type === "h2" || activeBlock?.type === "h3" || activeBlock?.type === "h4"
       ? activeBlock.type
       : "h1";
 
@@ -401,6 +513,56 @@ export function BlogEditor({ postId }: { postId?: number }) {
 
   const updateBlock = (id: string, html: string) =>
     setBlocks((b) => b.map((x) => (x.id === id ? { ...x, html } : x)));
+
+  const makeTableMarkup = (rows = 2, cols = 2) => {
+    const table = document.createElement("table");
+    table.style.width = "100%";
+    table.style.borderCollapse = "collapse";
+    table.style.border = "1px solid hsl(var(--border))";
+    table.style.tableLayout = "fixed";
+
+    const body = document.createElement("tbody");
+    for (let rowIndex = 0; rowIndex < rows; rowIndex += 1) {
+      const tr = document.createElement("tr");
+      for (let colIndex = 0; colIndex < cols; colIndex += 1) {
+        const cell = document.createElement("td");
+        cell.style.border = "1px solid hsl(var(--border))";
+        cell.style.padding = "0.7rem";
+        cell.style.verticalAlign = "top";
+        cell.textContent = `Cell ${rowIndex + 1}.${colIndex + 1}`;
+        tr.appendChild(cell);
+      }
+      body.appendChild(tr);
+    }
+    table.appendChild(body);
+    return table.outerHTML;
+  };
+
+  const insertTableAt = (index: number) => {
+    const rawRows = window.prompt("Number of rows", "2");
+    const rawCols = window.prompt("Number of columns", "2");
+    const rows = Math.max(1, Number.parseInt(rawRows ?? "", 10) || 2);
+    const cols = Math.max(1, Number.parseInt(rawCols ?? "", 10) || 2);
+
+    insertAt(index, "table", rows, cols);
+  };
+
+  const updateActiveBlockStyle = (patch: Partial<HeadingStyle>) => {
+    if (!activeBlock) return;
+    setBlocks((current) =>
+      current.map((block) =>
+        block.id === activeBlock.id ? { ...block, style: { ...(block.style ?? {}), ...patch } } : block,
+      ),
+    );
+  };
+
+  const selectedBlock = activeBlock ? blocks.find((block) => block.id === activeBlock.id) : null;
+  const selectedStyle: HeadingStyle = {
+    ...(selectedBlock?.type === "p"
+      ? { fontSize: "18px", fontWeight: 400, lineHeight: 1.75, textAlign: "left" as const, color: "#111111" }
+      : styles[activeType]),
+    ...(selectedBlock?.style ?? {}),
+  };
 
   const changeType = (id: string, type: BlockType) =>
     setBlocks((b) => b.map((x) => (x.id === id ? { ...x, type } : x)));
@@ -432,12 +594,20 @@ export function BlogEditor({ postId }: { postId?: number }) {
     selection?.addRange(range);
   };
 
-  const insertAt = (index: number, type: BlockType) =>
+  const insertAt = (index: number, type: BlockType, rows = 2, cols = 2) => {
+    const next = makeBlock(type, type === "table" ? makeTableMarkup(rows, cols) : "");
     setBlocks((b) => {
       const copy = [...b];
-      copy.splice(index, 0, makeBlock(type));
+      copy.splice(index, 0, next);
       return copy;
     });
+    if (type === "table") {
+      window.requestAnimationFrame(() => {
+        focusBlockById(next.id);
+        setActiveBlock({ id: next.id, type });
+      });
+    }
+  };
 
   const splitBlockAtSelection = ({
     beforeHtml,
@@ -488,8 +658,74 @@ export function BlogEditor({ postId }: { postId?: number }) {
     });
   };
 
-  const handlePasteBlocks = ({ id, pieces }: { id: string; pieces: string[] }) => {
-    if (pieces.length <= 1) return;
+  const handleTableAction = (id: string, action: "add-row" | "remove-row" | "add-column" | "remove-column" | "delete-table") => {
+    if (action === "delete-table") {
+      removeBlock(id);
+      return;
+    }
+
+    setBlocks((b) =>
+      b.map((block) => {
+        if (block.id !== id || block.type !== "table") return block;
+
+        const wrapper = document.createElement("div");
+        wrapper.innerHTML = sanitizeHtml(block.html || "");
+        const table = wrapper.querySelector("table");
+        if (!table) return block;
+
+        const rows = Array.from(table.querySelectorAll("tr"));
+        const rowCount = rows.length;
+
+        if (action === "add-row") {
+          const newRow = document.createElement("tr");
+          const cellCount = Math.max(1, rows[0]?.children.length ?? 1);
+          for (let columnIndex = 0; columnIndex < cellCount; columnIndex += 1) {
+            const cell = document.createElement("td");
+            cell.style.border = "1px solid hsl(var(--border))";
+            cell.style.padding = "0.7rem";
+            cell.style.verticalAlign = "top";
+            cell.textContent = "Cell";
+            newRow.appendChild(cell);
+          }
+          const targetBody = table.querySelector("tbody") ?? table;
+          targetBody.appendChild(newRow);
+        }
+
+        if (action === "remove-row") {
+          if (rowCount > 1) {
+            const lastRow = rows[rowCount - 1];
+            lastRow?.remove();
+          }
+        }
+
+        if (action === "add-column") {
+          rows.forEach((row) => {
+            const cell = document.createElement("td");
+            cell.style.border = "1px solid hsl(var(--border))";
+            cell.style.padding = "0.7rem";
+            cell.style.verticalAlign = "top";
+            cell.textContent = "Cell";
+            row.appendChild(cell);
+          });
+        }
+
+        if (action === "remove-column") {
+          const columnCount = Math.max(1, rows[0]?.children.length ?? 1);
+          if (columnCount > 1) {
+            rows.forEach((row) => {
+              const lastCell = row.lastElementChild;
+              lastCell?.remove();
+            });
+          }
+        }
+
+        return { ...block, html: table.outerHTML };
+      }),
+    );
+  };
+
+  const handlePasteBlocks = ({ id, pieces }: { id: string; pieces: PastedBlock[] }) => {
+    if (pieces.length === 0) return;
 
     setBlocks((b) => {
       const index = b.findIndex((x) => x.id === id);
@@ -499,11 +735,28 @@ export function BlogEditor({ postId }: { postId?: number }) {
       if (!current) return b;
 
       const existing = sanitizeHtml(current.html || "");
-      const firstPiece = sanitizeHtml(pieces[0] ?? "") || existing;
-      const remainder = pieces.slice(1).map((piece) => sanitizeHtml(piece)).filter(Boolean);
+      const first = pieces[0];
+      const firstPiece = sanitizeHtml(first?.html ?? "") || existing;
+      const remainder = pieces
+        .slice(1)
+        .map((piece) => ({ ...piece, html: sanitizeHtml(piece.html) }))
+        .filter((piece) => piece.html);
 
       const nextBlocks = [...b];
-      nextBlocks.splice(index, 1, { ...current, html: firstPiece }, ...remainder.map((piece) => makeBlock("p", piece)));
+      nextBlocks.splice(
+        index,
+        1,
+        {
+          ...current,
+          type: first?.type ?? current.type,
+          html: firstPiece,
+          ...(first?.style && Object.keys(first.style).length ? { style: first.style } : {}),
+        },
+        ...remainder.map((piece) => ({
+          ...makeBlock(piece.type, piece.html),
+          ...(piece.style && Object.keys(piece.style).length ? { style: piece.style } : {}),
+        })),
+      );
       return nextBlocks;
     });
   };
@@ -542,6 +795,17 @@ export function BlogEditor({ postId }: { postId?: number }) {
       }
       const range = sel.getRangeAt(0);
       if (!canvasRef.current?.contains(range.commonAncestorContainer)) return;
+      const ancestor =
+        range.commonAncestorContainer.nodeType === 1
+          ? (range.commonAncestorContainer as Element)
+          : range.commonAncestorContainer.parentElement;
+      const selectionBlock = ancestor?.closest("[data-block-id]") as HTMLElement | null;
+      if (selectionBlock?.dataset["blockId"] && selectionBlock.dataset["blockType"]) {
+        setActiveBlock({
+          id: selectionBlock.dataset["blockId"],
+          type: selectionBlock.dataset["blockType"] as BlockType,
+        });
+      }
       const rect = range.getBoundingClientRect();
       savedRange.current = range.cloneRange();
       setToolbar({ top: rect.top + window.scrollY - 44, left: rect.left + window.scrollX });
@@ -700,7 +964,7 @@ export function BlogEditor({ postId }: { postId?: number }) {
             <div className="mt-4 h-px w-full bg-border" />
 
             <div ref={canvasRef} className="mt-2">
-              <AddSection onAdd={(t) => insertAt(0, t)} />
+              <AddSection onAdd={(t) => (t === "table" ? insertTableAt(0) : insertAt(0, t))} />
               {blocks.map((b, i) => (
                 <div key={b.id}>
                   <SectionEditor
@@ -720,8 +984,9 @@ export function BlogEditor({ postId }: { postId?: number }) {
                     onFocus={(id, type) => setActiveBlock({ id, type })}
                     onSplit={splitBlockAtSelection}
                     onPasteBlocks={handlePasteBlocks}
+                    onTableAction={(action) => handleTableAction(b.id, action)}
                   />
-                  <AddSection onAdd={(t) => insertAt(i + 1, t)} />
+                  <AddSection onAdd={(t) => (t === "table" ? insertTableAt(i + 1) : insertAt(i + 1, t))} />
                 </div>
               ))}
             </div>
@@ -985,10 +1250,7 @@ export function BlogEditor({ postId }: { postId?: number }) {
                       key={preset.id}
                       type="button"
                       onClick={() =>
-                        setStyles((prev) => ({
-                          ...prev,
-                          [activeType]: getPresetStyle(preset.id, activeType),
-                        }))
+                        updateActiveBlockStyle(getPresetStyle(preset.id, activeType))
                       }
                       className="rounded-md border border-border bg-muted/40 px-2 py-3 text-left text-sm font-medium text-foreground transition hover:border-primary hover:bg-muted"
                     >
@@ -1021,37 +1283,29 @@ export function BlogEditor({ postId }: { postId?: number }) {
                       className="h-9 w-14 cursor-pointer p-1"
                       value={
                         colorMode === "text"
-                          ? styles[activeType].color
-                          : styles[activeType].backgroundColor ?? "#ffffff"
+                          ? selectedStyle.color
+                          : selectedStyle.backgroundColor ?? "#ffffff"
                       }
                       onChange={(e) =>
-                        setStyles((prev) => ({
-                          ...prev,
-                          [activeType]: {
-                            ...prev[activeType],
-                            ...(colorMode === "text"
-                              ? { color: e.target.value }
-                              : { backgroundColor: e.target.value }),
-                          },
-                        }))
+                        updateActiveBlockStyle(
+                          colorMode === "text"
+                            ? { color: e.target.value }
+                            : { backgroundColor: e.target.value },
+                        )
                       }
                     />
                     <Input
                       value={
                         colorMode === "text"
-                          ? styles[activeType].color
-                          : styles[activeType].backgroundColor ?? "#ffffff"
+                          ? selectedStyle.color
+                          : selectedStyle.backgroundColor ?? "#ffffff"
                       }
                       onChange={(e) =>
-                        setStyles((prev) => ({
-                          ...prev,
-                          [activeType]: {
-                            ...prev[activeType],
-                            ...(colorMode === "text"
-                              ? { color: e.target.value }
-                              : { backgroundColor: e.target.value }),
-                          },
-                        }))
+                        updateActiveBlockStyle(
+                          colorMode === "text"
+                            ? { color: e.target.value }
+                            : { backgroundColor: e.target.value },
+                        )
                       }
                     />
                   </div>
@@ -1074,13 +1328,7 @@ export function BlogEditor({ postId }: { postId?: number }) {
                         key={sizePreset.label}
                         type="button"
                         onClick={() =>
-                          setStyles((prev) => ({
-                            ...prev,
-                            [activeType]: {
-                              ...prev[activeType],
-                              fontSize: sizePreset.size,
-                            },
-                          }))
+                          updateActiveBlockStyle({ fontSize: sizePreset.size })
                         }
                         className="flex-1 rounded-md border border-border bg-muted/40 px-2 py-2 text-sm font-medium transition hover:border-primary"
                       >
@@ -1103,6 +1351,18 @@ export function BlogEditor({ postId }: { postId?: number }) {
           style={{ top: toolbar.top, left: toolbar.left }}
           onMouseDown={(e) => e.preventDefault()}
         >
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="Insert table"
+            onClick={() => {
+              const currentIndex = activeBlock ? blocks.findIndex((block) => block.id === activeBlock.id) : -1;
+              insertTableAt(currentIndex >= 0 ? currentIndex + 1 : 0);
+            }}
+          >
+            <Table2 className="size-4" />
+          </Button>
           <Button type="button" size="icon" variant="ghost" aria-label="Bold" onClick={() => exec("bold")}>
             <Bold className="size-4" />
           </Button>
@@ -1114,6 +1374,42 @@ export function BlogEditor({ postId }: { postId?: number }) {
             onClick={() => exec("italic")}
           >
             <Italic className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="Underline"
+            onClick={() => exec("underline")}
+          >
+            <Underline className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="Align left"
+            onClick={() => updateActiveBlockStyle({ textAlign: "left" })}
+          >
+            <AlignLeft className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="Align center"
+            onClick={() => updateActiveBlockStyle({ textAlign: "center" })}
+          >
+            <AlignCenter className="size-4" />
+          </Button>
+          <Button
+            type="button"
+            size="icon"
+            variant="ghost"
+            aria-label="Align right"
+            onClick={() => updateActiveBlockStyle({ textAlign: "right" })}
+          >
+            <AlignRight className="size-4" />
           </Button>
           <Button
             type="button"
