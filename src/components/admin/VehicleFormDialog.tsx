@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/app-client";
+import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
 import {
   MAX_PHOTOS,
@@ -31,6 +32,7 @@ import {
   type VehiclePhoto,
 } from "@/lib/admin-inventory";
 import { VIN_RE, vehicleSlug } from "@/lib/inventory-csv";
+import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
 
 type BodyStyle = Database["public"]["Enums"]["body_style"];
 type FuelType = Database["public"]["Enums"]["fuel_type"];
@@ -137,6 +139,7 @@ export function VehicleFormDialog({
   vehicle: Vehicle | null;
   onSaved: () => void;
 }) {
+  const { session } = useAuth();
   const [form, setForm] = useState<FormState>(empty);
   const [photos, setPhotos] = useState<PhotoDraft[]>([]);
   const [existing, setExisting] = useState<VehiclePhoto[]>([]);
@@ -224,16 +227,6 @@ export function VehicleFormDialog({
 
     setSaving(true);
     try {
-      const dupe = await supabase
-        .from("vehicles")
-        .select("id")
-        .eq("vin", vin)
-        .maybeSingle();
-      if (dupe.data && dupe.data.id !== vehicle?.id) {
-        toast.error("Another vehicle already uses this VIN.");
-        return;
-      }
-
       const payload = {
         vin,
         stock_number: form.stock_number.trim() || vin.slice(-8),
@@ -263,25 +256,10 @@ export function VehicleFormDialog({
           vehicleSlug({ year, make: form.make, model: form.model, trim: form.trim, vin }),
       };
 
-      let saved: Vehicle;
-      if (vehicle) {
-        const { data, error } = await supabase
-          .from("vehicles")
-          .update(payload)
-          .eq("id", vehicle.id)
-          .select()
-          .single();
-        if (error) throw new Error(error.message);
-        saved = data;
-      } else {
-        const { data, error } = await supabase
-          .from("vehicles")
-          .insert(payload)
-          .select()
-          .single();
-        if (error) throw new Error(error.message);
-        saved = data;
-      }
+      if (!session?.access_token) throw new Error("Your session has expired. Please sign in again.");
+      const saved = (await saveLegacyInventoryRow({
+        data: { accessToken: session.access_token, vehicle: payload },
+      })) as Vehicle;
 
       await syncVehiclePhotos(saved, photos, existing, title);
       toast.success(vehicle ? "Vehicle updated." : "Vehicle added.");

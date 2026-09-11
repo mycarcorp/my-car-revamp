@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
 import { toast } from "sonner";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -79,15 +80,14 @@ function AdminSettings() {
   if (error) return <div className="p-6 text-sm">Couldn't load settings.</div>;
 
   return (
-    <div className="p-6">
-      <h1 className="font-display text-2xl font-bold">Site settings</h1>
-      <p className="text-sm text-muted-foreground">
-        {isOwner
-          ? "Contact details, hours, trust badges and payment-estimator assumptions."
-          : "View only — ask an owner to change these."}
-      </p>
+    <div className="w-full">
+      <AdminPageHeader
+        title="Site settings"
+        
+      />
 
-      <div className="mt-6 grid gap-6 lg:grid-cols-2">
+      <div className="p-6">
+        <div className="grid gap-6 lg:grid-cols-2">
         <section className="space-y-4 rounded-lg border border-border bg-background p-5">
           <h2 className="font-display text-lg font-semibold">Dealership</h2>
           {field("dealership_name", "Name")}
@@ -157,9 +157,10 @@ function AdminSettings() {
         </section>
       </div>
 
-      <Button className="mt-6" onClick={save} disabled={!isOwner}>
-        Save settings
-      </Button>
+        <Button className="mt-6" onClick={save} disabled={!isOwner}>
+          Save settings
+        </Button>
+      </div>
     </div>
   );
 }

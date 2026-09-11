@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Car, FileText, Inbox, Settings, ExternalLink } from "lucide-react";
+import { Car, FileText, Inbox, Settings, Users, ExternalLink } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { VerifyEmailGate } from "@/components/VerifyEmailGate";
@@ -19,7 +19,8 @@ export const Route = createFileRoute("/admin")({
 });
 
 const NAV = [
-  { to: "/admin", label: "Lead inbox", icon: Inbox, exact: true },
+  { to: "/admin", label: "Dashboard", icon: Inbox, exact: true },
+  { to: "/admin/customers", label: "Customers", icon: Users, exact: false },
   { to: "/admin/inventory", label: "Inventory", icon: Car, exact: false },
   { to: "/admin/blog", label: "Blog", icon: FileText, exact: false },
   { to: "/admin/settings", label: "Site settings", icon: Settings, exact: false },
@@ -57,8 +58,8 @@ function AdminLayout() {
   }
 
   return (
-    <div className="flex min-h-screen">
-      <aside className="hidden w-60 shrink-0 flex-col bg-sidebar p-4 text-sidebar-foreground md:flex">
+    <div className="flex min-h-screen w-full">
+      <aside className="hidden w-52 shrink-0 flex-col bg-sidebar p-3 text-sidebar-foreground md:flex">
         <Link to="/" className="font-display text-lg font-extrabold">
           My<span className="text-sidebar-primary">Car</span>{" "}
           <span className="text-xs font-medium opacity-70">admin</span>
@@ -85,7 +86,7 @@ function AdminLayout() {
         </Link>
       </aside>
 
-      <div className="flex-1 bg-surface">
+      <div className="flex min-w-0 flex-1 flex-col bg-surface">
         <nav className="flex gap-2 overflow-x-auto border-b border-border bg-background p-2 md:hidden">
           {NAV.map((item) => (
             <Link

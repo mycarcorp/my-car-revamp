@@ -35,7 +35,7 @@ function AuthPage() {
 
 
   useEffect(() => {
-    if (user) void navigate({ to: "/account" });
+    if (user) void navigate({ to: "/search" });
   }, [user, navigate]);
 
   async function signIn(e: React.FormEvent<HTMLFormElement>) {
@@ -75,7 +75,7 @@ function AuthPage() {
       return;
     }
     void linkLegacyProfile({}).catch(() => undefined);
-    void navigate({ to: "/account" });
+    void navigate({ to: "/search" });
   }
 
 
@@ -132,7 +132,7 @@ function AuthPage() {
       return;
     }
     if (data.session) {
-      void navigate({ to: "/account" });
+      void navigate({ to: "/search" });
       return;
     }
     setPendingEmail(email);
@@ -146,7 +146,7 @@ function AuthPage() {
     });
     if (result.error) { toast.error("Google sign-in failed. Please try email instead."); return; }
     if (result.redirected) return;
-    void navigate({ to: "/account" });
+    void navigate({ to: "/search" });
   }
 
   return (

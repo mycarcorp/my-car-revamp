@@ -3,6 +3,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import { Eye, Pencil, Plus, Search, Star, Trash2, Upload } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -24,10 +25,13 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/app-client";
+import { useAuth } from "@/hooks/useAuth";
 import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
-import { deleteVehicleDeep, type Vehicle } from "@/lib/admin-inventory";
+import { type Vehicle } from "@/lib/admin-inventory";
 import { CsvImportDialog } from "@/components/admin/CsvImportDialog";
 import { VehicleFormDialog, BODY_STYLES, STATUSES } from "@/components/admin/VehicleFormDialog";
+import { listLegacyInventoryRows } from "@/lib/legacy-inventory.functions";
+import { deleteLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
 import type { Database } from "@/integrations/supabase/types";
 
 type VehicleStatus = Database["public"]["Enums"]["vehicle_status"];
@@ -49,6 +53,8 @@ const SORTS = [
 ];
 
 function AdminInventory() {
+  const { session } = useAuth();
+  const accessToken = session?.access_token ?? "";
   const queryClient = useQueryClient();
   const [q, setQ] = useState("");
   const [status, setStatus] = useState("all");
@@ -66,18 +72,16 @@ function AdminInventory() {
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin", "vehicles"],
+    enabled: Boolean(accessToken),
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("vehicles")
-        .select("*, vehicle_photos(url, position)")
-        .order("date_received", { ascending: false });
-      if (error) throw error;
-      return (data ?? []) as Row[];
+      const rows = await listLegacyInventoryRows({ data: { accessToken } });
+      return rows as Row[];
     },
   });
 
   const refresh = () => {
     void queryClient.invalidateQueries({ queryKey: ["admin", "vehicles"] });
+    void queryClient.invalidateQueries({ queryKey: ["admin", "dashboard", "vehicles"] });
     void queryClient.invalidateQueries({ queryKey: ["vehicles"] });
     void queryClient.invalidateQueries({ queryKey: ["facets"] });
   };
@@ -141,7 +145,12 @@ function AdminInventory() {
     if (!toDelete) return;
     setDeleting(true);
     try {
-      await deleteVehicleDeep(toDelete);
+      const match = /^LEGACY-(\d+)$/i.exec(toDelete.stock_number);
+      if (!match) throw new Error("This vehicle is not linked to a legacy inventory record.");
+      if (!accessToken) throw new Error("Your session has expired. Please sign in again.");
+      await deleteLegacyInventoryRow({
+        data: { accessToken, legacyId: Number(match[1]), publicId: toDelete.id },
+      });
       toast.success("Vehicle deleted.");
       setToDelete(null);
       refresh();
@@ -153,38 +162,37 @@ function AdminInventory() {
   }
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap items-start justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold">Inventory</h1>
-          <p className="text-sm text-muted-foreground">
-            Add, import, edit and remove vehicles. Changes appear on the public site right away.
-          </p>
-        </div>
-        <div className="flex gap-2">
-          <Button variant="outline" onClick={() => setImportOpen(true)}>
-            <Upload className="size-4" /> Import CSV
-          </Button>
-          <Button
-            onClick={() => {
-              setEditing(null);
-              setFormOpen(true);
-            }}
-          >
-            <Plus className="size-4" /> Add vehicle
-          </Button>
-        </div>
-      </div>
+    <div className="w-full">
+      <AdminPageHeader
+        title="Car Listings"
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
+              <Upload className="size-4" /> Import CSV
+            </Button>
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditing(null);
+                setFormOpen(true);
+              }}
+            >
+              <Plus className="size-4" /> Add vehicle
+            </Button>
+          </>
+        }
+      />
 
-      <div className="mt-6 grid gap-3 rounded-lg border border-border bg-background p-4 md:grid-cols-6">
-        <div className="space-y-1.5 md:col-span-2">
-          <Label htmlFor="admin-search">Search</Label>
-          <div className="relative">
+      <div className="p-6">
+        <div className="rounded-lg border border-border bg-background p-4">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <p className="text-sm font-medium text-foreground">All Cars ({filtered.length})</p>
+          <div className="relative w-full max-w-sm">
             <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               id="admin-search"
               className="pl-9"
-              placeholder="VIN, stock #, make, model, trim"
+              placeholder="Search make, model..."
               value={q}
               onChange={(e) => {
                 setQ(e.target.value);
@@ -193,21 +201,22 @@ function AdminInventory() {
             />
           </div>
         </div>
-        <Filter label="Status" value={status} onChange={setStatus} options={STATUSES} />
-        <Filter label="Make" value={make} onChange={setMake} options={makes} />
-        <Filter
-          label="Year"
-          value={year}
-          onChange={setYear}
-          options={years.map((y) => String(y))}
-        />
-        <Filter label="Body" value={body} onChange={setBody} options={BODY_STYLES} />
+
       </div>
 
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
-        <p className="text-sm text-muted-foreground">
-          {isLoading ? "Loading…" : `${filtered.length} vehicles`}
-        </p>
+        <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
+        <div className="grid flex-1 gap-3 md:grid-cols-4">
+          <Filter label="Status" value={status} onChange={setStatus} options={STATUSES} />
+          <Filter label="Make" value={make} onChange={setMake} options={makes} />
+          <Filter
+            label="Year"
+            value={year}
+            onChange={setYear}
+            options={years.map((y) => String(y))}
+          />
+          <Filter label="Body" value={body} onChange={setBody} options={BODY_STYLES} />
+        </div>
+
         <Select value={sort} onValueChange={setSort}>
           <SelectTrigger className="w-56">
             <SelectValue />
@@ -222,7 +231,7 @@ function AdminInventory() {
         </Select>
       </div>
 
-      {isLoading ? (
+        {isLoading ? (
         <div className="mt-4 space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
             <div key={i} className="h-16 animate-pulse rounded-lg bg-muted" />
@@ -242,16 +251,13 @@ function AdminInventory() {
       ) : (
         <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-background">
           <table className="w-full text-sm">
-            <thead className="border-b border-border text-left text-xs uppercase text-muted-foreground">
+            <thead className="border-b border-border text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
               <tr>
                 <th className="p-3">Photo</th>
-                <th className="p-3">Stock #</th>
-                <th className="p-3">VIN</th>
-                <th className="p-3">Vehicle</th>
-                <th className="p-3">Mileage</th>
+                <th className="p-3">Year / Make / Model</th>
                 <th className="p-3">Price</th>
+                <th className="p-3">Miles</th>
                 <th className="p-3">Status</th>
-                <th className="p-3">Updated</th>
                 <th className="p-3 text-right">Actions</th>
               </tr>
             </thead>
@@ -260,80 +266,53 @@ function AdminInventory() {
                 const photo = [...(v.vehicle_photos ?? [])].sort(
                   (a, b) => a.position - b.position,
                 )[0];
+                const title = vehicleTitle(v);
+                const subtitle = [v.trim, v.body_style].filter(Boolean).join(" ");
+                const statusClasses = {
+                  available: "bg-emerald-100 text-emerald-700",
+                  sold: "bg-slate-200 text-slate-700",
+                  pending: "bg-amber-100 text-amber-700",
+                  reserved: "bg-blue-100 text-blue-700",
+                } as const;
+
                 return (
-                  <tr key={v.id}>
+                  <tr key={v.id} className="align-middle">
                     <td className="p-3">
                       {photo ? (
                         <img
                           src={photo.url}
-                          alt={vehicleTitle(v)}
-                          className="h-12 w-16 rounded object-cover"
+                          alt={title}
+                          className="h-12 w-16 rounded-md border border-border object-cover"
                           loading="lazy"
                         />
                       ) : (
-                        <div className="h-12 w-16 rounded bg-muted" />
+                        <div className="h-12 w-16 rounded-md border border-border bg-muted" />
                       )}
                     </td>
-                    <td className="p-3 text-muted-foreground">{v.stock_number}</td>
-                    <td className="p-3 font-mono text-xs text-muted-foreground">{v.vin}</td>
-                    <td className="p-3 font-medium">{vehicleTitle(v)}</td>
-                    <td className="p-3 text-muted-foreground">{formatMiles(v.mileage)}</td>
-                    <td className="p-3">{formatUsd(Number(v.price_cents))}</td>
                     <td className="p-3">
-                      <Select
-                        value={v.status}
-                        onValueChange={(s) => void update(v.id, { status: s as VehicleStatus })}
-                      >
-                        <SelectTrigger className="w-32">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {STATUSES.map((s) => (
-                            <SelectItem key={s} value={s} className="capitalize">
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
+                      <div className="font-semibold text-foreground">{title}</div>
+                      {subtitle ? <div className="text-sm text-muted-foreground">{subtitle}</div> : null}
                     </td>
-                    <td className="p-3 text-xs text-muted-foreground">
-                      {new Date(v.updated_at).toLocaleDateString()}
+                    <td className="p-3 font-medium text-foreground">{formatUsd(Number(v.price_cents))}</td>
+                    <td className="p-3 text-muted-foreground">{formatMiles(v.mileage)}</td>
+                    <td className="p-3">
+                      <span
+                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${statusClasses[v.status as keyof typeof statusClasses] ?? "bg-muted text-muted-foreground"}`}
+                      >
+                        {v.status}
+                      </span>
                     </td>
                     <td className="p-3">
                       <div className="flex justify-end">
                         <Button
-                          size="icon"
-                          variant="ghost"
-                          onClick={() => void update(v.id, { is_featured: !v.is_featured })}
-                          aria-label="Toggle featured"
-                        >
-                          <Star
-                            className={v.is_featured ? "size-4 fill-accent text-accent" : "size-4"}
-                          />
-                        </Button>
-                        <Button size="icon" variant="ghost" asChild aria-label="View vehicle">
-                          <a href={`/inventory/${v.slug}`} target="_blank" rel="noreferrer">
-                            <Eye className="size-4" />
-                          </a>
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          aria-label="Edit vehicle"
+                          variant="outline"
+                          size="sm"
                           onClick={() => {
                             setEditing(v);
                             setFormOpen(true);
                           }}
                         >
-                          <Pencil className="size-4" />
-                        </Button>
-                        <Button
-                          size="icon"
-                          variant="ghost"
-                          aria-label="Delete vehicle"
-                          onClick={() => setToDelete(v)}
-                        >
-                          <Trash2 className="size-4 text-destructive" />
+                          Edit
                         </Button>
                       </div>
                     </td>
@@ -345,7 +324,7 @@ function AdminInventory() {
         </div>
       )}
 
-      {totalPages > 1 && (
+        {totalPages > 1 && (
         <div className="mt-6 flex items-center justify-center gap-3">
           <Button variant="outline" disabled={current <= 1} onClick={() => setPage(current - 1)}>
             Previous
@@ -363,15 +342,15 @@ function AdminInventory() {
         </div>
       )}
 
-      <VehicleFormDialog
+        <VehicleFormDialog
         open={formOpen}
         onOpenChange={setFormOpen}
         vehicle={editing}
         onSaved={refresh}
       />
-      <CsvImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={refresh} />
+        <CsvImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={refresh} />
 
-      <AlertDialog open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)}>
+        <AlertDialog open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
             <AlertDialogTitle>Delete this vehicle?</AlertDialogTitle>
@@ -398,7 +377,8 @@ function AdminInventory() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
+        </AlertDialog>
+      </div>
     </div>
   );
 }

@@ -1,177 +1,236 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useState } from "react";
-import { toast } from "sonner";
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useQuery } from "@tanstack/react-query";
+import { ArrowRight, BookOpenText, CarFront, Users } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { Textarea } from "@/components/ui/textarea";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/app-client";
-import { formatDate } from "@/lib/format";
-import type { Database } from "@/integrations/supabase/types";
-
-type LeadStatus = Database["public"]["Enums"]["lead_status"];
-type LeadUpdate = Database["public"]["Tables"]["leads"]["Update"];
+import { useAuth } from "@/hooks/useAuth";
+import { formatDate, formatUsd } from "@/lib/format";
+import { listLegacyPosts } from "@/lib/legacy-blog.functions";
+import { listLegacyInventoryRows } from "@/lib/legacy-inventory.functions";
 
 export const Route = createFileRoute("/admin/")({
-  component: LeadInbox,
+  component: AdminDashboard,
 });
 
-const STATUSES: LeadStatus[] = ["new", "contacted", "working", "won", "lost"];
+function AdminDashboard() {
+  const { session } = useAuth();
+  const accessToken = session?.access_token ?? "";
 
-function LeadInbox() {
-  const queryClient = useQueryClient();
-  const [filter, setFilter] = useState<string>("all");
-  const [openId, setOpenId] = useState<string | null>(null);
-
-  const { data, isLoading, error } = useQuery({
-    queryKey: ["admin", "leads", filter],
+  const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery({
+    queryKey: ["admin", "dashboard", "vehicles"],
+    enabled: Boolean(accessToken),
+    refetchInterval: 5000,
+    refetchIntervalInBackground: true,
     queryFn: async () => {
-      let q = supabase
+      return listLegacyInventoryRows({ data: { accessToken } });
+    },
+  });
+
+  const { data: leads = [], isLoading: leadsLoading } = useQuery({
+    queryKey: ["admin", "dashboard", "leads"],
+    queryFn: async () => {
+      const { data, error } = await supabase
         .from("leads")
-        .select("*, vehicle:vehicles(slug, year, make, model)")
-        .order("created_at", { ascending: false });
-      if (filter !== "all") q = q.eq("status", filter as LeadStatus);
-      const { data, error } = await q;
+        .select("id, full_name, email, created_at, status")
+        .order("created_at", { ascending: false })
+        .limit(8);
       if (error) throw error;
       return data ?? [];
     },
   });
 
-  async function update(id: string, patch: LeadUpdate) {
-    const { error } = await supabase.from("leads").update(patch).eq("id", id);
-    if (error) { toast.error("Could not update this lead."); return; }
-    void queryClient.invalidateQueries({ queryKey: ["admin", "leads"] });
-    toast.success("Lead updated.");
-  }
+  const { data: blogPosts = [], isLoading: blogLoading } = useQuery({
+    queryKey: ["admin", "dashboard", "blogPosts", accessToken],
+    enabled: Boolean(accessToken),
+    queryFn: () => listLegacyPosts({ data: { accessToken } }),
+  });
+
+  const activeVehicles = vehicles.filter((vehicle) => vehicle.status !== "sold" && vehicle.status !== "draft").length;
+  const soldVehicles = vehicles.filter((vehicle) => vehicle.status === "sold").length;
+  const publishedPosts = blogPosts.filter((post) => post.status === "published").length;
+  const draftPosts = blogPosts.filter((post) => post.status !== "published").length;
+  const newThisWeek = leads.filter((lead) => {
+    const createdAt = new Date(lead.created_at).getTime();
+    const diffDays = (Date.now() - createdAt) / (1000 * 60 * 60 * 24);
+    return diffDays <= 7;
+  }).length;
+
+  const stats = [
+    { label: "Active Cars", value: String(activeVehicles), accent: "text-emerald-600" },
+    { label: "Sold", value: String(soldVehicles), accent: "text-slate-600" },
+    { label: "Blog Posts", value: String(publishedPosts), accent: "text-blue-600" },
+    { label: "Drafts", value: String(draftPosts), accent: "text-amber-600" },
+    { label: "Customers", value: String(leads.length), accent: "text-violet-600" },
+    { label: "New This Week", value: String(newThisWeek), accent: "text-rose-600" },
+  ];
+
+  const recentVehicles = vehicles.slice(0, 5);
+  const recentBlogPosts = blogPosts.slice(0, 5);
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap items-center justify-between gap-4">
-        <div>
-          <h1 className="font-display text-2xl font-bold">Lead inbox</h1>
-          <p className="text-sm text-muted-foreground">
-            Every finance, trade, appointment, contact and availability request.
-          </p>
-        </div>
-        <Select value={filter} onValueChange={setFilter}>
-          <SelectTrigger className="w-48 bg-background">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            <SelectItem value="all">All statuses</SelectItem>
-            {STATUSES.map((s) => (
-              <SelectItem key={s} value={s} className="capitalize">
-                {s}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
+    <div className="w-full">
+      <AdminPageHeader
+        title="Dashboard"
+        actions={
+          <>
+            <Button asChild size="sm">
+              <Link to="/admin/inventory">Add car</Link>
+            </Button>
+            <Button asChild variant="outline" size="sm">
+              <Link to="/admin/blog/new">New post</Link>
+            </Button>
+          </>
+        }
+      />
+
+      <div className="p-6">
+        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
+        {stats.map((stat) => (
+          <div key={stat.label} className="rounded-xl border border-border bg-background p-4 shadow-sm">
+            <div className="flex items-center justify-between gap-3">
+              <p className="text-sm text-muted-foreground">{stat.label}</p>
+              <div className={`rounded-full bg-muted p-2 ${stat.accent}`}>
+                {stat.label.includes("Car") ? (
+                  <CarFront className="size-4" />
+                ) : stat.label.includes("Blog") || stat.label.includes("Draft") ? (
+                  <BookOpenText className="size-4" />
+                ) : (
+                  <Users className="size-4" />
+                )}
+              </div>
+            </div>
+            <p className="mt-4 text-3xl font-bold text-foreground">{stat.value}</p>
+          </div>
+        ))}
       </div>
 
-      {isLoading ? (
-        <div className="mt-6 space-y-3">
-          {Array.from({ length: 4 }).map((_, i) => (
-            <div key={i} className="h-20 animate-pulse rounded-lg bg-muted" />
-          ))}
-        </div>
-      ) : error ? (
-        <p className="mt-6 rounded-lg border border-destructive/40 bg-background p-6 text-sm">
-          Couldn't load leads. Refresh to try again.
-        </p>
-      ) : data?.length === 0 ? (
-        <p className="mt-6 rounded-lg border border-dashed border-border bg-background p-10 text-center text-sm text-muted-foreground">
-          No leads yet.
-        </p>
-      ) : (
-        <ul className="mt-6 space-y-3">
-          {data?.map((lead) => {
-            const details = (lead.details ?? {}) as Record<string, unknown>;
-            const vehicle = lead.vehicle as { year: number; make: string; model: string } | null;
-            return (
-              <li key={lead.id} className="rounded-lg border border-border bg-background p-4">
-                <button
-                  className="flex w-full flex-wrap items-center justify-between gap-3 text-left"
-                  onClick={() => setOpenId(openId === lead.id ? null : lead.id)}
-                >
-                  <div>
-                    <p className="font-semibold">
-                      {lead.full_name}{" "}
-                      <span className="text-sm font-normal text-muted-foreground">
-                        · {lead.email}
-                        {lead.phone ? ` · ${lead.phone}` : ""}
-                      </span>
-                    </p>
-                    <p className="text-xs text-muted-foreground">
-                      {lead.lead_type} · {formatDate(lead.created_at)}
-                      {vehicle ? ` · ${vehicle.year} ${vehicle.make} ${vehicle.model}` : ""}
-                    </p>
-                  </div>
-                  <Badge variant={lead.status === "new" ? "default" : "secondary"} className="capitalize">
-                    {lead.status}
-                  </Badge>
-                </button>
+        <div className="mt-8 grid gap-6">
+        <section className="rounded-xl border border-border bg-background p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Recent Car Listings</h2>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/admin/inventory" className="inline-flex items-center gap-1">
+                View all <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </div>
 
-                {openId === lead.id && (
-                  <div className="mt-4 space-y-4 border-t border-border pt-4">
-                    {lead.message && <p className="text-sm">{lead.message}</p>}
-                    {Object.keys(details).length > 0 && (
-                      <dl className="grid gap-x-6 gap-y-1 text-sm sm:grid-cols-2">
-                        {Object.entries(details).map(([k, v]) => (
-                          <div key={k} className="flex justify-between gap-4">
-                            <dt className="capitalize text-muted-foreground">{k.replace(/_/g, " ")}</dt>
-                            <dd className="font-medium">{String(v) || "—"}</dd>
+          {vehiclesLoading ? (
+            <div className="mt-4 space-y-3">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
+              ))}
+            </div>
+          ) : recentVehicles.length === 0 ? (
+            <p className="mt-4 text-sm text-muted-foreground">No listings have been added yet.</p>
+          ) : (
+            <div className="mt-4 overflow-hidden rounded-lg border border-border">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-muted/50 text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Vehicle</th>
+                      <th className="px-4 py-3 font-medium">Price</th>
+                      <th className="px-4 py-3 font-medium">Miles</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentVehicles.map((vehicle) => (
+                      <tr key={vehicle.id} className="border-t border-border bg-background">
+                        <td className="px-4 py-3 align-top">
+                          <div className="font-medium text-foreground">
+                            {vehicle.year} {vehicle.make} {vehicle.model}
                           </div>
-                        ))}
-                      </dl>
-                    )}
-                    <div className="flex flex-wrap items-center gap-3">
-                      <Select
-                        value={lead.status}
-                        onValueChange={(v) => update(lead.id, { status: v as LeadStatus })}
-                      >
-                        <SelectTrigger className="w-44">
-                          <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                          {STATUSES.map((s) => (
-                            <SelectItem key={s} value={s} className="capitalize">
-                              {s}
-                            </SelectItem>
-                          ))}
-                        </SelectContent>
-                      </Select>
-                      <a
-                        href={`mailto:${lead.email}`}
-                        className="text-sm font-medium text-primary hover:underline"
-                      >
-                        Email this customer
-                      </a>
-                    </div>
-                    <div>
-                      <Textarea
-                        defaultValue={lead.internal_notes ?? ""}
-                        placeholder="Internal notes"
-                        rows={3}
-                        onBlur={(e) => {
-                          if (e.target.value !== (lead.internal_notes ?? ""))
-                            void update(lead.id, { internal_notes: e.target.value });
-                        }}
-                      />
-                    </div>
-                  </div>
-                )}
-              </li>
-            );
-          })}
-        </ul>
-      )}
+                          <div className="text-xs text-muted-foreground">
+                            {vehicle.trim ?? "No trim listed"}
+                          </div>
+                        </td>
+                        <td className="px-4 py-3 align-top font-medium text-foreground">
+                          {formatUsd(vehicle.price_cents)}
+                        </td>
+                        <td className="px-4 py-3 align-top text-muted-foreground">
+                          {vehicle.mileage ? `${vehicle.mileage.toLocaleString()} mi` : "—"}
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <Badge
+                            variant={vehicle.status === "sold" ? "secondary" : "default"}
+                            className="capitalize"
+                          >
+                            {vehicle.status}
+                          </Badge>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+
+        <section className="rounded-xl border border-border bg-background p-5 shadow-sm">
+          <div className="flex items-center justify-between gap-3">
+            <h2 className="text-lg font-semibold">Recent Blog Posts</h2>
+            <Button asChild variant="ghost" size="sm">
+              <Link to="/admin/blog" className="inline-flex items-center gap-1">
+                View all <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          </div>
+
+          {blogLoading || leadsLoading ? (
+            <div className="mt-4 space-y-3">
+              {Array.from({ length: 5 }).map((_, index) => (
+                <div key={index} className="h-14 animate-pulse rounded-lg bg-muted" />
+              ))}
+            </div>
+          ) : recentBlogPosts.length === 0 ? (
+            <p className="mt-4 text-sm text-muted-foreground">No blog posts have been created yet.</p>
+          ) : (
+            <div className="mt-4 overflow-hidden rounded-lg border border-border">
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-muted/50 text-muted-foreground">
+                    <tr>
+                      <th className="px-4 py-3 font-medium">Title</th>
+                      <th className="px-4 py-3 font-medium">Category</th>
+                      <th className="px-4 py-3 font-medium">Status</th>
+                      <th className="px-4 py-3 font-medium">Date</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {recentBlogPosts.map((post) => (
+                      <tr key={post.id} className="border-t border-border bg-background">
+                        <td className="px-4 py-3 align-top font-medium text-foreground">
+                          {post.title}
+                        </td>
+                        <td className="px-4 py-3 align-top text-muted-foreground">
+                          {post.category || "—"}
+                        </td>
+                        <td className="px-4 py-3 align-top">
+                          <Badge
+                            variant={post.status === "published" ? "default" : "secondary"}
+                            className="capitalize"
+                          >
+                            {post.status}
+                          </Badge>
+                        </td>
+                        <td className="px-4 py-3 align-top text-muted-foreground">
+                          {post.published_at ? formatDate(post.published_at) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )}
+        </section>
+        </div>
+      </div>
     </div>
   );
 }

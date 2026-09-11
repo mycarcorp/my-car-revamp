@@ -1,4 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { BlogEditor } from "@/components/admin/BlogEditor";
 
 export const Route = createFileRoute("/admin/blog/new")({
@@ -9,5 +10,10 @@ export const Route = createFileRoute("/admin/blog/new")({
       { name: "robots", content: "noindex" },
     ],
   }),
-  component: () => <BlogEditor />,
+  component: () => (
+    <div className="min-w-0">
+      <AdminPageHeader title="New blog post" subtitle="Create a new article for the site." />
+      <BlogEditor />
+    </div>
+  ),
 });

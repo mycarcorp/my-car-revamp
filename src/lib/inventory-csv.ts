@@ -10,16 +10,123 @@ export type VehicleInsert = Database["public"]["Tables"]["vehicles"]["Insert"];
 
 export const REQUIRED_HEADERS = [
   "VIN",
-  "Stock Number",
   "Year",
   "Make",
   "Model",
   "Odometer",
-  "Body type",
 ] as const;
+
+const HEADER_ALIASES: Record<string, readonly string[]> = {
+  ID: ["id", "vehicle id", "vehicle_id"],
+  VIN: ["VIN", "vin", "vehicle id", "vehicleid"],
+  "Stock Number": [
+    "Stock Number",
+    "Stock number",
+    "stock_number",
+    "stock number",
+    "stocknumber",
+    "stock",
+    "stock no",
+    "stock no.",
+    "stock id",
+    "inventory number",
+    "stock#",
+    "stock #",
+  ],
+  Year: ["Year", "year"],
+  Make: ["Make", "make"],
+  Model: ["Model", "model"],
+  Odometer: ["Odometer", "odometer", "mileage", "Miles", "Mileage"],
+  "Body type": [
+    "Body type",
+    "Body Type",
+    "Body Style",
+    "BodyStyle",
+    "body_type",
+    "body type",
+    "bodytype",
+    "body style",
+    "body_style",
+    "body",
+    "type",
+    "vehicle type",
+    "vehicle body",
+    "vehicle body type",
+    "category",
+  ],
+  "SpecialPrice": ["SpecialPrice", "special_price", "specialprice"],
+  MSRP: ["MSRP", "msrp"],
+  Price: ["Price", "price", "price_cents", "AskingPrice", "AdvertisingPrice"],
+  "Price cents": ["price_cents"],
+  "Fuel type": ["Fuel type", "fuel_type", "fuel type"],
+  Drivetrain: ["Drivetrain", "drivetrain"],
+  "City MPG": ["City MPG", "city_mpg", "city mpg"],
+  "Highway MPG": ["Highway MPG", "highway_mpg", "highway mpg"],
+  "Inventory status": ["Inventory status", "inventory_status", "inventory status", "status"],
+  Trim: ["Trim", "trim"],
+  "Date in stock": ["Date in stock", "DateInStock", "date_in_stock", "date in stock", "date_received"],
+  "Equipment and options": [
+    "Equipment and options",
+    "equipment_and_options",
+    "equipment and options",
+    "features",
+  ],
+  "Primary photo URL": [
+    "Primary photo URL",
+    "primary_photo_url",
+    "primary photo url",
+    "photo_url",
+    "image_url",
+    "image url",
+    "picture_url",
+    "picture url",
+    "image",
+    "photo",
+  ],
+  "Additional photo URLs": [
+    "Additional photo URLs",
+    "additional_photo_urls",
+    "additional photo urls",
+    "photo_urls",
+    "photos",
+    "images",
+    "image_urls",
+    "image urls",
+    "picture_urls",
+    "picture urls",
+    "urls",
+  ],
+  "Vehicle description": ["Vehicle description", "vehicle_description", "vehicle description", "description"],
+  "Exterior color": ["Exterior color", "exterior_color", "exterior color"],
+  "Interior color": ["Interior color", "interior_color", "interior color"],
+  Transmission: ["Transmission", "transmission"],
+  Engine: ["Engine", "engine"],
+  "Body Style": ["Body Style", "body_style", "body style"],
+};
+
+const normalizeHeaderName = (value: string) =>
+  clean(value)
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+function findHeaderIndex(headers: readonly string[], name: string): number {
+  const aliases = Array.from(
+    new Set(([...(HEADER_ALIASES[name] ?? [name])].map((alias) => normalizeHeaderName(alias)))),
+  );
+
+  for (const alias of aliases) {
+    const index = headers.findIndex((header) => normalizeHeaderName(header) === alias);
+    if (index !== -1) return index;
+  }
+
+  return -1;
+}
 
 export type ParsedRow = {
   rowNumber: number;
+  sourceVehicleId: string | null;
   vehicle: VehicleInsert | null;
   photoUrls: string[];
   errors: string[];
@@ -74,9 +181,14 @@ const clean = (v: string | undefined) =>
 const BODY_MAP: Record<string, BodyStyle> = {
   suv: "SUV",
   crossover: "SUV",
+  "sport utility": "SUV",
+  "sport utility 4d": "SUV",
   sedan: "Sedan",
+  "sedan 4d": "Sedan",
   truck: "Truck",
   pickup: "Truck",
+  "pickup 2d": "Truck",
+  "pickup 4d": "Truck",
   cab_chassis: "Truck",
   "cab chassis": "Truck",
   coupe: "Coupe",
@@ -86,6 +198,20 @@ const BODY_MAP: Record<string, BodyStyle> = {
   wagon: "Wagon",
   van: "Van",
 };
+
+function inferBodyStyle(...values: string[]): BodyStyle | null {
+  const text = values.map(normalizeHeaderName).join(" ");
+  if (/convertible|roadster|cabrio/.test(text)) return "Convertible";
+  if (/coupe/.test(text)) return "Coupe";
+  if (/hatchback/.test(text)) return "Hatchback";
+  if (/minivan/.test(text)) return "Minivan";
+  if (/wagon/.test(text)) return "Wagon";
+  if (/van/.test(text)) return "Van";
+  if (/pickup|pick up|truck|cab chassis|chassis|f\s?\d{3}|silverado|ram |dakota|tacoma|tundra|frontier|colorado|ranger|sierra|ridgeline/.test(text)) return "Truck";
+  if (/suv|sport utility|crossover|cr\s?v|rav4|rogue|murano|tucson|tahoe|traverse|equinox|escape|explorer|tiguan|sportage|compass|patriot|forester|encore|x5|x6|lr4|evoque|jx /.test(text)) return "SUV";
+  if (/sedan/.test(text)) return "Sedan";
+  return null;
+}
 
 const FUEL_MAP: Record<string, FuelType> = {
   gas: "Gas",
@@ -132,7 +258,8 @@ export function vehicleSlug(v: {
   vin: string;
 }): string {
   const base = [v.year, v.make, v.model, v.trim ?? ""].join(" ");
-  return `${slugify(base)}-${v.vin.slice(-6).toLowerCase()}`;
+  const vinSuffix = v.vin.toLowerCase();
+  return `${slugify(base)}-${vinSuffix}`;
 }
 
 export const VIN_RE = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -161,12 +288,21 @@ function splitFeatures(raw: string): string[] {
 function splitPhotoUrls(...raw: string[]): string[] {
   const out: string[] = [];
   for (const chunk of raw) {
-    for (const part of (chunk ?? "").split(/[\s,|]+/g)) {
-      const u = part.trim();
-      if (/^https?:\/\//i.test(u) && !out.includes(u)) out.push(u);
+    const matches = (chunk ?? "").match(/https?:\/\/[^\s"'<>\]\[},]+/gi) ?? [];
+    for (const match of matches) {
+      const url = match.replace(/[.)]+$/g, "");
+      if (!out.includes(url)) out.push(url);
     }
   }
   return out.slice(0, 12);
+}
+
+function photoColumnValues(headers: readonly string[], row: readonly string[]): string[] {
+  return headers.flatMap((header, index) => {
+    const normalized = normalizeHeaderName(header);
+    if (!/(photo|image|picture|url)/.test(normalized)) return [];
+    return row[index] ? [row[index]!] : [];
+  });
 }
 
 function buildDescription(desc: string, equipment: string, features: string[]): string | null {
@@ -181,13 +317,18 @@ export function parseInventoryCsv(text: string): ParsedCsv {
   if (table.length === 0) return { headers: [], rows: [], missingHeaders: [...REQUIRED_HEADERS] };
 
   const headers = table[0]!.map((h) => clean(h));
-  const missingHeaders = REQUIRED_HEADERS.filter((h) => !headers.includes(h));
-  const idx = (name: string) => headers.indexOf(name);
-  const get = (r: string[], name: string) => clean(r[idx(name)]);
+  const normalizedHeaders = headers.map(normalizeHeaderName);
+  const missingHeaders = REQUIRED_HEADERS.filter((h) => findHeaderIndex(normalizedHeaders, h) === -1);
+  const idx = (name: string) => findHeaderIndex(normalizedHeaders, name);
+  const get = (r: string[], name: string) => {
+    const i = idx(name);
+    return i === -1 ? "" : clean(r[i]);
+  };
 
   const rows: ParsedRow[] = table.slice(1).map((r, i) => {
     const rowNumber = i + 2;
     const errors: string[] = [];
+    const sourceVehicleId = get(r, "ID") || null;
 
     const vin = get(r, "VIN").toUpperCase();
     if (!vin) errors.push("VIN is missing");
@@ -206,12 +347,28 @@ export function parseInventoryCsv(text: string): ParsedCsv {
     const mileage = toNumber(get(r, "Odometer"));
     if (mileage === null || mileage < 0) errors.push(`Odometer "${get(r, "Odometer")}" is not valid`);
 
-    const priceRaw = get(r, "SpecialPrice") || get(r, "MSRP") || get(r, "Price");
-    const price = toNumber(priceRaw);
-    if (price === null || price <= 0) errors.push(`Price "${priceRaw}" is missing or not valid`);
+    const directPriceCents = toNumber(get(r, "Price cents"));
+    const priceCandidates = [
+      get(r, "SpecialPrice"),
+      get(r, "AdvertisingPrice"),
+      get(r, "AskingPrice"),
+      get(r, "MSRP"),
+      get(r, "Price"),
+    ];
+    const priceRaw =
+      priceCandidates.find((value) => {
+        const amount = toNumber(value);
+        return amount !== null && amount > 0;
+      }) ?? priceCandidates.find(Boolean) ?? "";
+    const price = directPriceCents && directPriceCents > 0 ? directPriceCents : toNumber(priceRaw);
+    if (price === null || price < 0) {
+      errors.push(`Price "${priceRaw}" is missing or not valid`);
+    }
 
     const bodyRaw = get(r, "Body type") || get(r, "Body Style");
-    const body = BODY_MAP[bodyRaw.toLowerCase()];
+    const body =
+      (bodyRaw ? BODY_MAP[normalizeHeaderName(bodyRaw)] : null) ??
+      inferBodyStyle(get(r, "Model"), get(r, "Trim"), bodyRaw);
     if (!body) errors.push(`Body type "${bodyRaw}" is not one of the allowed body styles`);
 
     const fuelRaw = get(r, "Fuel type");
@@ -230,12 +387,18 @@ export function parseInventoryCsv(text: string): ParsedCsv {
     const trim = get(r, "Trim") || null;
     const dateReceived = parseDate(get(r, "Date in stock"));
 
-    const equipment = clean(r[idx("Equipment and options")] ?? "");
+    const equipment = get(r, "Equipment and options");
     const features = splitFeatures(equipment);
 
-    const photoUrls = splitPhotoUrls(get(r, "Primary photo URL"), get(r, "Additional photo URLs"));
+    const photoUrls = splitPhotoUrls(
+      ...photoColumnValues(headers, r),
+      get(r, "Primary photo URL"),
+      get(r, "Additional photo URLs"),
+    );
 
-    if (errors.length > 0) return { rowNumber, vehicle: null, photoUrls, errors };
+    if (errors.length > 0) {
+      return { rowNumber, sourceVehicleId, vehicle: null, photoUrls, errors };
+    }
 
     const vehicle: VehicleInsert = {
       vin,
@@ -246,7 +409,7 @@ export function parseInventoryCsv(text: string): ParsedCsv {
       trim,
       body_style: body!,
       mileage: mileage!,
-      price_cents: Math.round(price! * 100),
+      price_cents: directPriceCents && directPriceCents > 0 ? directPriceCents : Math.round(price! * 100),
       status,
       slug: vehicleSlug({ year: year!, make, model, trim, vin }),
       exterior_color: get(r, "Exterior color") || null,
@@ -261,7 +424,7 @@ export function parseInventoryCsv(text: string): ParsedCsv {
       ...(dateReceived ? { date_received: dateReceived } : {}),
     };
 
-    return { rowNumber, vehicle, photoUrls, errors };
+    return { rowNumber, sourceVehicleId, vehicle, photoUrls, errors };
   });
 
   return { headers, rows, missingHeaders };

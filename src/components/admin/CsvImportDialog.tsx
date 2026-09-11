@@ -12,8 +12,10 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { RadioGroup, RadioGroupItem } from "@/components/ui/radio-group";
+import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/app-client";
 import { parseInventoryCsv, type ParsedCsv, type ParsedRow } from "@/lib/inventory-csv";
+import { importLegacyInventoryRows } from "@/lib/legacy-inventory.functions";
 
 type Mode = "skip" | "update";
 
@@ -34,6 +36,7 @@ export function CsvImportDialog({
   onOpenChange: (v: boolean) => void;
   onImported: () => void;
 }) {
+  const { session } = useAuth();
   const [parsed, setParsed] = useState<ParsedCsv | null>(null);
   const [fileName, setFileName] = useState("");
   const [existingVins, setExistingVins] = useState<Set<string>>(new Set());
@@ -85,47 +88,20 @@ export function CsvImportDialog({
       skipped: 0,
       failed: invalid.map((r) => ({ row: r.rowNumber, reason: r.errors.join("; ") })),
     };
-    const seen = new Set<string>();
-
-    for (const row of valid) {
-      const v = row.vehicle!;
-      if (seen.has(v.vin)) {
-        result.skipped++;
-        continue;
-      }
-      seen.add(v.vin);
-      const exists = existingVins.has(v.vin);
-      try {
-        if (exists && mode === "skip") {
-          result.skipped++;
-          continue;
-        }
-        if (exists) {
-          const { data, error } = await supabase
-            .from("vehicles")
-            .update(v)
-            .eq("vin", v.vin)
-            .select("id")
-            .single();
-          if (error) throw new Error(error.message);
-          await replacePhotos(data.id, row);
-          result.updated++;
-        } else {
-          const { data, error } = await supabase
-            .from("vehicles")
-            .insert(v)
-            .select("id")
-            .single();
-          if (error) throw new Error(error.message);
-          await replacePhotos(data.id, row);
-          result.added++;
-        }
-      } catch (e) {
-        result.failed.push({
-          row: row.rowNumber,
-          reason: e instanceof Error ? e.message : "Unknown error",
-        });
-      }
+    try {
+      const importResult = await importLegacyInventoryRows({
+        data: {
+          accessToken: session?.access_token ?? "",
+          mode,
+          rows: valid.map((row) => ({ vehicle: row.vehicle!, photoUrls: row.photoUrls })),
+        },
+      });
+      result.added += importResult.added;
+      result.updated += importResult.updated;
+      result.skipped += importResult.skipped;
+      importResult.failed.forEach((reason) => result.failed.push({ row: 0, reason }));
+    } catch (error) {
+      result.failed.push({ row: 0, reason: error instanceof Error ? error.message : "Import failed" });
     }
 
     setSummary(result);
@@ -134,11 +110,17 @@ export function CsvImportDialog({
     toast.success(`${result.added} added, ${result.updated} updated, ${result.skipped} skipped.`);
   }
 
-  async function replacePhotos(vehicleId: string, row: ParsedRow) {
-    if (row.photoUrls.length === 0) return;
+  async function syncImportedPhotos(vehicleId: string, row: ParsedRow) {
+    if (row.photoUrls.length === 0) {
+      if (row.sourceVehicleId && row.sourceVehicleId !== vehicleId) {
+        await copySourcePhotos(row.sourceVehicleId, vehicleId);
+      }
+      return;
+    }
+
     await supabase.from("vehicle_photos").delete().eq("vehicle_id", vehicleId);
     const v = row.vehicle!;
-    await supabase.from("vehicle_photos").insert(
+    const { error } = await supabase.from("vehicle_photos").insert(
       row.photoUrls.map((url, i) => ({
         vehicle_id: vehicleId,
         url,
@@ -146,6 +128,27 @@ export function CsvImportDialog({
         alt: `${v.year} ${v.make} ${v.model} — photo ${i + 1}`,
       })),
     );
+    if (error) throw new Error(`Could not save vehicle photos: ${error.message}`);
+  }
+
+  async function copySourcePhotos(sourceVehicleId: string, vehicleId: string) {
+    const { data: sourcePhotos, error: readError } = await supabase
+      .from("vehicle_photos")
+      .select("url, alt, position")
+      .eq("vehicle_id", sourceVehicleId)
+      .order("position");
+    if (readError) throw new Error(`Could not read source vehicle photos: ${readError.message}`);
+    if (!sourcePhotos?.length) return;
+
+    const { error: insertError } = await supabase.from("vehicle_photos").insert(
+      sourcePhotos.map((photo) => ({
+        vehicle_id: vehicleId,
+        url: photo.url,
+        alt: photo.alt,
+        position: photo.position,
+      })),
+    );
+    if (insertError) throw new Error(`Could not copy vehicle photos: ${insertError.message}`);
   }
 
   return (

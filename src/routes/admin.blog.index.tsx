@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
 import { Eye, Pencil, Trash2, Plus } from "lucide-react";
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
 import {
@@ -105,29 +106,16 @@ function AdminBlog() {
   });
 
   return (
-    <div className="p-6">
-      <div className="flex flex-wrap items-start justify-between gap-3">
-        <div>
-          <h1 className="font-display text-2xl font-bold">Blog</h1>
-          <p className="text-sm text-muted-foreground">
-            Write, publish and manage articles. Everything is saved to your blog table.
-          </p>
-        </div>
-        <Button onClick={() => void navigate({ to: "/admin/blog/new" })}>
-          <Plus className="size-4" /> Add Blog Post
-        </Button>
-      </div>
+    <div className="w-full">
+      <AdminPageHeader
+        title="Blog"
+       
+      />
 
-      {schema && (!schema.hasSeoColumns || !schema.hasCategoriesTable) && (
-        <p className="mt-4 rounded-lg border border-amber-400/50 bg-amber-50 p-4 text-sm text-amber-900">
-          The SEO, CTA and design settings can't be saved yet because the extra blog fields haven't been
-          added to the database. Run the setup script in{" "}
-          <code>supabase/migrations_legacy/2026_mc_blog_editor.sql</code> once, then reload this page.
-          Everything else already works.
-        </p>
-      )}
+      <div className="p-6">
+       
 
-      {isLoading ? (
+        {isLoading ? (
         <div className="mt-6 h-24 animate-pulse rounded-lg bg-muted" />
       ) : error ? (
         <p className="mt-6 rounded-lg border border-destructive/40 bg-background p-6 text-sm">
@@ -181,7 +169,7 @@ function AdminBlog() {
         </ul>
       )}
 
-      {/* View */}
+        {/* View */}
       <Dialog open={viewing !== null} onOpenChange={(o) => !o && setViewing(null)}>
         <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
           <DialogHeader>
@@ -210,7 +198,7 @@ function AdminBlog() {
         </DialogContent>
       </Dialog>
 
-      {/* Delete */}
+        {/* Delete */}
       <AlertDialog open={deleting !== null} onOpenChange={(o) => !o && setDeleting(null)}>
         <AlertDialogContent>
           <AlertDialogHeader>
@@ -231,7 +219,8 @@ function AdminBlog() {
             </AlertDialogAction>
           </AlertDialogFooter>
         </AlertDialogContent>
-      </AlertDialog>
+        </AlertDialog>
+      </div>
     </div>
   );
 }

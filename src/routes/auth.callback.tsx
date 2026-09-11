@@ -29,7 +29,7 @@ function AuthCallbackPage() {
       if (done) return;
       done = true;
       if (signedIn) void linkLegacyProfile({}).catch(() => undefined);
-      void navigate({ to: signedIn ? "/account" : "/auth" });
+      void navigate({ to: signedIn ? "/search" : "/auth" });
     };
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {

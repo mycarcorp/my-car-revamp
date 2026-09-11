@@ -1,6 +1,7 @@
 import { queryOptions } from "@tanstack/react-query";
 import { supabase } from "@/integrations/supabase/app-client";
 import type { Database } from "@/integrations/supabase/types";
+import { listPublicLegacyInventoryRows } from "@/lib/legacy-inventory.functions";
 
 export type Vehicle = Database["public"]["Tables"]["vehicles"]["Row"];
 export type VehiclePhoto = Database["public"]["Tables"]["vehicle_photos"]["Row"];
@@ -81,15 +82,10 @@ export const vehicleSearchQuery = (filters: SearchFilters) =>
     queryKey: ["vehicles", "search", filters],
     queryFn: async () => {
       const page = filters.page ?? 1;
-      const from = (page - 1) * PAGE_SIZE;
-      let q = applyFilters(
-        supabase.from("vehicles").select("*, vehicle_photos(*)", { count: "exact" }),
-        filters,
-      );
-      q = applySort(q, filters.sort).range(from, from + PAGE_SIZE - 1);
-      const { data, error, count } = await q;
-      if (error) throw error;
-      return { vehicles: (data ?? []) as VehicleWithPhotos[], count: count ?? 0, page };
+      const { data } = await listPublicLegacyInventoryRows({
+        data: { ...filters, page, pageSize: PAGE_SIZE },
+      });
+      return { vehicles: data.vehicles as VehicleWithPhotos[], count: data.count, page };
     },
   });
 
@@ -97,12 +93,8 @@ export const facetsQuery = () =>
   queryOptions({
     queryKey: ["vehicles", "facets"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("vehicles")
-        .select("make, model, body_style, fuel_type, drivetrain, exterior_color, price_cents")
-        .in("status", ["available", "pending"]);
-      if (error) throw error;
-      const rows = data ?? [];
+      const { data } = await listPublicLegacyInventoryRows({ data: { page: 1, pageSize: 10000 } });
+      const rows = data.vehicles;
       const tally = (key: keyof (typeof rows)[number]) => {
         const map = new Map<string, number>();
         for (const r of rows) {
@@ -127,15 +119,8 @@ export const featuredVehiclesQuery = () =>
   queryOptions({
     queryKey: ["vehicles", "featured"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("vehicles")
-        .select("*, vehicle_photos(*)")
-        .in("status", ["available", "pending"])
-        .order("is_featured", { ascending: false })
-        .order("date_received", { ascending: false })
-        .limit(8);
-      if (error) throw error;
-      return (data ?? []) as VehicleWithPhotos[];
+      const { data } = await listPublicLegacyInventoryRows({ data: { page: 1, pageSize: 8 } });
+      return data.vehicles as VehicleWithPhotos[];
     },
   });
 
@@ -143,13 +128,8 @@ export const vehicleBySlugQuery = (slug: string) =>
   queryOptions({
     queryKey: ["vehicle", slug],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("vehicles")
-        .select("*, vehicle_photos(*)")
-        .eq("slug", slug)
-        .maybeSingle();
-      if (error) throw error;
-      return (data as VehicleWithPhotos | null) ?? null;
+      const { data } = await listPublicLegacyInventoryRows({ data: { slug, page: 1, pageSize: 1 } });
+      return (data.vehicles[0] as VehicleWithPhotos | undefined) ?? null;
     },
   });
 
@@ -157,15 +137,10 @@ export const similarVehiclesQuery = (bodyStyle: string, excludeId: string) =>
   queryOptions({
     queryKey: ["vehicles", "similar", bodyStyle, excludeId],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("vehicles")
-        .select("*, vehicle_photos(*)")
-        .eq("body_style", bodyStyle as Vehicle["body_style"])
-        .neq("id", excludeId)
-        .in("status", ["available", "pending"])
-        .limit(4);
-      if (error) throw error;
-      return (data ?? []) as VehicleWithPhotos[];
+      const { data } = await listPublicLegacyInventoryRows({
+        data: { body: bodyStyle, excludeId, page: 1, pageSize: 4 },
+      });
+      return data.vehicles as VehicleWithPhotos[];
     },
   });
 
