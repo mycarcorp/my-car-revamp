@@ -220,7 +220,11 @@ export function sanitizeHtml(input: string): string {
 
 /** Sanitises inline content used inside a single block. */
 export function sanitizeInline(input: string): string {
-  return sanitizeHtml(input).replace(/<\/?(h1|h2|h3|h4|p|ul|ol|li|blockquote)>/g, " ").replace(/\s+/g, " ").trim();
+  return sanitizeHtml(input)
+    .replace(/<\/?(h1|h2|h3|h4|p|ul|ol|li|blockquote)>/g, " ")
+    .replace(/\r?\n/g, "<br>")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 /* -------------------------------------------------------------------------- */

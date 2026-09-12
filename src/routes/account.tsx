@@ -1,9 +1,11 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { toast } from "sonner";
-import { Trash2 } from "lucide-react";
+import { ArrowRight, Car, ClipboardList, KeyRound, Mail, Settings, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/app-client";
@@ -29,13 +31,16 @@ export const Route = createFileRoute("/account")({
 });
 
 function AccountPage() {
-  const { user, loading, emailVerified, signOut } = useAuth();
+  const { user, loading, emailVerified } = useAuth();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { data: settings } = useQuery(siteSettingsQuery());
+  const [activeTab, setActiveTab] = useState("saved");
+  const [newEmail, setNewEmail] = useState("");
+  const [newPassword, setNewPassword] = useState("");
 
   useEffect(() => {
-    if (!loading && !user) void navigate({ to: "/auth" });
+    if (!loading && !user) void navigate({ to: "/" });
   }, [loading, user, navigate]);
 
   const saved = useQuery({
@@ -81,31 +86,28 @@ function AccountPage() {
 
   if (!emailVerified) return <VerifyEmailGate email={user.email ?? ""} />;
 
+  const displayName = String(user.user_metadata?.full_name ?? user.user_metadata?.name ?? "").trim();
+  const firstName = displayName.split(/\s+/)[0] || user.email?.split("@")[0] || "there";
+  const requestCount = requests.data?.length ?? 0;
+
   return (
-    <div className="mx-auto max-w-6xl px-4 py-12">
-      <div className="flex flex-wrap items-center justify-between gap-4">
+    <div className="mx-auto max-w-7xl px-4 py-8 sm:px-6 lg:px-8">
+      <div className="border-b border-border pb-8">
         <div>
-          <h1 className="font-display text-3xl font-bold">Your account</h1>
-          <p className="mt-1 text-sm text-muted-foreground">{user.email}</p>
+          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Customer dashboard</p>
+          <h1 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">Welcome back, {firstName}.</h1>
+          <p className="mt-2 text-sm text-muted-foreground">Keep track of your saved vehicles and requests in one place.</p>
         </div>
-        <Button
-          variant="outline"
-          onClick={async () => {
-            await signOut();
-            void navigate({ to: "/" });
-          }}
-        >
-          Sign out
-        </Button>
       </div>
 
-      <Tabs defaultValue="saved" className="mt-8">
-        <TabsList>
-          <TabsTrigger value="saved">Saved vehicles</TabsTrigger>
-          <TabsTrigger value="searches">Saved searches</TabsTrigger>
-          <TabsTrigger value="requests">My requests</TabsTrigger>
-        </TabsList>
+      <div className="mt-8 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
+        <SummaryCard icon={Car} label="Saved vehicles" value={saved.data?.length ?? 0} onClick={() => setActiveTab("saved")} />
+        <SummaryCard icon={ArrowRight} label="Saved searches" value={searches.data?.length ?? 0} onClick={() => setActiveTab("searches")} />
+        <SummaryCard icon={ClipboardList} label="My requests" value={requestCount} onClick={() => setActiveTab("requests")} />
+        <SummaryCard icon={Settings} label="Settings" onClick={() => setActiveTab("settings")} />
+      </div>
 
+      <Tabs value={activeTab} onValueChange={setActiveTab} className="mt-8">
         <TabsContent value="saved" className="mt-6">
           {(saved.data?.length ?? 0) === 0 ? (
             <EmptyState text="You haven't saved any vehicles yet." />
@@ -173,8 +175,76 @@ function AccountPage() {
             </ul>
           )}
         </TabsContent>
+
+        <TabsContent value="settings" className="mt-6 grid gap-6 lg:grid-cols-2">
+          <section className="rounded-xl border border-border bg-card p-6">
+            <div className="flex items-start gap-3">
+              <Mail className="mt-1 size-5 text-primary" />
+              <div>
+                <h2 className="font-display text-xl font-semibold">Email address</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Current email: {user.email}</p>
+              </div>
+            </div>
+            <form className="mt-5 space-y-4" onSubmit={async (event) => {
+              event.preventDefault();
+              const email = newEmail.trim().toLowerCase();
+              if (!email) return;
+              const { error } = await supabase.auth.updateUser({ email });
+              if (error) toast.error(error.message);
+              else { setNewEmail(""); toast.success("Check your email to confirm the new address."); }
+            }}>
+              <div className="space-y-2">
+                <Label htmlFor="new-email">New email</Label>
+                <Input id="new-email" type="email" value={newEmail} onChange={(event) => setNewEmail(event.target.value)} placeholder="you@example.com" required />
+              </div>
+              <Button type="submit" variant="outline">Change email</Button>
+            </form>
+          </section>
+
+          <section className="rounded-xl border border-border bg-card p-6">
+            <div className="flex items-start gap-3">
+              <KeyRound className="mt-1 size-5 text-primary" />
+              <div>
+                <h2 className="font-display text-xl font-semibold">Password</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Choose a new password for your account.</p>
+              </div>
+            </div>
+            <form className="mt-5 space-y-4" onSubmit={async (event) => {
+              event.preventDefault();
+              if (newPassword.length < 8) { toast.error("Use at least 8 characters."); return; }
+              const { error } = await supabase.auth.updateUser({ password: newPassword });
+              if (error) toast.error(error.message);
+              else { setNewPassword(""); toast.success("Password updated."); }
+            }}>
+              <div className="space-y-2">
+                <Label htmlFor="new-password">New password</Label>
+                <Input id="new-password" type="password" value={newPassword} onChange={(event) => setNewPassword(event.target.value)} minLength={8} required />
+              </div>
+              <Button type="submit" variant="outline">Change password</Button>
+            </form>
+          </section>
+
+          <section className="rounded-xl border border-border bg-surface p-6 lg:col-span-2">
+            <h2 className="font-display text-xl font-semibold">Need to update a request?</h2>
+            <p className="mt-1 text-sm text-muted-foreground">Start a new financing, sell/trade, or visit request and our team will connect it to your account.</p>
+            <div className="mt-5 flex flex-wrap gap-3">
+              <Button asChild variant="outline"><Link to="/finance">Financing</Link></Button>
+              <Button asChild variant="outline"><Link to="/sell">Sell or trade</Link></Button>
+              <Button asChild variant="outline"><Link to="/schedule">Book a visit</Link></Button>
+            </div>
+          </section>
+        </TabsContent>
       </Tabs>
     </div>
+  );
+}
+
+function SummaryCard({ icon: Icon, label, value, onClick }: { icon: typeof Car; label: string; value?: number; onClick: () => void }) {
+  return (
+    <button type="button" onClick={onClick} className="flex items-center gap-4 rounded-xl border border-border bg-card p-5 text-left transition hover:border-primary/50 hover:bg-muted/30">
+      <span className="flex size-10 items-center justify-center rounded-full bg-primary/10 text-primary"><Icon className="size-5" /></span>
+      <span>{value !== undefined && <span className="block text-2xl font-bold">{value}</span>}<span className="text-sm text-muted-foreground">{label}</span></span>
+    </button>
   );
 }
 

@@ -96,8 +96,11 @@ function BlogPost() {
     <article className="w-full overflow-x-hidden">
       <style dangerouslySetInnerHTML={{ __html: css }} />
 
-      <div className="relative -mx-[50vw] left-1/2 w-screen">
-        <div className="relative h-[72vh] min-h-[440px] overflow-hidden bg-muted">
+      <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-8 lg:px-12">
+        <Link to="/blog" className="text-sm font-semibold text-muted-foreground hover:text-primary">
+          ← All articles
+        </Link>
+        <div className="relative mt-6 aspect-[16/7] min-h-[280px] overflow-hidden rounded-2xl bg-muted">
           {post.image_url && (
             <img
               src={post.image_url}
@@ -107,7 +110,7 @@ function BlogPost() {
           )}
           <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/20" />
 
-          <div className="relative mx-auto flex h-full max-w-6xl items-end px-4 pb-8 sm:px-8 lg:px-12">
+          <div className="relative flex h-full items-end p-6 sm:p-10 lg:p-14">
             <div className="max-w-4xl text-left text-white">
               {post.category && (
                 <span className="inline-flex rounded-full border border-white/40 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-white/90 backdrop-blur-sm">
@@ -119,28 +122,20 @@ function BlogPost() {
                 {post.title}
               </h1>
 
-              <p className="mt-4 flex flex-wrap items-center gap-3 text-sm text-white/85 sm:text-base">
-                <span>{formatDate(post.published_at)}</span>
-                {post.author_name && <span>• {post.author_name}</span>}
-                {post.read_time ? <span>• {post.read_time} min read</span> : null}
-              </p>
             </div>
           </div>
         </div>
       </div>
 
-      <div className="mx-auto max-w-5xl px-4 py-10 sm:px-8 lg:px-12">
-        <Link to="/blog" className="text-sm text-muted-foreground hover:text-primary">
-          ← All articles
-        </Link>
-
+      <div className="mx-auto grid max-w-6xl gap-12 px-4 py-12 sm:px-8 lg:grid-cols-[minmax(0,720px)_280px] lg:px-12">
         <div
-          className="blog-body mt-8 text-base text-foreground/90"
+          className="blog-body text-base text-foreground/90"
           dangerouslySetInnerHTML={{ __html: responsiveBodyHtml }}
         />
 
-        {cta.enabled && (cta.headline || cta.button_text) && (
-          <aside className="mt-12 rounded-xl border border-border bg-card p-8 text-center">
+        <aside className="space-y-8">
+          {cta.enabled && (cta.headline || cta.button_text) && (
+            <div className="rounded-xl border border-border bg-card p-6">
             {cta.headline && <h2 className="font-display text-2xl font-bold">{cta.headline}</h2>}
             {cta.button_text && cta.url && (
               <a
@@ -151,9 +146,25 @@ function BlogPost() {
                 {cta.button_text}
               </a>
             )}
-          </aside>
-        )}
+            </div>
+          )}
+          <div className="rounded-xl border border-border bg-card p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">About this article</p>
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Practical guidance from the MyCar team in Fredericksburg, Virginia.
+            </p>
+          </div>
+        </aside>
       </div>
+
+      <div className="mx-auto max-w-6xl px-4 pb-12 sm:px-8 lg:px-12">
+        <div className="max-w-[720px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {formatDate(post.published_at)}
+          {post.author_name ? ` · ${post.author_name}` : ""}
+          {post.read_time ? ` · ${post.read_time} min read` : ""}
+        </div>
+      </div>
+
     </article>
   );
 }

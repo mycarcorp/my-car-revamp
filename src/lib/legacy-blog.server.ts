@@ -67,30 +67,36 @@ export type LegacyBlogPost = {
   meta_description?: string | null | undefined;
   primary_cta?: PrimaryCta | null | undefined;
   heading_styles?: HeadingStyles | null | undefined;
+  is_featured?: boolean | null | undefined;
 };
 
 /* -------------------------------------------------------------------------- */
 /* Optional-column detection (new SEO/CTA/design columns may not exist yet)    */
 /* -------------------------------------------------------------------------- */
 
-const OPTIONAL_COLUMNS = ["meta_title", "meta_description", "primary_cta", "heading_styles"] as const;
+const OPTIONAL_COLUMNS = ["meta_title", "meta_description", "primary_cta", "heading_styles", "is_featured"] as const;
 let columnCache: Set<string> | null = null;
 
 async function knownColumns(): Promise<Set<string>> {
-  if (columnCache) return columnCache;
-  const rows = (await rest("mc_blog?select=*&limit=1", { profile: "mycarco_db" })) as Array<
-    Record<string, unknown>
-  >;
-  const base = new Set<string>(rows?.[0] ? Object.keys(rows[0]) : []);
-  if (!rows?.[0]) {
-    // Empty table: probe each optional column individually.
-    for (const col of OPTIONAL_COLUMNS) {
-      try {
-        await rest(`mc_blog?select=${col}&limit=1`, { profile: "mycarco_db" });
-        base.add(col);
-      } catch {
-        /* column missing */
-      }
+  const base = new Set<string>(columnCache ?? []);
+  try {
+    const rows = (await rest("mc_blog?select=*&limit=1", { profile: "mycarco_db" })) as Array<
+      Record<string, unknown>
+    >;
+    for (const column of Object.keys(rows?.[0] ?? {})) base.add(column);
+  } catch {
+    /* Individual optional-column probes below provide the useful result. */
+  }
+
+  // Probe missing optional columns on every call so a newly applied migration
+  // is detected without restarting the server.
+  for (const col of OPTIONAL_COLUMNS) {
+    if (base.has(col)) continue;
+    try {
+      await rest(`mc_blog?select=${col}&limit=1`, { profile: "mycarco_db" });
+      base.add(col);
+    } catch {
+      /* column missing */
     }
   }
   columnCache = base;
@@ -107,7 +113,11 @@ async function filterPayload<T extends Record<string, unknown>>(input: T): Promi
 }
 
 /** True when the optional editor columns exist in the legacy table. */
-export async function schemaStatus(): Promise<{ hasSeoColumns: boolean; hasCategoriesTable: boolean }> {
+export async function schemaStatus(): Promise<{
+  hasSeoColumns: boolean;
+  hasFeaturedColumn: boolean;
+  hasCategoriesTable: boolean;
+}> {
   const cols = await knownColumns();
   let hasCategoriesTable = true;
   try {
@@ -116,7 +126,10 @@ export async function schemaStatus(): Promise<{ hasSeoColumns: boolean; hasCateg
     hasCategoriesTable = false;
   }
   return {
-    hasSeoColumns: OPTIONAL_COLUMNS.every((c) => cols.has(c)),
+    hasSeoColumns: ["meta_title", "meta_description", "primary_cta", "heading_styles"].every((c) =>
+      cols.has(c),
+    ),
+    hasFeaturedColumn: cols.has("is_featured"),
     hasCategoriesTable,
   };
 }
@@ -237,6 +250,29 @@ export async function deletePost(id: number): Promise<void> {
   await rest(`mc_blog?id=eq.${id}`, { method: "DELETE", profile: "mycarco_db" });
 }
 
+export async function setFeaturedPost(id: number): Promise<void> {
+  const columns = await knownColumns();
+  if (!columns.has("is_featured")) {
+    throw new Error("The featured post option needs the latest blog database migration.");
+  }
+  const current = (await rest(`mc_blog?select=status&id=eq.${id}&limit=1`, {
+    profile: "mycarco_db",
+  })) as Array<{ status: string | null }>;
+  if (current?.[0]?.status !== "published") throw new Error("Only published posts can be featured.");
+
+  await rest("mc_blog?is_featured=eq.true", {
+    method: "PATCH",
+    profile: "mycarco_db",
+    body: { is_featured: false },
+  });
+  await rest(`mc_blog?id=eq.${id}`, {
+    method: "PATCH",
+    profile: "mycarco_db",
+    prefer: "return=minimal",
+    body: { is_featured: true, updated_at: new Date().toISOString() },
+  });
+}
+
 /* -------------------------------------------------------------------------- */
 /* Categories                                                                  */
 /* -------------------------------------------------------------------------- */
@@ -275,10 +311,19 @@ export async function addCategory(name: string, slug: string): Promise<string> {
 /* -------------------------------------------------------------------------- */
 
 export async function listPublishedPosts(): Promise<LegacyBlogPost[]> {
-  return (await rest(
-    "mc_blog?select=*&status=eq.published&order=published_at.desc.nullslast,created_at.desc",
-    { profile: "mycarco_db" },
-  )) as LegacyBlogPost[];
+  try {
+    return (await rest(
+      "mc_blog?select=*&status=eq.published&order=is_featured.desc.nullslast,published_at.desc.nullslast,created_at.desc",
+      { profile: "mycarco_db" },
+    )) as LegacyBlogPost[];
+  } catch (error) {
+    // Keep publishing available while the optional featured column is being deployed.
+    console.warn("[blog] featured ordering unavailable; using publication date", error);
+    return (await rest(
+      "mc_blog?select=*&status=eq.published&order=published_at.desc.nullslast,created_at.desc",
+      { profile: "mycarco_db" },
+    )) as LegacyBlogPost[];
+  }
 }
 
 export async function getPublishedPost(slug: string): Promise<LegacyBlogPost | null> {

@@ -2,7 +2,7 @@ import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 import { toast } from "sonner";
-import { Eye, Pencil, Trash2, Plus } from "lucide-react";
+import { Eye, Pencil, Star, Trash2, Plus } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Button } from "@/components/ui/button";
 import { Switch } from "@/components/ui/switch";
@@ -30,6 +30,7 @@ import {
   deleteLegacyPost,
   getBlogSchemaStatus,
   listLegacyPosts,
+  setFeaturedLegacyPost,
   updateLegacyPost,
   type LegacyBlogPost,
 } from "@/lib/legacy-blog.functions";
@@ -64,6 +65,8 @@ function AdminBlog() {
     queryKey: ["admin", "mc_blog", "schema"],
     enabled: Boolean(accessToken),
     queryFn: () => getBlogSchemaStatus({ data: { accessToken } }),
+    refetchOnMount: "always",
+    staleTime: 0,
   });
 
   const refresh = () => queryClient.invalidateQueries({ queryKey: ["admin", "mc_blog"] });
@@ -105,6 +108,15 @@ function AdminBlog() {
     onError: (e: Error) => toast.error(e.message || "Could not update this post."),
   });
 
+  const featurePost = useMutation({
+    mutationFn: (id: number) => setFeaturedLegacyPost({ data: { accessToken, id } }),
+    onSuccess: () => {
+      void refresh();
+      toast.success("Featured post updated.");
+    },
+    onError: (e: Error) => toast.error(e.message || "Could not feature this post."),
+  });
+
   return (
     <div className="w-full">
       <AdminPageHeader
@@ -120,7 +132,11 @@ function AdminBlog() {
       />
 
       <div className="p-6">
-       
+        {schema && !schema.hasFeaturedColumn && (
+          <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
+            Featured posts are unavailable until the legacy blog migration is applied.
+          </p>
+        )}
 
         {isLoading ? (
         <div className="mt-6 h-24 animate-pulse rounded-lg bg-muted" />
@@ -145,6 +161,16 @@ function AdminBlog() {
                 </p>
               </div>
               <div className="flex items-center gap-3">
+                <Button
+                  variant={p.is_featured ? "default" : "ghost"}
+                  size="icon"
+                  aria-label={p.is_featured ? "Featured post" : "Make featured post"}
+                  disabled={!schema?.hasFeaturedColumn || p.status !== "published" || featurePost.isPending}
+                  title={!schema?.hasFeaturedColumn ? "Apply the featured-post migration first" : undefined}
+                  onClick={() => featurePost.mutate(p.id)}
+                >
+                  <Star className={`size-4 ${p.is_featured ? "fill-current" : ""}`} />
+                </Button>
                 <div className="flex items-center gap-2 text-sm">
                   <span className="text-muted-foreground">Published</span>
                   <Switch

@@ -65,7 +65,8 @@ const enumBody = (value: string | null): string => {
   return "Sedan";
 };
 
-const enumStatus = (value: string | null) => (value === "sold" ? "sold" : value === "pending" ? "pending" : "available");
+const enumStatus = (value: string | null) =>
+  value === "draft" ? "draft" : value === "sold" ? "sold" : value === "pending" ? "pending" : "available";
 
 function imageUrls(car: LegacyCar): string[] {
   const vin = (car.source_id ?? `legacy-${car.id}`).trim().toLowerCase();
@@ -180,7 +181,7 @@ export async function importLegacyInventory(input: {
         original_price: vehicle.prior_price_cents == null ? null : Number(vehicle.prior_price_cents) / 100,
         image_url: (row.photoUrls?.length ? row.photoUrls : existing[0]?.image_url?.split(","))?.join(",") ?? null,
         description: vehicle.description ?? null,
-        status: vehicle.status === "sold" ? "sold" : "active",
+        status: vehicle.status === "draft" ? "draft" : vehicle.status === "sold" ? "sold" : vehicle.status === "pending" ? "pending" : "active",
         source_id: sourceId,
       };
       const result = existing[0]
@@ -200,7 +201,8 @@ export async function importLegacyInventory(input: {
         const urls = imageUrls(car);
         if (urls.length) await rest("vehicle_photos", { method: "POST", profile: "public", body: urls.map((url, i) => ({ vehicle_id: publicId, url, position: i + 1, alt: `${car.year} ${car.make} ${car.model}` })) });
       }
-      existing[0] ? summary.updated++ : summary.added++;
+      if (existing[0]) summary.updated++;
+      else summary.added++;
     } catch (error) {
       summary.failed.push(error instanceof Error ? error.message : "Unknown import error");
     }
@@ -287,7 +289,18 @@ export async function listPublicLegacyInventory(input: {
   const cars = (await rest("mc_cars?select=*&order=created_at.desc", {
     profile: "mycarco_db",
   })) as LegacyCar[];
-  let rows = cars.map((car) => adapt(car, `legacy-${car.id}`));
+  const vins = cars
+    .map((car) => (car.source_id ?? `legacy-${car.id}`).trim().toUpperCase())
+    .filter(Boolean);
+  const publicRows = (await rest(
+    `vehicles?select=id,vin&vin=in.(${vins.map(encodeURIComponent).join(",")})`,
+    { profile: "public" },
+  )) as Array<{ id: string; vin: string }>;
+  const publicIds = new Map(publicRows.map((row) => [row.vin.toUpperCase(), row.id]));
+  let rows = cars.map((car) => {
+    const vin = (car.source_id ?? `legacy-${car.id}`).trim().toUpperCase();
+    return adapt(car, publicIds.get(vin) ?? `legacy-${car.id}`);
+  });
   rows = rows.filter((row) => row.status === "available" || row.status === "pending");
   if (input.slug) rows = rows.filter((row) => row.slug === input.slug);
   if (input.excludeId) rows = rows.filter((row) => row.id !== input.excludeId);

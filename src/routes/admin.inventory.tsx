@@ -382,6 +382,10 @@ function AdminInventory() {
         onOpenChange={setFormOpen}
         vehicle={editing}
         onSaved={refresh}
+        onDelete={() => {
+          if (editing) setToDelete(editing);
+          setFormOpen(false);
+        }}
       />
         <CsvImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={refresh} />
 

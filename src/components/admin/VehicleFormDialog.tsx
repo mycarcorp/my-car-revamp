@@ -133,11 +133,13 @@ export function VehicleFormDialog({
   onOpenChange,
   vehicle,
   onSaved,
+  onDelete,
 }: {
   open: boolean;
   onOpenChange: (v: boolean) => void;
   vehicle: Vehicle | null;
   onSaved: () => void;
+  onDelete?: () => void;
 }) {
   const { session } = useAuth();
   const [form, setForm] = useState<FormState>(empty);
@@ -470,10 +472,24 @@ export function VehicleFormDialog({
           )}
         </div>
 
-        <DialogFooter>
+        <DialogFooter className="grid grid-cols-3 items-center">
           <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
             Cancel
           </Button>
+          {vehicle && onDelete ? (
+            <Button
+              type="button"
+              variant="ghost"
+              className="justify-self-center text-destructive hover:bg-destructive/10 hover:text-destructive"
+              onClick={onDelete}
+              disabled={saving}
+            >
+              <Trash2 className="size-4" />
+              Delete
+            </Button>
+          ) : (
+            <span />
+          )}
           <Button onClick={() => void submit()} disabled={saving}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
             {vehicle ? "Save changes" : "Add vehicle"}

@@ -14,6 +14,7 @@ import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VehicleCard } from "@/components/VehicleCard";
+import { useAuth } from "@/hooks/useAuth";
 import {
   collectionsQuery,
   facetsQuery,
@@ -74,6 +75,7 @@ function getMakeVehicleImage(make: string) {
 }
 
 function Home() {
+  const { user } = useAuth();
   const { data: settings } = useQuery(siteSettingsQuery());
   const { data: featured } = useQuery(featuredVehiclesQuery());
   const { data: facets } = useQuery(facetsQuery());
@@ -82,6 +84,10 @@ function Home() {
   const [marqueePaused, setMarqueePaused] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const badges = (settings?.trust_badges ?? []) as { label: string; enabled: boolean }[];
+  const displayName =
+    String(user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? "").trim().split(/\s+/)[0] ||
+    user?.email?.split("@")[0] ||
+    "there";
   const ctaButtonClass =
     "h-11 rounded-md border border-[#F7941D] bg-[#F7941D] px-5 text-sm font-semibold text-slate-950 shadow-[0_10px_22px_rgba(247,148,29,0.25)] transition-colors hover:bg-[#ea8718] hover:border-[#ea8718] hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
@@ -93,22 +99,6 @@ function Home() {
     media.addEventListener("change", updateReducedMotion);
 
     return () => media.removeEventListener("change", updateReducedMotion);
-  }, []);
-
-  useEffect(() => {
-    const existingScript = document.querySelector('script[data-widget-id="6a43bb0bbd10bf7f08bff1e7"]');
-    if (existingScript) return;
-
-    const script = document.createElement("script");
-    script.src = "https://widgets.leadconnectorhq.com/loader.js";
-    script.async = true;
-    script.dataset["resourcesUrl"] = "https://widgets.leadconnectorhq.com/chat-widget/loader.js";
-    script.dataset["widgetId"] = "6a43bb0bbd10bf7f08bff1e7";
-    document.body.appendChild(script);
-
-    return () => {
-      script.remove();
-    };
   }, []);
 
   return (
@@ -176,11 +166,19 @@ function Home() {
               className="mt-5 max-w-[320px] text-[2.7rem] font-black leading-[0.94] tracking-[-0.065em] text-white sm:max-w-[360px] sm:text-[4rem] md:text-[4.6rem] lg:max-w-[440px] lg:text-[5.15rem]"
               style={{ fontFamily: '"Inter", "Segoe UI", sans-serif' }}
             >
-              <span className="block">Right car.</span>
-              <span className="block">Right price.</span>
+              {user ? (
+                <span className="block">Welcome back, {displayName}!</span>
+              ) : (
+                <>
+                  <span className="block">Right car.</span>
+                  <span className="block">Right price.</span>
+                </>
+              )}
             </h1>
             <p className="mt-5 max-w-lg text-base text-slate-200/90 md:text-lg">
-              {facets?.total
+              {user
+                ? "Pick up where you left off and find the right next step for your car journey."
+                : facets?.total
                 ? `Search over 30,000 used vehicles with real monthly payments built in from day one.`
                 : "Inspected used vehicles with a real monthly payment estimate on every listing."}
             </p>
@@ -240,8 +238,6 @@ function Home() {
           </div>
         </section>
       )}
-
-
 
       {/* BODY STYLES */}
       <section className="mx-auto max-w-7xl px-4 pb-14 mt-6">

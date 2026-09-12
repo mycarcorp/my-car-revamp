@@ -124,6 +124,20 @@ export const deleteLegacyPost = createServerFn({ method: "POST" })
     return { deleted: true };
   });
 
+export const setFeaturedLegacyPost = createServerFn({ method: "POST" })
+  .inputValidator((input: { accessToken: string; id: number }) => {
+    const accessToken = String(input?.accessToken ?? "");
+    const id = Number(input?.id);
+    if (!accessToken || !Number.isFinite(id)) throw new Error("Invalid request.");
+    return { accessToken, id };
+  })
+  .handler(async ({ data }): Promise<{ featured: boolean }> => {
+    const m = await import("./legacy-blog.server");
+    await m.requireStaff(data.accessToken);
+    await m.setFeaturedPost(data.id);
+    return { featured: true };
+  });
+
 export const listBlogCategories = createServerFn({ method: "POST" })
   .inputValidator((input: { accessToken: string }) => {
     const accessToken = String(input?.accessToken ?? "");

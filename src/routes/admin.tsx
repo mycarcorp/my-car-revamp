@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Car, FileText, Inbox, Settings, Users, ExternalLink } from "lucide-react";
+import { Car, FileText, Inbox, LogOut, Settings, Users, ExternalLink } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { VerifyEmailGate } from "@/components/VerifyEmailGate";
@@ -27,11 +27,16 @@ const NAV = [
 ] as const;
 
 function AdminLayout() {
-  const { user, isStaff, loading, emailVerified } = useAuth();
+  const { user, isStaff, loading, emailVerified, signOut } = useAuth();
   const navigate = useNavigate();
 
+  async function logout() {
+    await signOut();
+    void navigate({ to: "/" });
+  }
+
   useEffect(() => {
-    if (!loading && !user) void navigate({ to: "/auth" });
+    if (!loading && !user) void navigate({ to: "/" });
   }, [loading, user, navigate]);
 
   if (loading) {
@@ -84,6 +89,9 @@ function AdminLayout() {
         >
           <ExternalLink className="size-4" /> View public site
         </Link>
+        <Button variant="ghost" className="justify-start gap-2 px-3 text-sidebar-foreground hover:bg-sidebar-accent" onClick={() => void logout()}>
+          <LogOut className="size-4" /> Log out
+        </Button>
       </aside>
 
       <div className="flex min-w-0 flex-1 flex-col bg-surface">
@@ -98,6 +106,9 @@ function AdminLayout() {
               {item.label}
             </Link>
           ))}
+          <Button variant="ghost" className="w-full justify-start gap-2 px-3" onClick={() => void logout()}>
+            <LogOut className="size-4" /> Log out
+          </Button>
         </nav>
         <Outlet />
       </div>

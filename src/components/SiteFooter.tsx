@@ -13,14 +13,14 @@ export function SiteFooter() {
     <footer className="mt-20 border-t border-border bg-surface">
       <div className="mx-auto grid max-w-7xl gap-10 px-4 py-14 md:grid-cols-4">
         <div>
-          <BrandLogo className="h-9 w-auto" />
+          <BrandLogo className="h-12 w-auto" />
 
           <p className="mt-4 text-sm text-muted-foreground">
             My Car Business Services LLC — independent used-vehicle dealership serving
             Fredericksburg and the surrounding Virginia counties.
           </p>
           <p className="mt-4 text-sm font-semibold">{settings?.phone}</p>
-          <p className="text-sm text-muted-foreground">{settings?.address_line}</p>
+          <p className="text-sm text-muted-foreground">4720 Harrison Rd, Fredericksburg, VA 22408</p>
         </div>
 
         <div>
@@ -36,7 +36,6 @@ export function SiteFooter() {
         <div>
           <h3 className="text-sm font-semibold uppercase tracking-wide">Company</h3>
           <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
-            <li><Link to="/about" className="hover:text-primary">About us</Link></li>
             <li><Link to="/blog" className="hover:text-primary">Blog</Link></li>
             <li><Link to="/contact" className="hover:text-primary">Contact</Link></li>
             <li>
@@ -77,10 +76,12 @@ export function SiteFooter() {
       </div>
 
       <div className="border-t border-border">
-        <div className="mx-auto max-w-7xl px-4 py-6 text-xs text-muted-foreground">
-          © {new Date().getFullYear()} My Car Business Services LLC. Payment figures shown on this
-          site are estimates only and are not an offer of credit. Vehicle availability, pricing, and
-          equipment are subject to change and must be confirmed with the dealership.
+        <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-muted-foreground">
+          <span>© {new Date().getFullYear()} My Car Business Services LLC.</span>
+          <nav className="flex gap-4">
+            <Link to="/privacy" className="hover:text-primary">Privacy Policy</Link>
+            <Link to="/terms" className="hover:text-primary">Terms and Conditions</Link>
+          </nav>
         </div>
       </div>
     </footer>

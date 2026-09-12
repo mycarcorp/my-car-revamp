@@ -133,8 +133,38 @@ function RootComponent() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAdmin = pathname.startsWith("/admin");
 
+  useEffect(() => {
+    const widgetId = "6a43bb0bbd10bf7f08bff1e7";
+    const selector = `script[data-widget-id="${widgetId}"]`;
+
+    if (isAdmin) {
+      document.querySelector(selector)?.remove();
+      return;
+    }
+
+    if (document.querySelector(selector)) return;
+
+    const script = document.createElement("script");
+    script.src = "https://widgets.leadconnectorhq.com/loader.js";
+    script.async = true;
+    script.dataset["resourcesUrl"] = "https://widgets.leadconnectorhq.com/chat-widget/loader.js";
+    script.dataset["widgetId"] = widgetId;
+    document.body.appendChild(script);
+  }, [isAdmin]);
+
   return (
     <QueryClientProvider client={queryClient}>
+      {isAdmin && (
+        <style>{`
+          #chat-widget-container,
+          #lc_chat_widget,
+          [data-widget-id="6a43bb0bbd10bf7f08bff1e7"],
+          iframe[src*="leadconnectorhq.com"],
+          iframe[src*="leadconnector"] {
+            display: none !important;
+          }
+        `}</style>
+      )}
       <AuthProvider>
         <div className="flex min-h-screen flex-col">
           {!isAdmin && <SiteHeader />}

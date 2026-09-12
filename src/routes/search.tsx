@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { SlidersHorizontal, X } from "lucide-react";
+import { ArrowRight, Banknote, Handshake, Search, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -12,6 +12,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { VehicleCard } from "@/components/VehicleCard";
+import { useAuth } from "@/hooks/useAuth";
 import { PAGE_SIZE, facetsQuery, siteSettingsQuery, vehicleSearchQuery, type SearchFilters } from "@/lib/queries";
 
 type SearchParams = {
@@ -89,6 +90,7 @@ const SORTS = [
 function SearchPage() {
   const params = Route.useSearch();
   const navigate = useNavigate({ from: "/search" });
+  const { user } = useAuth();
   const { data: facets } = useQuery(facetsQuery());
   const { data: settings } = useQuery(siteSettingsQuery());
   const { data, isLoading } = useQuery(vehicleSearchQuery(params as SearchFilters));
@@ -102,6 +104,10 @@ function SearchPage() {
 
   const totalPages = data ? Math.max(1, Math.ceil(data.count / PAGE_SIZE)) : 1;
   const page = params.page ?? 1;
+  const displayName =
+    String(user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? "").trim().split(/\s+/)[0] ||
+    user?.email?.split("@")[0] ||
+    "there";
 
   const FacetSelect = ({
     label,
@@ -134,6 +140,50 @@ function SearchPage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10">
+      {user && (
+        <section className="mb-10 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
+          <div className="border-b border-border bg-surface px-5 py-6 sm:px-8">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Your MyCar dashboard</p>
+            <h1 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
+              Welcome back, {displayName}!
+            </h1>
+            <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
+              Here are a few ways to keep moving toward your next vehicle.
+            </p>
+          </div>
+          <div className="grid gap-px bg-border md:grid-cols-3">
+            <Link
+              to="/search"
+              search={{ deal: "price-drop" }}
+              className="group bg-card p-5 transition-colors hover:bg-muted/50"
+            >
+              <Search className="size-5 text-primary" />
+              <h2 className="mt-4 font-display text-lg font-semibold">Suggested deals</h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">See vehicles with recent price drops.</p>
+              <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                Browse deals <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+              </span>
+            </Link>
+            <Link to="/finance" className="group bg-card p-5 transition-colors hover:bg-muted/50">
+              <Banknote className="size-5 text-primary" />
+              <h2 className="mt-4 font-display text-lg font-semibold">Plan your payment</h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">Explore financing options for your budget.</p>
+              <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                Start a finance request <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+              </span>
+            </Link>
+            <Link to="/sell" className="group bg-card p-5 transition-colors hover:bg-muted/50">
+              <Handshake className="size-5 text-primary" />
+              <h2 className="mt-4 font-display text-lg font-semibold">Sell or trade</h2>
+              <p className="mt-1 text-sm leading-6 text-muted-foreground">Get a real offer for your current vehicle.</p>
+              <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                Get your offer <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+              </span>
+            </Link>
+          </div>
+        </section>
+      )}
+
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
           <h1 className="font-display text-3xl font-bold">Used vehicle inventory</h1>
