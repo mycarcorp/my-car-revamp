@@ -95,6 +95,22 @@ function Home() {
     return () => media.removeEventListener("change", updateReducedMotion);
   }, []);
 
+  useEffect(() => {
+    const existingScript = document.querySelector('script[data-widget-id="6a43bb0bbd10bf7f08bff1e7"]');
+    if (existingScript) return;
+
+    const script = document.createElement("script");
+    script.src = "https://widgets.leadconnectorhq.com/loader.js";
+    script.async = true;
+    script.dataset["resourcesUrl"] = "https://widgets.leadconnectorhq.com/chat-widget/loader.js";
+    script.dataset["widgetId"] = "6a43bb0bbd10bf7f08bff1e7";
+    document.body.appendChild(script);
+
+    return () => {
+      script.remove();
+    };
+  }, []);
+
   return (
     <>
       <style>{`

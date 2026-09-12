@@ -1,12 +1,13 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Eye, Pencil, Plus, Search, Star, Trash2, Upload } from "lucide-react";
+import { Plus, Search, SlidersHorizontal, Upload, X } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Slider } from "@/components/ui/slider";
 import {
   AlertDialog,
   AlertDialogAction,
@@ -61,6 +62,7 @@ function AdminInventory() {
   const [make, setMake] = useState("all");
   const [year, setYear] = useState("all");
   const [body, setBody] = useState("all");
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 0]);
   const [sort, setSort] = useState("newest");
   const [page, setPage] = useState(1);
 
@@ -94,6 +96,18 @@ function AdminInventory() {
     () => Array.from(new Set((data ?? []).map((v) => v.year))).sort((a, b) => b - a),
     [data],
   );
+  const priceBounds = useMemo(() => {
+    const prices = (data ?? []).map((v) => Number(v.price_cents) / 100).filter((price) => price > 0);
+    if (prices.length === 0) return { min: 0, max: 0 };
+    return {
+      min: Math.floor(Math.min(...prices) / 1000) * 1000,
+      max: Math.ceil(Math.max(...prices) / 1000) * 1000,
+    };
+  }, [data]);
+
+  useEffect(() => {
+    setPriceRange([priceBounds.min, priceBounds.max]);
+  }, [priceBounds.min, priceBounds.max]);
 
   const filtered = useMemo(() => {
     const needle = q.trim().toLowerCase();
@@ -102,6 +116,8 @@ function AdminInventory() {
       if (make !== "all" && v.make !== make) return false;
       if (year !== "all" && String(v.year) !== year) return false;
       if (body !== "all" && v.body_style !== body) return false;
+      const price = Number(v.price_cents) / 100;
+      if (priceBounds.max > 0 && (price < priceRange[0] || price > priceRange[1])) return false;
       if (!needle) return true;
       return [v.vin, v.stock_number, v.make, v.model, v.trim ?? ""]
         .join(" ")
@@ -125,11 +141,29 @@ function AdminInventory() {
       }
     });
     return rows;
-  }, [data, q, status, make, year, body, sort]);
+  }, [data, q, status, make, year, body, sort, priceBounds.max, priceRange]);
 
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const current = Math.min(page, totalPages);
   const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+
+  const hasActiveFilters =
+    Boolean(q.trim()) ||
+    status !== "all" ||
+    make !== "all" ||
+    year !== "all" ||
+    body !== "all" ||
+    (priceBounds.max > 0 && (priceRange[0] !== priceBounds.min || priceRange[1] !== priceBounds.max));
+
+  function resetFilters() {
+    setQ("");
+    setStatus("all");
+    setMake("all");
+    setYear("all");
+    setBody("all");
+    setPriceRange([priceBounds.min, priceBounds.max]);
+    setPage(1);
+  }
 
   async function update(id: string, patch: Partial<Vehicle>) {
     const { error } = await supabase.from("vehicles").update(patch).eq("id", id);
@@ -183,54 +217,85 @@ function AdminInventory() {
         }
       />
 
-      <div className="p-6">
-        <div className="rounded-lg border border-border bg-background p-4">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <p className="text-sm font-medium text-foreground">All Cars ({filtered.length})</p>
-          <div className="relative w-full max-w-sm">
-            <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-            <Input
-              id="admin-search"
-              className="pl-9"
-              placeholder="Search make, model..."
-              value={q}
-              onChange={(e) => {
-                setQ(e.target.value);
-                setPage(1);
-              }}
-            />
+      <div className="p-4 sm:p-6">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Inventory</p>
+            <h2 className="mt-1 font-display text-2xl font-bold text-foreground">All cars</h2>
+            <p className="mt-1 text-sm text-muted-foreground">{filtered.length} matching vehicles</p>
+          </div>
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+              <Input
+                id="admin-search"
+                className="h-10 rounded-lg bg-background pl-9"
+                placeholder="Search make, model, VIN..."
+                value={q}
+                onChange={(e) => {
+                  setQ(e.target.value);
+                  setPage(1);
+                }}
+              />
+            </div>
+            <Select value={sort} onValueChange={setSort}>
+              <SelectTrigger className="h-10 w-full rounded-lg bg-background sm:w-52">
+                <SelectValue />
+              </SelectTrigger>
+              <SelectContent>
+                {SORTS.map((s) => <SelectItem key={s.value} value={s.value}>{s.label}</SelectItem>)}
+              </SelectContent>
+            </Select>
           </div>
         </div>
 
-      </div>
+        <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <details className="group rounded-xl border border-border bg-background lg:contents" open>
+            <summary className="flex cursor-pointer list-none items-center justify-between p-4 font-semibold lg:hidden">
+              <span className="flex items-center gap-2"><SlidersHorizontal className="size-4 text-[#F7941D]" /> Filters</span>
+              <span className="text-xs font-normal text-muted-foreground">{hasActiveFilters ? "Active" : "All vehicles"}</span>
+            </summary>
+            <aside className="space-y-5 rounded-xl border border-border bg-background p-4 group-open:block lg:block">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-foreground">Filters</h3>
+                {hasActiveFilters && <button type="button" onClick={resetFilters} className="text-xs font-semibold text-[#F7941D] hover:underline">Clear all</button>}
+              </div>
+              <div className="space-y-4">
+                <Filter label="Status" value={status} onChange={(value) => { setStatus(value); setPage(1); }} options={STATUSES} />
+                <Filter label="Make" value={make} onChange={(value) => { setMake(value); setPage(1); }} options={makes} />
+                <Filter label="Year" value={year} onChange={(value) => { setYear(value); setPage(1); }} options={years.map((y) => String(y))} />
+                <Filter label="Body style" value={body} onChange={(value) => { setBody(value); setPage(1); }} options={BODY_STYLES} />
+              </div>
+              <div className="space-y-3 border-t border-border pt-4">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="price-range">Price</Label>
+                  <span className="text-xs font-medium text-muted-foreground">{formatUsd(priceRange[0] * 100)} - {formatUsd(priceRange[1] * 100)}</span>
+                </div>
+                <Slider
+                  id="price-range"
+                  min={priceBounds.min}
+                  max={priceBounds.max || 1}
+                  step={1000}
+                  value={priceRange}
+                  onValueChange={(value) => {
+                    const next = value as [number, number];
+                    setPriceRange(next[0] <= next[1] ? next : [next[1], next[1]]);
+                    setPage(1);
+                  }}
+                  disabled={priceBounds.max <= priceBounds.min}
+                  aria-label="Filter by price range"
+                  className="py-2 [&_[data-orientation=horizontal]]:bg-[#F7941D]/20 [&_[data-orientation=horizontal]_span]:bg-[#F7941D] [&_[role=slider]]:border-[#F7941D] [&_[role=slider]]:focus-visible:ring-[#F7941D]"
+                />
+                <div className="grid grid-cols-2 gap-2">
+                  <Input aria-label="Minimum price" type="number" min={priceBounds.min} max={priceRange[1]} step={1000} value={priceRange[0]} onChange={(e) => setPriceRange([Math.min(Number(e.target.value) || priceBounds.min, priceRange[1]), priceRange[1]])} className="h-9 rounded-lg text-xs" />
+                  <Input aria-label="Maximum price" type="number" min={priceRange[0]} max={priceBounds.max} step={1000} value={priceRange[1]} onChange={(e) => setPriceRange([priceRange[0], Math.max(Number(e.target.value) || priceBounds.max, priceRange[0])])} className="h-9 rounded-lg text-xs" />
+                </div>
+              </div>
+              {hasActiveFilters && <div className="flex flex-wrap gap-2 border-t border-border pt-4"><button type="button" onClick={resetFilters} className="inline-flex items-center gap-1 rounded-full bg-[#F7941D]/10 px-2.5 py-1 text-xs font-semibold text-[#b76508]">Reset filters <X className="size-3" /></button></div>}
+            </aside>
+          </details>
 
-        <div className="mt-4 flex flex-wrap items-end justify-between gap-3">
-        <div className="grid flex-1 gap-3 md:grid-cols-4">
-          <Filter label="Status" value={status} onChange={setStatus} options={STATUSES} />
-          <Filter label="Make" value={make} onChange={setMake} options={makes} />
-          <Filter
-            label="Year"
-            value={year}
-            onChange={setYear}
-            options={years.map((y) => String(y))}
-          />
-          <Filter label="Body" value={body} onChange={setBody} options={BODY_STYLES} />
-        </div>
-
-        <Select value={sort} onValueChange={setSort}>
-          <SelectTrigger className="w-56">
-            <SelectValue />
-          </SelectTrigger>
-          <SelectContent>
-            {SORTS.map((s) => (
-              <SelectItem key={s.value} value={s.value}>
-                {s.label}
-              </SelectItem>
-            ))}
-          </SelectContent>
-        </Select>
-      </div>
-
+          <div className="min-w-0">
         {isLoading ? (
         <div className="mt-4 space-y-3">
           {Array.from({ length: 5 }).map((_, i) => (
@@ -249,78 +314,48 @@ function AdminInventory() {
           </p>
         </div>
       ) : (
-        <div className="mt-4 overflow-x-auto rounded-lg border border-border bg-background">
-          <table className="w-full text-sm">
-            <thead className="border-b border-border text-left text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
-              <tr>
-                <th className="p-3">Photo</th>
-                <th className="p-3">Year / Make / Model</th>
-                <th className="p-3">Price</th>
-                <th className="p-3">Miles</th>
-                <th className="p-3">Status</th>
-                <th className="p-3 text-right">Actions</th>
-              </tr>
-            </thead>
-            <tbody className="divide-y divide-border">
-              {visible.map((v) => {
-                const photo = [...(v.vehicle_photos ?? [])].sort(
-                  (a, b) => a.position - b.position,
-                )[0];
-                const title = vehicleTitle(v);
-                const subtitle = [v.trim, v.body_style].filter(Boolean).join(" ");
-                const statusClasses = {
-                  available: "bg-emerald-100 text-emerald-700",
-                  sold: "bg-slate-200 text-slate-700",
-                  pending: "bg-amber-100 text-amber-700",
-                  reserved: "bg-blue-100 text-blue-700",
-                } as const;
+        <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+          {visible.map((v) => {
+            const photo = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position)[0];
+            const title = vehicleTitle(v);
+            const statusClasses = {
+              available: "bg-emerald-100 text-emerald-700",
+              sold: "bg-slate-200 text-slate-700",
+              pending: "bg-amber-100 text-amber-700",
+              reserved: "bg-blue-100 text-blue-700",
+            } as const;
 
-                return (
-                  <tr key={v.id} className="align-middle">
-                    <td className="p-3">
-                      {photo ? (
-                        <img
-                          src={photo.url}
-                          alt={title}
-                          className="h-12 w-16 rounded-md border border-border object-cover"
-                          loading="lazy"
-                        />
-                      ) : (
-                        <div className="h-12 w-16 rounded-md border border-border bg-muted" />
-                      )}
-                    </td>
-                    <td className="p-3">
-                      <div className="font-semibold text-foreground">{title}</div>
-                      {subtitle ? <div className="text-sm text-muted-foreground">{subtitle}</div> : null}
-                    </td>
-                    <td className="p-3 font-medium text-foreground">{formatUsd(Number(v.price_cents))}</td>
-                    <td className="p-3 text-muted-foreground">{formatMiles(v.mileage)}</td>
-                    <td className="p-3">
-                      <span
-                        className={`inline-flex rounded-full px-2.5 py-1 text-xs font-medium capitalize ${statusClasses[v.status as keyof typeof statusClasses] ?? "bg-muted text-muted-foreground"}`}
-                      >
-                        {v.status}
-                      </span>
-                    </td>
-                    <td className="p-3">
-                      <div className="flex justify-end">
-                        <Button
-                          variant="outline"
-                          size="sm"
-                          onClick={() => {
-                            setEditing(v);
-                            setFormOpen(true);
-                          }}
-                        >
-                          Edit
-                        </Button>
-                      </div>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+            return (
+              <article key={v.id} className="group overflow-hidden rounded-xl border border-border bg-background shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#F7941D]/60 hover:shadow-md">
+                <div className="relative aspect-[16/10] overflow-hidden bg-muted">
+                  {photo ? (
+                    <img src={photo.url} alt={title} className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]" loading="lazy" />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-xs text-muted-foreground">No photo available</div>
+                  )}
+                  <span className={`absolute left-3 top-3 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${statusClasses[v.status as keyof typeof statusClasses] ?? "bg-muted text-muted-foreground"}`}>
+                    {v.status}
+                  </span>
+                </div>
+                <div className="space-y-4 p-4">
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{v.year} {v.make}</p>
+                    <h3 className="mt-1 line-clamp-2 font-display text-lg font-bold text-foreground">{v.model}{v.trim ? ` ${v.trim}` : ""}</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">{v.body_style} · {formatMiles(v.mileage)}</p>
+                  </div>
+                  <div className="flex items-end justify-between gap-3 border-t border-border pt-3">
+                    <div>
+                      <p className="text-xs text-muted-foreground">Price</p>
+                      <p className="font-display text-xl font-bold text-foreground">{formatUsd(Number(v.price_cents))}</p>
+                    </div>
+                    <Button size="sm" className="rounded-md border border-[#F7941D] bg-[#F7941D] font-semibold text-slate-950 shadow-sm hover:border-[#ea8718] hover:bg-[#ea8718]" onClick={() => { setEditing(v); setFormOpen(true); }}>
+                      Edit vehicle
+                    </Button>
+                  </div>
+                </div>
+              </article>
+            );
+          })}
         </div>
       )}
 
@@ -379,6 +414,8 @@ function AdminInventory() {
         </AlertDialogContent>
         </AlertDialog>
       </div>
+      </div>
+    </div>
     </div>
   );
 }
