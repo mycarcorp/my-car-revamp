@@ -132,19 +132,29 @@ export const legacyMigrateLogin = createServerFn({ method: "POST" })
  * details to the current Auth user, matched by email. Idempotent.
  */
 export const linkLegacyProfile = createServerFn({ method: "POST" })
-  .middleware([requireSupabaseAuth])
-  .handler(async ({ context }): Promise<{ linked: boolean }> => {
-    const email = String((context.claims as { email?: string })?.email ?? "")
-      .trim()
-      .toLowerCase();
-    if (!email) return { linked: false };
+  .middleware([attachAppSupabaseAuth])
+  .handler(async (): Promise<{ linked: boolean }> => {
+    // Resolve the caller from the bearer token against the live project. A missing
+    // or stale token simply means "nothing to link" — never an unhandled error.
+    const { getRequest } = await import("@tanstack/react-start/server");
+    const authHeader = getRequest()?.headers.get("authorization") ?? "";
+    const token = authHeader.startsWith("Bearer ") ? authHeader.slice(7).trim() : "";
+    if (token.split(".").length !== 3) return { linked: false };
 
     const { appAdmin } = await import("./app-admin.server");
     const supabaseAdmin = appAdmin();
+
+    const { data: userData, error: userError } = await supabaseAdmin.auth.getUser(token);
+    const user = userData?.user;
+    if (userError || !user) return { linked: false };
+
+    const email = String(user.email ?? "").trim().toLowerCase();
+    if (!email) return { linked: false };
+
     const { data: profile } = await supabaseAdmin
       .from("profiles")
       .select("legacy_user_id")
-      .eq("id", context.userId)
+      .eq("id", user.id)
       .maybeSingle();
     if (profile && (profile as { legacy_user_id: number | null }).legacy_user_id) {
       return { linked: true };
@@ -153,6 +163,6 @@ export const linkLegacyProfile = createServerFn({ method: "POST" })
     const legacy = await fetchLegacyUser(email);
     if (!legacy) return { linked: false };
 
-    await applyLegacyProfile(context.userId, legacy);
+    await applyLegacyProfile(user.id, legacy);
     return { linked: true };
   });
