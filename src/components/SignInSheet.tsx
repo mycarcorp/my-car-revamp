@@ -21,7 +21,9 @@ export function SignInSheet() {
     const password = String(form.get("password") ?? "");
     setBusy(true);
 
-    let { error } = await supabase.auth.signInWithPassword({ email, password });
+    let { error } = await supabase.auth
+      .signInWithPassword({ email, password })
+      .catch((cause: Error) => ({ error: cause }));
     if (error?.message.toLowerCase().includes("invalid")) {
       try {
         const result = await legacyMigrateLogin({ data: { email, password } });
@@ -73,11 +75,18 @@ export function SignInSheet() {
       (error: Error) => ({ status: "error" as const, message: error.message }),
     );
     setBusy(false);
+    if (result.status === "exists") {
+      toast.error("An account already exists for that email. Please sign in instead.");
+      setMode("signin");
+      return;
+    }
     if (result.status !== "created") {
       toast.error(result.message || "We couldn't create your account. Please try again.");
       return;
     }
-    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    const { error } = await supabase.auth
+      .signInWithPassword({ email, password })
+      .catch((cause: Error) => ({ error: cause }));
     if (error) {
       toast.success("Your account was created. Please verify your email before signing in.");
       setMode("signin");
@@ -128,7 +137,7 @@ export function SignInSheet() {
               type={showPassword ? "text" : "password"}
               required
               minLength={mode === "signup" ? 8 : undefined}
-              autoComplete="current-password"
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
               className="h-11 pr-11"
             />
             <button

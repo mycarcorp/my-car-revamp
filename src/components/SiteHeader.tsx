@@ -157,7 +157,21 @@ export function SiteHeader() {
       )}
 
       <Sheet open={signInOpen} onOpenChange={setSignInOpen}>
-        <SheetContent side="right" className="w-[min(100%,380px)] overflow-y-auto p-6 sm:max-w-md">
+        {signInOpen && (
+          <style>{`
+            #chat-widget-container,
+            #lc_chat_widget,
+            chat-widget,
+            iframe[src*="leadconnectorhq.com"],
+            iframe[src*="leadconnector"] {
+              display: none !important;
+            }
+          `}</style>
+        )}
+        <SheetContent
+          side="right"
+          className="z-[100] w-[min(100%,380px)] overflow-y-auto p-6 sm:max-w-md"
+        >
           <SignInSheet />
         </SheetContent>
       </Sheet>
