@@ -16,12 +16,22 @@ export const Route = createFileRoute("/api/public/vehicle-photos/$")({
         }
 
         const url = APP_SUPABASE_URL;
-        const key = APP_SUPABASE_PUBLISHABLE_KEY;
+        const key = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? process.env["LEGACY_SUPABASE_SERVICE_ROLE_KEY"] ?? APP_SUPABASE_PUBLISHABLE_KEY;
         if (!url || !key) return new Response("Not configured", { status: 500 });
+
+        const vin = path.split("/")[0]?.toUpperCase();
+        const vehicleResponse = await fetch(
+          `${url}/rest/v1/vehicles?select=status&vin=eq.${encodeURIComponent(vin ?? "")}&limit=1`,
+          { headers: { apikey: key, Authorization: `Bearer ${key}` } },
+        );
+        const vehicles = (await vehicleResponse.json().catch(() => [])) as Array<{ status?: string }>;
+        if (!vehicleResponse.ok || !vehicles[0] || vehicles[0].status === "draft") {
+          return new Response("Not found", { status: 404 });
+        }
 
         const upstream = await fetch(
           `${url}/storage/v1/object/vehicle-photos/${path}`,
-          { headers: { apikey: key } },
+          { headers: { apikey: key, Authorization: `Bearer ${key}` } },
         );
         if (!upstream.ok || !upstream.body) {
           return new Response("Not found", { status: 404 });

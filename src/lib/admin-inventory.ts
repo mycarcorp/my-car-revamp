@@ -7,7 +7,9 @@ export type VehicleInsert = Database["public"]["Tables"]["vehicles"]["Insert"];
 export type VehicleUpdate = Database["public"]["Tables"]["vehicles"]["Update"];
 
 export const PHOTO_BUCKET = "vehicle-photos";
-export const MAX_PHOTOS = 5;
+export const MAX_PHOTOS = 30;
+export const MAX_PHOTO_BYTES = 10 * 1024 * 1024;
+const ALLOWED_PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 
 const storagePathFromUrl = (url: string): string | null => {
   const m = url.match(/vehicle-photos\/([a-z0-9-]+\/photo-\d+\.jpg)/i);
@@ -24,6 +26,12 @@ export function photoPublicUrl(vin: string, index: number): string {
 
 /** Uploads a file to vehicle-photos/<vin>/photo-<n>.jpg and returns the app URL. */
 export async function uploadVehiclePhoto(vin: string, index: number, file: File): Promise<string> {
+  if (!ALLOWED_PHOTO_TYPES.has(file.type)) {
+    throw new Error("Photos must be JPG, PNG, or WebP images.");
+  }
+  if (file.size > MAX_PHOTO_BYTES) {
+    throw new Error("Each vehicle photo must be 10 MB or smaller.");
+  }
   const path = photoStoragePath(vin, index);
   const { error } = await supabase.storage
     .from(PHOTO_BUCKET)

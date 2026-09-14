@@ -83,7 +83,7 @@ function imageUrls(car: LegacyCar): string[] {
     });
 }
 
-function publicVehicle(car: LegacyCar, existingId?: string) {
+function publicVehicle(car: LegacyCar, existingId?: string, overrides: Record<string, unknown> = {}) {
   const vin = (car.source_id ?? `legacy-${car.id}`).trim().toUpperCase();
   const slug = `${car.year}-${car.make}-${car.model}-${car.id}`.toLowerCase().replace(/[^a-z0-9]+/g, "-");
   return {
@@ -107,6 +107,7 @@ function publicVehicle(car: LegacyCar, existingId?: string) {
     features: [],
     status: enumStatus(car.status),
     date_received: (car.created_at ?? new Date().toISOString()).slice(0, 10),
+    ...overrides,
   };
 }
 
@@ -127,21 +128,26 @@ export async function listLegacyInventory(accessToken: string): Promise<LegacyIn
     .map((car) => (car.source_id ?? `legacy-${car.id}`).trim().toUpperCase())
     .filter(Boolean);
   const publicRows = (await rest(
-    `vehicles?select=id,vin&vin=in.(${vins.map(encodeURIComponent).join(",")})`,
+    `vehicles?select=*&vin=in.(${vins.map(encodeURIComponent).join(",")})`,
     { profile: "public" },
-  )) as Array<{ id: string; vin: string }>;
+  )) as Array<Record<string, unknown> & { id: string; vin: string }>;
   const publicIds = new Map(publicRows.map((row) => [row.vin.toUpperCase(), row.id]));
 
   return cars.map((car) => {
     const vin = (car.source_id ?? `legacy-${car.id}`).trim().toUpperCase();
-    return adapt(car, publicIds.get(vin) ?? `legacy-${car.id}`);
+    const publicRow = publicRows.find((row) => row.vin.toUpperCase() === vin);
+    return adapt(car, publicIds.get(vin) ?? `legacy-${car.id}`, publicRow);
   });
 }
 
-function adapt(car: LegacyCar, publicId: string): LegacyInventoryRow {
+function adapt(
+  car: LegacyCar,
+  publicId: string,
+  publicRow?: Record<string, unknown> | null,
+): LegacyInventoryRow {
   const urls = imageUrls(car);
   return {
-    ...publicVehicle(car, publicId),
+    ...publicVehicle(car, publicId, publicRow ? publicFields(publicRow) : {}),
     id: publicId,
     legacy_id: car.id,
     vehicle_photos: urls.map((url, index) => ({
@@ -149,6 +155,53 @@ function adapt(car: LegacyCar, publicId: string): LegacyInventoryRow {
       position: index + 1,
       alt: `${car.year} ${car.make} ${car.model}`,
     })),
+  };
+}
+
+function publicFields(row: Record<string, unknown>): Record<string, unknown> {
+  return {
+    vin: row.vin,
+    stock_number: row.stock_number,
+    slug: row.slug,
+    year: row.year,
+    make: row.make,
+    model: row.model,
+    trim: row.trim,
+    body_style: row.body_style,
+    mileage: row.mileage,
+    price_cents: row.price_cents,
+    prior_price_cents: row.prior_price_cents,
+    exterior_color: row.exterior_color,
+    interior_color: row.interior_color,
+    transmission: row.transmission,
+    drivetrain: row.drivetrain,
+    fuel_type: row.fuel_type,
+    engine: row.engine,
+    mpg_combined: row.mpg_combined,
+    description: row.description,
+    features: row.features,
+    status: row.status,
+    is_featured: row.is_featured,
+    date_received: row.date_received,
+  };
+}
+
+function publicFieldsFromInput(vehicle: Json): Record<string, unknown> {
+  return {
+    stock_number: String(vehicle.stock_number ?? "").trim() || undefined,
+    slug: String(vehicle.slug ?? "").trim() || undefined,
+    trim: vehicle.trim ?? null,
+    body_style: vehicle.body_style,
+    interior_color: vehicle.interior_color ?? null,
+    transmission: vehicle.transmission ?? null,
+    drivetrain: vehicle.drivetrain ?? null,
+    fuel_type: vehicle.fuel_type ?? null,
+    engine: vehicle.engine ?? null,
+    mpg_combined: vehicle.mpg_combined ?? null,
+    description: vehicle.description ?? null,
+    features: Array.isArray(vehicle.features) ? vehicle.features : [],
+    status: vehicle.status,
+    is_featured: Boolean(vehicle.is_featured),
   };
 }
 
@@ -192,7 +245,10 @@ export async function importLegacyInventory(input: {
       if (!car) throw new Error("Legacy vehicle was not returned after save.");
       const vin = sourceId.toUpperCase();
       const publicRows = (await rest(`vehicles?select=id&vin=eq.${encodeURIComponent(vin)}&limit=1`, { profile: "public" })) as Array<{ id: string }>;
-      const publicPayload = publicVehicle(car, publicRows[0]?.id);
+      const publicPayload = {
+        ...publicVehicle(car, publicRows[0]?.id),
+        ...publicFieldsFromInput(vehicle),
+      };
       const publicResult = publicRows[0]
         ? await rest(`vehicles?id=eq.${publicRows[0].id}`, { method: "PATCH", profile: "public", prefer: "return=representation", body: publicPayload })
         : await rest("vehicles", { method: "POST", profile: "public", prefer: "return=representation", body: publicPayload });

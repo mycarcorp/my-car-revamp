@@ -26,6 +26,7 @@ import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
 import {
   MAX_PHOTOS,
+  MAX_PHOTO_BYTES,
   syncVehiclePhotos,
   type PhotoDraft,
   type Vehicle,
@@ -33,6 +34,7 @@ import {
 } from "@/lib/admin-inventory";
 import { VIN_RE, vehicleSlug } from "@/lib/inventory-csv";
 import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
+import { decodeVin, type VinDecodedVehicle } from "@/lib/vin-decoder.functions";
 
 type BodyStyle = Database["public"]["Enums"]["body_style"];
 type FuelType = Database["public"]["Enums"]["fuel_type"];
@@ -97,10 +99,41 @@ const empty: FormState = {
   mpg_combined: "",
   description: "",
   features: "",
-  status: "available",
+  status: "draft",
   is_featured: false,
   slug: "",
 };
+
+function applyDecodedVehicle(form: FormState, decoded: VinDecodedVehicle): FormState {
+  const body = BODY_STYLES.find((option) =>
+    decoded.bodyStyle?.toLowerCase().includes(option.toLowerCase()),
+  );
+  const fuelText = decoded.fuelType?.toLowerCase() ?? "";
+  const fuel = fuelText.includes("plug-in") || fuelText.includes("plug in")
+    ? "Plug-in Hybrid"
+    : FUEL_TYPES.find((option) => fuelText.includes(option.toLowerCase()));
+  const drivetrain = decoded.drivetrain?.toLowerCase().includes("all") || decoded.drivetrain?.toLowerCase().includes("4wd")
+    ? "AWD/4WD"
+    : decoded.drivetrain?.toLowerCase().includes("rear")
+      ? "RWD"
+      : decoded.drivetrain?.toLowerCase().includes("front")
+        ? "FWD"
+        : undefined;
+
+  return {
+    ...form,
+    vin: decoded.vin,
+    year: decoded.year ? String(decoded.year) : form.year,
+    make: decoded.make ?? form.make,
+    model: decoded.model ?? form.model,
+    trim: decoded.trim ?? form.trim,
+    body_style: body ?? form.body_style,
+    fuel_type: fuel ?? form.fuel_type,
+    drivetrain: drivetrain ?? form.drivetrain,
+    transmission: decoded.transmission ?? form.transmission,
+    engine: decoded.engine ?? form.engine,
+  };
+}
 
 function fromVehicle(v: Vehicle): FormState {
   return {
@@ -146,6 +179,7 @@ export function VehicleFormDialog({
   const [photos, setPhotos] = useState<PhotoDraft[]>([]);
   const [existing, setExisting] = useState<VehiclePhoto[]>([]);
   const [saving, setSaving] = useState(false);
+  const [decoding, setDecoding] = useState(false);
 
   useEffect(() => {
     if (!open) return;
@@ -178,9 +212,11 @@ export function VehicleFormDialog({
     if (!list) return;
     const room = MAX_PHOTOS - photos.length;
     const files = Array.from(list)
-      .filter((f) => f.type.startsWith("image/"))
+      .filter((f) => ["image/jpeg", "image/png", "image/webp"].includes(f.type) && f.size <= MAX_PHOTO_BYTES)
       .slice(0, Math.max(0, room));
-    if (files.length < list.length) toast.warning(`Up to ${MAX_PHOTOS} photos per vehicle.`);
+    if (files.length < list.length) {
+      toast.warning(`Use JPG, PNG, or WebP files under 10 MB. Up to ${MAX_PHOTOS} photos per vehicle.`);
+    }
     setPhotos((p) => [
       ...p,
       ...files.map((file) => ({
@@ -199,6 +235,28 @@ export function VehicleFormDialog({
       [next[index], next[target]] = [next[target]!, next[index]!];
       return next;
     });
+  }
+
+  async function decodeCurrentVin() {
+    const vin = form.vin.replace(/\s+/g, "").toUpperCase();
+    if (!VIN_RE.test(vin)) {
+      toast.error("Enter a valid 17-character VIN first.");
+      return;
+    }
+    if (!session?.access_token) {
+      toast.error("Your session has expired. Please sign in again.");
+      return;
+    }
+    setDecoding(true);
+    try {
+      const decoded = await decodeVin({ data: { accessToken: session.access_token, vin } });
+      setForm((current) => applyDecodedVehicle(current, decoded));
+      toast.success("VIN decoded. Review the details before saving.");
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not decode this VIN.");
+    } finally {
+      setDecoding(false);
+    }
   }
 
   async function submit() {
@@ -280,17 +338,23 @@ export function VehicleFormDialog({
         <DialogHeader>
           <DialogTitle>{vehicle ? "Edit vehicle" : "Add vehicle"}</DialogTitle>
           <DialogDescription>
-            Details here appear on the public inventory once the status is set to available.
+            New vehicles start as drafts. Details appear on public inventory only when published as available.
           </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 sm:grid-cols-2">
           <Field label="VIN">
-            <Input
-              value={form.vin}
-              onChange={(e) => set("vin", e.target.value.toUpperCase())}
-              maxLength={17}
-            />
+            <div className="flex gap-2">
+              <Input
+                value={form.vin}
+                onChange={(e) => set("vin", e.target.value.replace(/\s+/g, "").toUpperCase())}
+                maxLength={17}
+                className="min-w-0 flex-1"
+              />
+              <Button type="button" variant="outline" onClick={() => void decodeCurrentVin()} disabled={decoding}>
+                {decoding ? <Loader2 className="size-4 animate-spin" /> : "Decode"}
+              </Button>
+            </div>
           </Field>
           <Field label="Stock number">
             <Input value={form.stock_number} onChange={(e) => set("stock_number", e.target.value)} />
