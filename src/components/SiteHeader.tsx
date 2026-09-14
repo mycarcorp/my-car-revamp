@@ -30,7 +30,9 @@ export function SiteHeader() {
   const [open, setOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
 
-  const profileName = String(user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? "").trim();
+  const profileName = String(
+    user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "",
+  ).trim();
   const initials = (profileName || user?.email || "M")
     .split(/\s+/)
     .map((part) => part[0])

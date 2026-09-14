@@ -85,7 +85,7 @@ export const vehicleSearchQuery = (filters: SearchFilters) =>
       const data = await listPublicLegacyInventoryRows({
         data: { ...filters, page, pageSize: PAGE_SIZE },
       });
-      return { vehicles: data.vehicles as VehicleWithPhotos[], count: data.count, page };
+      return { vehicles: data.vehicles as unknown as VehicleWithPhotos[], count: data.count, page };
     },
   });
 
@@ -120,7 +120,7 @@ export const featuredVehiclesQuery = () =>
     queryKey: ["vehicles", "featured"],
     queryFn: async () => {
       const data = await listPublicLegacyInventoryRows({ data: { page: 1, pageSize: 8 } });
-      return data.vehicles as VehicleWithPhotos[];
+      return data.vehicles as unknown as VehicleWithPhotos[];
     },
   });
 
@@ -129,7 +129,7 @@ export const vehicleBySlugQuery = (slug: string) =>
     queryKey: ["vehicle", slug],
     queryFn: async () => {
       const data = await listPublicLegacyInventoryRows({ data: { slug, page: 1, pageSize: 1 } });
-      return (data.vehicles[0] as VehicleWithPhotos | undefined) ?? null;
+      return (data.vehicles[0] as unknown as VehicleWithPhotos | undefined) ?? null;
     },
   });
 
@@ -140,7 +140,7 @@ export const similarVehiclesQuery = (bodyStyle: string, excludeId: string) =>
       const data = await listPublicLegacyInventoryRows({
         data: { body: bodyStyle, excludeId, page: 1, pageSize: 4 },
       });
-      return data.vehicles as VehicleWithPhotos[];
+      return data.vehicles as unknown as VehicleWithPhotos[];
     },
   });
 
