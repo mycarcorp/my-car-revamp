@@ -1,5 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
-import { requireSupabaseAuth } from "@/integrations/supabase/auth-middleware";
+import { attachAppSupabaseAuth } from "@/lib/app-auth-middleware";
 
 type LegacyUser = {
   id: number;
