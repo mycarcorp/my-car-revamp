@@ -199,7 +199,9 @@ export function sanitizeHtml(input: string): string {
     const safeAttributes: string[] = [];
 
     for (const attributeMatch of attrs.matchAll(/([a-zA-Z:-]+)\s*=\s*("([^"]*)"|'([^']*)'|([^\s>]+))/g)) {
-      const attrName = attributeMatch[1].toLowerCase();
+      const rawName = attributeMatch[1];
+      if (!rawName) continue;
+      const attrName = rawName.toLowerCase();
       const attrValue = attributeMatch[3] ?? attributeMatch[4] ?? attributeMatch[5] ?? "";
       if (!attrValue) continue;
 

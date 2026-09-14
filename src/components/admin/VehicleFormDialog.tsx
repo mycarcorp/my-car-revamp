@@ -261,7 +261,7 @@ export function VehicleFormDialog({
       if (!session?.access_token) throw new Error("Your session has expired. Please sign in again.");
       const saved = (await saveLegacyInventoryRow({
         data: { accessToken: session.access_token, vehicle: payload },
-      })) as Vehicle;
+      })) as unknown as Vehicle;
 
       await syncVehiclePhotos(saved, photos, existing, title);
       toast.success(vehicle ? "Vehicle updated." : "Vehicle added.");

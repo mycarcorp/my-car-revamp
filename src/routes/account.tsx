@@ -86,7 +86,9 @@ function AccountPage() {
 
   if (!emailVerified) return <VerifyEmailGate email={user.email ?? ""} />;
 
-  const displayName = String(user.user_metadata?.full_name ?? user.user_metadata?.name ?? "").trim();
+  const displayName = String(
+    user.user_metadata?.["full_name"] ?? user.user_metadata?.["name"] ?? "",
+  ).trim();
   const firstName = displayName.split(/\s+/)[0] || user.email?.split("@")[0] || "there";
   const requestCount = requests.data?.length ?? 0;
 

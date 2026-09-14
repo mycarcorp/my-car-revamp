@@ -105,7 +105,7 @@ function SearchPage() {
   const totalPages = data ? Math.max(1, Math.ceil(data.count / PAGE_SIZE)) : 1;
   const page = params.page ?? 1;
   const displayName =
-    String(user?.user_metadata?.full_name ?? user?.user_metadata?.name ?? "").trim().split(/\s+/)[0] ||
+    String(user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "").trim().split(/\s+/)[0] ||
     user?.email?.split("@")[0] ||
     "there";
 

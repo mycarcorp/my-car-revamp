@@ -42,12 +42,13 @@ async function rest(
     "Content-Type": "application/json",
   };
   if (init.profile) headers[method === "GET" ? "Accept-Profile" : "Content-Profile"] = init.profile;
-  if (init.prefer) headers.Prefer = init.prefer;
-  const response = await fetch(`${c.url}/rest/v1/${path}`, {
+  if (init.prefer) headers["Prefer"] = init.prefer;
+  const requestInit: RequestInit = {
     method,
     headers,
-    body: init.body === undefined ? undefined : JSON.stringify(init.body),
-  });
+  };
+  if (init.body !== undefined) requestInit.body = JSON.stringify(init.body);
+  const response = await fetch(`${c.url}/rest/v1/${path}`, requestInit);
   const text = await response.text();
   if (!response.ok) throw new Error(`Legacy inventory request failed (${response.status}): ${text.slice(0, 300)}`);
   return text ? JSON.parse(text) : null;
@@ -160,7 +161,7 @@ export async function importLegacyInventory(input: {
   const summary = { added: 0, updated: 0, skipped: 0, failed: [] as string[] };
   for (const row of input.rows) {
     const vehicle = row.vehicle;
-    const sourceId = String(vehicle.vin ?? "").trim().toLowerCase();
+    const sourceId = String(vehicle["vin"] ?? "").trim().toLowerCase();
     try {
       const existing = (await rest(`mc_cars?select=*&source_id=eq.${encodeURIComponent(sourceId)}&limit=1`, { profile: "mycarco_db" })) as LegacyCar[];
       if (existing[0] && input.mode === "skip") {
@@ -168,20 +169,20 @@ export async function importLegacyInventory(input: {
         continue;
       }
       const payload = {
-        year: Number(vehicle.year),
-        make: String(vehicle.make ?? ""),
-        model: String(vehicle.model ?? ""),
-        trim_level: vehicle.trim ?? null,
-        body_type: vehicle.body_style ?? null,
-        fuel_type: vehicle.fuel_type ?? "Gas",
-        drivetrain: vehicle.drivetrain ?? null,
-        color: vehicle.exterior_color ?? null,
-        mileage: Number(vehicle.mileage ?? 0),
-        price: Number(vehicle.price_cents ?? 0) / 100,
-        original_price: vehicle.prior_price_cents == null ? null : Number(vehicle.prior_price_cents) / 100,
+        year: Number(vehicle["year"]),
+        make: String(vehicle["make"] ?? ""),
+        model: String(vehicle["model"] ?? ""),
+        trim_level: vehicle["trim"] ?? null,
+        body_type: vehicle["body_style"] ?? null,
+        fuel_type: vehicle["fuel_type"] ?? "Gas",
+        drivetrain: vehicle["drivetrain"] ?? null,
+        color: vehicle["exterior_color"] ?? null,
+        mileage: Number(vehicle["mileage"] ?? 0),
+        price: Number(vehicle["price_cents"] ?? 0) / 100,
+        original_price: vehicle["prior_price_cents"] == null ? null : Number(vehicle["prior_price_cents"]) / 100,
         image_url: (row.photoUrls?.length ? row.photoUrls : existing[0]?.image_url?.split(","))?.join(",") ?? null,
-        description: vehicle.description ?? null,
-        status: vehicle.status === "draft" ? "draft" : vehicle.status === "sold" ? "sold" : vehicle.status === "pending" ? "pending" : "active",
+        description: vehicle["description"] ?? null,
+        status: vehicle["status"] === "draft" ? "draft" : vehicle["status"] === "sold" ? "sold" : vehicle["status"] === "pending" ? "pending" : "active",
         source_id: sourceId,
       };
       const result = existing[0]
@@ -221,7 +222,7 @@ export async function saveLegacyInventoryVehicle(input: {
   });
   if (result.failed.length) throw new Error(result.failed[0]);
 
-  const sourceId = String(input.vehicle.vin ?? "").trim().toLowerCase();
+  const sourceId = String(input.vehicle["vin"] ?? "").trim().toLowerCase();
   const cars = (await rest(`mc_cars?select=*&source_id=eq.${encodeURIComponent(sourceId)}&limit=1`, {
     profile: "mycarco_db",
   })) as LegacyCar[];

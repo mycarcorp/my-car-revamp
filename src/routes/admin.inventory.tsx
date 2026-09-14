@@ -77,7 +77,7 @@ function AdminInventory() {
     enabled: Boolean(accessToken),
     queryFn: async () => {
       const rows = await listLegacyInventoryRows({ data: { accessToken } });
-      return rows as Row[];
+      return rows as unknown as Row[];
     },
   });
 
