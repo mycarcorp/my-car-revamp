@@ -66,8 +66,12 @@ const enumBody = (value: string | null): string => {
   return "Sedan";
 };
 
+// Legacy mc_cars_status only supports: active, sold, hidden
 const enumStatus = (value: string | null) =>
-  value === "draft" ? "draft" : value === "sold" ? "sold" : value === "pending" ? "pending" : "available";
+  value === "hidden" || value === "draft" ? "draft" : value === "sold" ? "sold" : "available";
+
+const legacyStatus = (value: unknown) =>
+  value === "sold" ? "sold" : value === "draft" ? "hidden" : "active";
 
 function imageUrls(car: LegacyCar): string[] {
   const vin = (car.source_id ?? `legacy-${car.id}`).trim().toLowerCase();
@@ -262,7 +266,7 @@ export async function importLegacyInventory(input: {
         original_price: vehicle["prior_price_cents"] == null ? null : Number(vehicle["prior_price_cents"]) / 100,
         image_url: (row.photoUrls?.length ? row.photoUrls : existing[0]?.image_url?.split(","))?.join(",") ?? null,
         description: vehicle["description"] ?? null,
-        status: vehicle["status"] === "draft" ? "draft" : vehicle["status"] === "sold" ? "sold" : vehicle["status"] === "pending" ? "pending" : "active",
+        status: legacyStatus(vehicle["status"]),
         source_id: sourceId,
       };
       const result = existing[0]
