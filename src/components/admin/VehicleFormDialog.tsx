@@ -27,14 +27,24 @@ import type { Database } from "@/integrations/supabase/types";
 import {
   MAX_PHOTOS,
   MAX_PHOTO_BYTES,
-  syncVehiclePhotos,
   type PhotoDraft,
   type Vehicle,
   type VehiclePhoto,
 } from "@/lib/admin-inventory";
 import { VIN_RE, vehicleSlug } from "@/lib/inventory-csv";
 import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
+import { saveVehiclePhotosFn, type PhotoOrderInput } from "@/lib/vehicle-photos.functions";
 import { decodeVin, type VinDecodedVehicle } from "@/lib/vin-decoder.functions";
+
+
+function fileToDataUrl(file: File): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(String(reader.result));
+    reader.onerror = () => reject(new Error("Could not read the selected image."));
+    reader.readAsDataURL(file);
+  });
+}
 
 type BodyStyle = Database["public"]["Enums"]["body_style"];
 type FuelType = Database["public"]["Enums"]["fuel_type"];
@@ -321,7 +331,25 @@ export function VehicleFormDialog({
         data: { accessToken: session.access_token, vehicle: payload },
       })) as unknown as Vehicle;
 
-      await syncVehiclePhotos(saved, photos, existing, title);
+      const newPhotos: Array<{ dataUrl: string; contentType?: string }> = [];
+      const order: PhotoOrderInput[] = [];
+      for (const p of photos) {
+        if (p.kind === "existing") {
+          order.push({ kind: "keep", url: p.url });
+        } else {
+          order.push({ kind: "new", index: newPhotos.length });
+          newPhotos.push({ dataUrl: await fileToDataUrl(p.file), contentType: p.file.type });
+        }
+      }
+      await saveVehiclePhotosFn({
+        data: {
+          accessToken: session.access_token,
+          vin,
+          altBase: title,
+          order,
+          newPhotos,
+        },
+      });
       toast.success(vehicle ? "Vehicle updated." : "Vehicle added.");
       onSaved();
       onOpenChange(false);
