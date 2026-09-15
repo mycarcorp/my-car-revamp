@@ -180,10 +180,14 @@ function AdminInventory() {
     setDeleting(true);
     try {
       const match = /^LEGACY-(\d+)$/i.exec(toDelete.stock_number);
-      if (!match) throw new Error("This vehicle is not linked to a legacy inventory record.");
       if (!accessToken) throw new Error("Your session has expired. Please sign in again.");
       await deleteLegacyInventoryRow({
-        data: { accessToken, legacyId: Number(match[1]), publicId: toDelete.id },
+        data: {
+          accessToken,
+          legacyId: match ? Number(match[1]) : null,
+          publicId: toDelete.id,
+          vin: toDelete.vin,
+        },
       });
       toast.success("Vehicle deleted.");
       setToDelete(null);
