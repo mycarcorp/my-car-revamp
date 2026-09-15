@@ -79,7 +79,10 @@ export const Route = createFileRoute("/api/public/vehicle-photos/$")({
         for (const target of storageTargets) {
           const upstream = await fetch(
             `${target.url}/storage/v1/object/vehicle-photos/${path}`,
-            { headers: { apikey: target.key, Authorization: `Bearer ${target.key}` } },
+            {
+              headers: { apikey: target.key, Authorization: `Bearer ${target.key}` },
+              cache: "no-store",
+            },
           ).catch(() => null);
 
           if (upstream?.ok && upstream.body) {
@@ -87,7 +90,9 @@ export const Route = createFileRoute("/api/public/vehicle-photos/$")({
               status: 200,
               headers: {
                 "content-type": upstream.headers.get("content-type") ?? "image/jpeg",
-                "cache-control": "public, max-age=31536000, immutable",
+                "cache-control": versioned
+                  ? "public, max-age=31536000, immutable"
+                  : "no-cache, must-revalidate",
               },
             });
           }
