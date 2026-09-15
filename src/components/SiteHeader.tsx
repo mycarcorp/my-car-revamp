@@ -1,6 +1,6 @@
 import { Link, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Heart, LogOut, Menu, User2, X } from "lucide-react";
+import { Heart, LayoutDashboard, LogOut, Menu, User2, X } from "lucide-react";
 import { useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -25,7 +25,7 @@ const NAV = [
 ] as const;
 
 export function SiteHeader() {
-  const { user } = useAuth();
+  const { user, isStaff } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
   const [signInOpen, setSignInOpen] = useState(false);
@@ -109,6 +109,11 @@ export function SiteHeader() {
                       <p className="truncate text-xs text-muted-foreground">{user.email}</p>
                     </div>
                     <DropdownMenuSeparator />
+                    {isStaff && (
+                      <DropdownMenuItem asChild>
+                        <Link to="/admin"><LayoutDashboard className="size-4" /> Admin dashboard</Link>
+                      </DropdownMenuItem>
+                    )}
                     <DropdownMenuItem asChild>
                       <Link to="/account"><User2 className="size-4" /> Account settings</Link>
                     </DropdownMenuItem>
