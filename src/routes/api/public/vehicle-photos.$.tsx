@@ -9,8 +9,11 @@ const ALLOWED = /^[a-z0-9-]+\/photo-\d+\.jpg$/i;
 export const Route = createFileRoute("/api/public/vehicle-photos/$")({
   server: {
     handlers: {
-      GET: async ({ params }) => {
-        const path = (params as { _splat?: string })._splat ?? "";
+      GET: async ({ params, request }) => {
+        const path = ((params as { _splat?: string })._splat ?? "").split("?")[0] ?? "";
+        // Versioned URLs (?v=...) are safe to cache forever; bare slot URLs are
+        // reused when photos are replaced, so they must always be revalidated.
+        const versioned = new URL(request.url).searchParams.has("v");
         if (!ALLOWED.test(path)) {
           return new Response("Not found", { status: 404 });
         }
