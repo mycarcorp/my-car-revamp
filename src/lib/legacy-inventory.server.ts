@@ -66,8 +66,12 @@ const enumBody = (value: string | null): string => {
   return "Sedan";
 };
 
+// Legacy mc_cars_status only supports: active, sold, hidden
 const enumStatus = (value: string | null) =>
-  value === "draft" ? "draft" : value === "sold" ? "sold" : value === "pending" ? "pending" : "available";
+  value === "hidden" || value === "draft" ? "draft" : value === "sold" ? "sold" : "available";
+
+const legacyStatus = (value: unknown) =>
+  value === "sold" ? "sold" : value === "draft" ? "hidden" : "active";
 
 function imageUrls(car: LegacyCar): string[] {
   const vin = (car.source_id ?? `legacy-${car.id}`).trim().toLowerCase();
