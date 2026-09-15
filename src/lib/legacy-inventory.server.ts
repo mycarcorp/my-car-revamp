@@ -324,12 +324,36 @@ export async function saveLegacyInventoryVehicle(input: {
 
 export async function deleteLegacyInventoryVehicle(input: {
   accessToken: string;
-  legacyId: number;
+  legacyId?: number | null;
   publicId?: string | null;
+  vin?: string | null;
 }) {
   await requireStaff(input.accessToken);
-  await rest(`mc_cars?id=eq.${input.legacyId}`, { method: "DELETE", profile: "mycarco_db" });
-  if (!input.publicId || input.publicId.startsWith("legacy-")) return;
+
+  // Resolve the legacy row by id when known, otherwise by VIN (source_id).
+  let legacyId = input.legacyId ?? null;
+  const vin = (input.vin ?? "").trim().toLowerCase();
+  if (!legacyId && vin) {
+    const found = (await rest(
+      `mc_cars?select=id&source_id=eq.${encodeURIComponent(vin)}&limit=1`,
+      { profile: "mycarco_db" },
+    )) as Array<{ id: number }>;
+    legacyId = found[0]?.id ?? null;
+  }
+  if (legacyId) {
+    await rest(`mc_cars?id=eq.${legacyId}`, { method: "DELETE", profile: "mycarco_db" });
+  }
+
+  let publicId = input.publicId && !input.publicId.startsWith("legacy-") ? input.publicId : null;
+  if (!publicId && vin) {
+    const rows = (await rest(
+      `vehicles?select=id&vin=eq.${encodeURIComponent(vin.toUpperCase())}&limit=1`,
+      { profile: "public" },
+    )) as Array<{ id: string }>;
+    publicId = rows[0]?.id ?? null;
+  }
+  if (!publicId) return;
+  input = { ...input, publicId };
 
   await rest(`leads?vehicle_id=eq.${encodeURIComponent(input.publicId)}`, {
     method: "PATCH",
