@@ -57,6 +57,9 @@ function VehicleDetail() {
   const { user } = useAuth();
   const photos = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
   const [active, setActive] = useState(0);
+  const [failedPhotoIds, setFailedPhotoIds] = useState<string[]>([]);
+  const markFailed = (id: string) =>
+    setFailedPhotoIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   const [saved, setSaved] = useState(false);
   const [savingBusy, setSavingBusy] = useState(false);
 
