@@ -16,7 +16,7 @@ export type PhotoOrderItem =
 type Creds = { url: string; key: string };
 
 function storageCreds(): Creds {
-  const candidates: Array<Partial<Creds>> = [
+  const candidates: Array<{ url: string | undefined; key: string | undefined }> = [
     { url: process.env["SUPABASE_URL"], key: process.env["SUPABASE_SERVICE_ROLE_KEY"] },
     { url: process.env["LEGACY_SUPABASE_URL"], key: process.env["LEGACY_SUPABASE_SERVICE_ROLE_KEY"] },
   ];
