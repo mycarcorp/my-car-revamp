@@ -381,15 +381,16 @@ export async function listPublicLegacyInventory(input: {
     .map((car) => (car.source_id ?? `legacy-${car.id}`).trim().toUpperCase())
     .filter(Boolean);
   const publicRows = (await rest(
-    `vehicles?select=id,vin&vin=in.(${vins.map(encodeURIComponent).join(",")})`,
+    `vehicles?select=*&vin=in.(${vins.map(encodeURIComponent).join(",")})`,
     { profile: "public" },
-  )) as Array<{ id: string; vin: string }>;
+  )) as Array<Record<string, unknown> & { id: string; vin: string }>;
   const publicIds = new Map(publicRows.map((row) => [row.vin.toUpperCase(), row.id]));
   const publicPhotos = await photosByVehicleIds(publicRows.map((row) => row.id));
   let rows = cars.map((car) => {
     const vin = (car.source_id ?? `legacy-${car.id}`).trim().toUpperCase();
+    const publicRow = publicRows.find((row) => row.vin.toUpperCase() === vin);
     const publicId = publicIds.get(vin) ?? `legacy-${car.id}`;
-    return adapt(car, publicId, undefined, publicPhotos.get(publicId));
+    return adapt(car, publicId, publicRow, publicPhotos.get(publicId));
   });
   rows = rows.filter((row) => row.status === "available" || row.status === "pending");
   if (input.slug) rows = rows.filter((row) => row.slug === input.slug);

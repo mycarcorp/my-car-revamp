@@ -109,7 +109,7 @@ const empty: FormState = {
   mpg_combined: "",
   description: "",
   features: "",
-  status: "draft",
+  status: "available",
   is_featured: false,
   slug: "",
 };
