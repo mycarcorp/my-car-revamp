@@ -29,9 +29,6 @@ export const Route = createFileRoute("/api/public/vehicle-photos/$")({
           },
         );
         const vehicles = (await vehicleResponse.json().catch(() => [])) as Array<{ status?: string }>;
-        if (!vehicleResponse.ok || !vehicles[0]) {
-          return new Response("Not found", { status: 404 });
-        }
 
         const storageTargets = [
           {
