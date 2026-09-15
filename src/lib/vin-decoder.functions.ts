@@ -3,22 +3,22 @@ import { requireStaff } from "./legacy-blog.server";
 
 export type VinDecodedVehicle = {
   vin: string;
-  year?: number;
-  make?: string;
-  model?: string;
-  trim?: string;
-  bodyStyle?: string;
-  vehicleType?: string;
-  doors?: string;
-  engine?: string;
-  cylinders?: string;
-  displacement?: string;
-  fuelType?: string;
-  transmission?: string;
-  drivetrain?: string;
-  manufacturer?: string;
-  plantCountry?: string;
-  plantState?: string;
+  year?: number | undefined;
+  make?: string | undefined;
+  model?: string | undefined;
+  trim?: string | undefined;
+  bodyStyle?: string | undefined;
+  vehicleType?: string | undefined;
+  doors?: string | undefined;
+  engine?: string | undefined;
+  cylinders?: string | undefined;
+  displacement?: string | undefined;
+  fuelType?: string | undefined;
+  transmission?: string | undefined;
+  drivetrain?: string | undefined;
+  manufacturer?: string | undefined;
+  plantCountry?: string | undefined;
+  plantState?: string | undefined;
 };
 
 const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/;
