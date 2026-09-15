@@ -1,3 +1,4 @@
+import { useState } from "react";
 import { Link } from "@tanstack/react-router";
 import { Camera, TrendingDown } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
@@ -13,6 +14,7 @@ export function VehicleCard({
 }) {
   const photos = [...(vehicle.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
   const cover = photos[0];
+  const [coverFailed, setCoverFailed] = useState(false);
   const payment = settings
     ? monthlyPayment(Number(vehicle.price_cents), {
         apr: Number(settings.finance_apr),
