@@ -352,28 +352,26 @@ export async function deleteLegacyInventoryVehicle(input: {
     )) as Array<{ id: string }>;
     publicId = rows[0]?.id ?? null;
   }
-  if (!publicId) return;
-  input = { ...input, publicId };
 
-  await rest(`leads?vehicle_id=eq.${encodeURIComponent(input.publicId)}`, {
+  await rest(`leads?vehicle_id=eq.${encodeURIComponent(publicId)}`, {
     method: "PATCH",
     profile: "public",
     body: { vehicle_id: null },
   });
-  await rest(`appointments?vehicle_id=eq.${encodeURIComponent(input.publicId)}`, {
+  await rest(`appointments?vehicle_id=eq.${encodeURIComponent(publicId)}`, {
     method: "PATCH",
     profile: "public",
     body: { vehicle_id: null },
   });
-  await rest(`saved_vehicles?vehicle_id=eq.${encodeURIComponent(input.publicId)}`, {
+  await rest(`saved_vehicles?vehicle_id=eq.${encodeURIComponent(publicId)}`, {
     method: "DELETE",
     profile: "public",
   });
-  await rest(`vehicle_photos?vehicle_id=eq.${encodeURIComponent(input.publicId)}`, {
+  await rest(`vehicle_photos?vehicle_id=eq.${encodeURIComponent(publicId)}`, {
     method: "DELETE",
     profile: "public",
   });
-  await rest(`vehicles?id=eq.${encodeURIComponent(input.publicId)}`, {
+  await rest(`vehicles?id=eq.${encodeURIComponent(publicId)}`, {
     method: "DELETE",
     profile: "public",
   });
