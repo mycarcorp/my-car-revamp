@@ -44,7 +44,9 @@ export const saveLegacyInventoryRow = createServerFn({ method: "POST" })
   });
 
 export const deleteLegacyInventoryRow = createServerFn({ method: "POST" })
-  .inputValidator((input: { accessToken: string; legacyId: number; publicId?: string | null }) => input)
+  .inputValidator(
+    (input: { accessToken: string; legacyId?: number | null; publicId?: string | null; vin?: string | null }) => input,
+  )
   .handler(async ({ data }) => {
     const { deleteLegacyInventoryVehicle } = await import("./legacy-inventory.server");
     return deleteLegacyInventoryVehicle(data);
