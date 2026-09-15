@@ -65,7 +65,7 @@ function decodeDataUrl(dataUrl: string): { bytes: Uint8Array; contentType: strin
 
 /** `uploads/cars/<vin>/photo-3.jpg` or `/api/public/vehicle-photos/<vin>/photo-3.jpg` -> storage key */
 function storageKeyFromUrl(url: string, vin: string): string | null {
-  const m = url.match(/photo-(\d+)\.(?:jpe?g|png|webp)$/i);
+  const m = (url.split("?")[0] ?? "").match(/photo-(\d+)\.(?:jpe?g|png|webp)$/i);
   if (!m) return null;
   return `${vin}/photo-${m[1]}.jpg`;
 }
