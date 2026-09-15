@@ -117,6 +117,30 @@ export type LegacyInventoryRow = ReturnType<typeof publicVehicle> & {
   vehicle_photos: { url: string; position: number; alt: string | null }[];
 };
 
+type PublicVehiclePhoto = {
+  vehicle_id: string;
+  url: string;
+  position: number;
+  alt: string | null;
+};
+
+async function photosByVehicleIds(ids: string[]): Promise<Map<string, PublicVehiclePhoto[]>> {
+  const validIds = ids.filter((id) => !id.startsWith("legacy-"));
+  if (validIds.length === 0) return new Map();
+
+  const photos = (await rest(
+    `vehicle_photos?select=vehicle_id,url,position,alt&vehicle_id=in.(${validIds.map(encodeURIComponent).join(",")})&order=position.asc`,
+    { profile: "public" },
+  )) as PublicVehiclePhoto[];
+  const grouped = new Map<string, PublicVehiclePhoto[]>();
+  for (const photo of photos) {
+    const current = grouped.get(photo.vehicle_id) ?? [];
+    current.push(photo);
+    grouped.set(photo.vehicle_id, current);
+  }
+  return grouped;
+}
+
 export async function listLegacyInventory(accessToken: string): Promise<LegacyInventoryRow[]> {
   await requireStaff(accessToken);
   const cars = (await rest("mc_cars?select=*&order=created_at.desc", {
@@ -132,11 +156,13 @@ export async function listLegacyInventory(accessToken: string): Promise<LegacyIn
     { profile: "public" },
   )) as Array<Record<string, unknown> & { id: string; vin: string }>;
   const publicIds = new Map(publicRows.map((row) => [row.vin.toUpperCase(), row.id]));
+  const publicPhotos = await photosByVehicleIds(publicRows.map((row) => row.id));
 
   return cars.map((car) => {
     const vin = (car.source_id ?? `legacy-${car.id}`).trim().toUpperCase();
     const publicRow = publicRows.find((row) => row.vin.toUpperCase() === vin);
-    return adapt(car, publicIds.get(vin) ?? `legacy-${car.id}`, publicRow);
+    const publicId = publicIds.get(vin) ?? `legacy-${car.id}`;
+    return adapt(car, publicId, publicRow, publicPhotos.get(publicId));
   });
 }
 
@@ -144,17 +170,18 @@ function adapt(
   car: LegacyCar,
   publicId: string,
   publicRow?: Record<string, unknown> | null,
+  publicPhotos?: PublicVehiclePhoto[],
 ): LegacyInventoryRow {
-  const urls = imageUrls(car);
+  const legacyPhotos = imageUrls(car).map((url, index) => ({
+    url,
+    position: index + 1,
+    alt: `${car.year} ${car.make} ${car.model}`,
+  }));
   return {
     ...publicVehicle(car, publicId, publicRow ? publicFields(publicRow) : {}),
     id: publicId,
     legacy_id: car.id,
-    vehicle_photos: urls.map((url, index) => ({
-      url,
-      position: index + 1,
-      alt: `${car.year} ${car.make} ${car.model}`,
-    })),
+    vehicle_photos: publicPhotos?.length ? publicPhotos : legacyPhotos,
   };
 }
 
@@ -354,9 +381,11 @@ export async function listPublicLegacyInventory(input: {
     { profile: "public" },
   )) as Array<{ id: string; vin: string }>;
   const publicIds = new Map(publicRows.map((row) => [row.vin.toUpperCase(), row.id]));
+  const publicPhotos = await photosByVehicleIds(publicRows.map((row) => row.id));
   let rows = cars.map((car) => {
     const vin = (car.source_id ?? `legacy-${car.id}`).trim().toUpperCase();
-    return adapt(car, publicIds.get(vin) ?? `legacy-${car.id}`);
+    const publicId = publicIds.get(vin) ?? `legacy-${car.id}`;
+    return adapt(car, publicId, undefined, publicPhotos.get(publicId));
   });
   rows = rows.filter((row) => row.status === "available" || row.status === "pending");
   if (input.slug) rows = rows.filter((row) => row.slug === input.slug);
