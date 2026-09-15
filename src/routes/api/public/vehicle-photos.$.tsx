@@ -16,7 +16,13 @@ export const Route = createFileRoute("/api/public/vehicle-photos/$")({
         }
 
         const url = APP_SUPABASE_URL;
-        const key = process.env["SUPABASE_SERVICE_ROLE_KEY"] ?? process.env["LEGACY_SUPABASE_SERVICE_ROLE_KEY"] ?? APP_SUPABASE_PUBLISHABLE_KEY;
+        // The photo bucket lives in the app's own project, so the LEGACY_* pair
+        // (which points at that project) must win over the platform variables.
+        const key =
+          process.env["MYCAR_SUPABASE_SECRET_KEY"] ??
+          process.env["LEGACY_SUPABASE_SERVICE_ROLE_KEY"] ??
+          process.env["SUPABASE_SERVICE_ROLE_KEY"] ??
+          APP_SUPABASE_PUBLISHABLE_KEY;
         if (!url || !key) return new Response("Not configured", { status: 500 });
 
         const vin = path.split("/")[0]?.toUpperCase();
