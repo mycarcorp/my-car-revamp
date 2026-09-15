@@ -54,9 +54,9 @@ export const decodeVin = createServerFn({ method: "POST" })
     const result = payload.Results?.[0];
     if (!result) throw new Error("VIN was not found.");
 
-    const year = numberValue(result.ModelYear);
-    const make = clean(result.Make);
-    const model = clean(result.Model);
+    const year = numberValue(result["ModelYear"]);
+    const make = clean(result["Make"]);
+    const model = clean(result["Model"]);
     if (!year && !make && !model) throw new Error("VIN returned no usable vehicle information.");
 
     return {
