@@ -185,10 +185,11 @@ function VehicleDetail() {
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.4fr_1fr]">
         <div>
           <div className="overflow-hidden rounded-xl border border-border bg-muted">
-            {photos[active] ? (
+            {photos[active] && !failedPhotoIds.includes(photos[active].id) ? (
               <img
                 src={photos[active].url}
                 alt={photos[active].alt ?? vehicleTitle(v)}
+                onError={() => markFailed(photos[active]!.id)}
                 className="aspect-[4/3] w-full object-cover"
               />
             ) : (
