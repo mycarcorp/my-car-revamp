@@ -155,6 +155,7 @@ export async function saveVehiclePhotos(input: {
         const c = storageCreds();
         const res = await fetch(`${c.url}/storage/v1/object/vehicle-photos/${sourceKey}`, {
           headers: { apikey: c.key, Authorization: `Bearer ${c.key}` },
+          cache: "no-store",
         });
         if (!res.ok) continue;
         const buffer = new Uint8Array(await res.arrayBuffer());
