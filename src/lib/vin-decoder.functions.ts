@@ -3,22 +3,22 @@ import { requireStaff } from "./legacy-blog.server";
 
 export type VinDecodedVehicle = {
   vin: string;
-  year?: number;
-  make?: string;
-  model?: string;
-  trim?: string;
-  bodyStyle?: string;
-  vehicleType?: string;
-  doors?: string;
-  engine?: string;
-  cylinders?: string;
-  displacement?: string;
-  fuelType?: string;
-  transmission?: string;
-  drivetrain?: string;
-  manufacturer?: string;
-  plantCountry?: string;
-  plantState?: string;
+  year?: number | undefined;
+  make?: string | undefined;
+  model?: string | undefined;
+  trim?: string | undefined;
+  bodyStyle?: string | undefined;
+  vehicleType?: string | undefined;
+  doors?: string | undefined;
+  engine?: string | undefined;
+  cylinders?: string | undefined;
+  displacement?: string | undefined;
+  fuelType?: string | undefined;
+  transmission?: string | undefined;
+  drivetrain?: string | undefined;
+  manufacturer?: string | undefined;
+  plantCountry?: string | undefined;
+  plantState?: string | undefined;
 };
 
 const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/;
@@ -54,9 +54,9 @@ export const decodeVin = createServerFn({ method: "POST" })
     const result = payload.Results?.[0];
     if (!result) throw new Error("VIN was not found.");
 
-    const year = numberValue(result.ModelYear);
-    const make = clean(result.Make);
-    const model = clean(result.Model);
+    const year = numberValue(result["ModelYear"]);
+    const make = clean(result["Make"]);
+    const model = clean(result["Model"]);
     if (!year && !make && !model) throw new Error("VIN returned no usable vehicle information.");
 
     return {
@@ -64,18 +64,18 @@ export const decodeVin = createServerFn({ method: "POST" })
       year,
       make,
       model,
-      trim: clean(result.Trim) ?? clean(result.Series),
-      bodyStyle: clean(result.BodyClass),
-      vehicleType: clean(result.VehicleType),
-      doors: clean(result.Doors),
-      engine: clean(result.EngineModel) ?? clean(result.EngineConfiguration),
-      cylinders: clean(result.EngineCylinders),
-      displacement: clean(result.DisplacementL),
-      fuelType: clean(result.FuelTypePrimary),
-      transmission: clean(result.TransmissionStyle),
-      drivetrain: clean(result.DriveType),
-      manufacturer: clean(result.Manufacturer),
-      plantCountry: clean(result.PlantCountry),
-      plantState: clean(result.PlantState),
+      trim: clean(result["Trim"]) ?? clean(result["Series"]),
+      bodyStyle: clean(result["BodyClass"]),
+      vehicleType: clean(result["VehicleType"]),
+      doors: clean(result["Doors"]),
+      engine: clean(result["EngineModel"]) ?? clean(result["EngineConfiguration"]),
+      cylinders: clean(result["EngineCylinders"]),
+      displacement: clean(result["DisplacementL"]),
+      fuelType: clean(result["FuelTypePrimary"]),
+      transmission: clean(result["TransmissionStyle"]),
+      drivetrain: clean(result["DriveType"]),
+      manufacturer: clean(result["Manufacturer"]),
+      plantCountry: clean(result["PlantCountry"]),
+      plantState: clean(result["PlantState"]),
     };
   });

@@ -15,41 +15,57 @@ export const Route = createFileRoute("/api/public/vehicle-photos/$")({
           return new Response("Not found", { status: 404 });
         }
 
-        const url = APP_SUPABASE_URL;
-        // The photo bucket lives in the app's own project, so the LEGACY_* pair
-        // (which points at that project) must win over the platform variables.
-        const key =
-          process.env["MYCAR_SUPABASE_SECRET_KEY"] ??
-          process.env["LEGACY_SUPABASE_SERVICE_ROLE_KEY"] ??
-          process.env["SUPABASE_SERVICE_ROLE_KEY"] ??
-          APP_SUPABASE_PUBLISHABLE_KEY;
-        if (!url || !key) return new Response("Not configured", { status: 500 });
-
+        // Vehicle records are read from the app project with the publishable key
+        // (public rows only), while the photo binaries live in the storage
+        // account reachable with the server credentials below.
         const vin = path.split("/")[0]?.toUpperCase();
         const vehicleResponse = await fetch(
-          `${url}/rest/v1/vehicles?select=status&vin=eq.${encodeURIComponent(vin ?? "")}&limit=1`,
-          { headers: { apikey: key, Authorization: `Bearer ${key}` } },
+          `${APP_SUPABASE_URL}/rest/v1/vehicles?select=status&vin=eq.${encodeURIComponent(vin ?? "")}&limit=1`,
+          {
+            headers: {
+              apikey: APP_SUPABASE_PUBLISHABLE_KEY,
+              Accept: "application/json",
+            },
+          },
         );
         const vehicles = (await vehicleResponse.json().catch(() => [])) as Array<{ status?: string }>;
         if (!vehicleResponse.ok || !vehicles[0] || vehicles[0].status === "draft") {
           return new Response("Not found", { status: 404 });
         }
 
-        const upstream = await fetch(
-          `${url}/storage/v1/object/vehicle-photos/${path}`,
-          { headers: { apikey: key, Authorization: `Bearer ${key}` } },
-        );
-        if (!upstream.ok || !upstream.body) {
-          return new Response("Not found", { status: 404 });
+        const storageTargets = [
+          {
+            url: process.env["SUPABASE_URL"],
+            key: process.env["SUPABASE_SERVICE_ROLE_KEY"],
+          },
+          {
+            url: process.env["LEGACY_SUPABASE_URL"],
+            key: process.env["LEGACY_SUPABASE_SERVICE_ROLE_KEY"],
+          },
+        ].filter((t): t is { url: string; key: string } => Boolean(t.url && t.key));
+
+        if (storageTargets.length === 0) {
+          return new Response("Not configured", { status: 500 });
         }
 
-        return new Response(upstream.body, {
-          status: 200,
-          headers: {
-            "content-type": upstream.headers.get("content-type") ?? "image/jpeg",
-            "cache-control": "public, max-age=31536000, immutable",
-          },
-        });
+        for (const target of storageTargets) {
+          const upstream = await fetch(
+            `${target.url}/storage/v1/object/vehicle-photos/${path}`,
+            { headers: { apikey: target.key, Authorization: `Bearer ${target.key}` } },
+          ).catch(() => null);
+
+          if (upstream?.ok && upstream.body) {
+            return new Response(upstream.body, {
+              status: 200,
+              headers: {
+                "content-type": upstream.headers.get("content-type") ?? "image/jpeg",
+                "cache-control": "public, max-age=31536000, immutable",
+              },
+            });
+          }
+        }
+
+        return new Response("Not found", { status: 404 });
       },
     },
   },
