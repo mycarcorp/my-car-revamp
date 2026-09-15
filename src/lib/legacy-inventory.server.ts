@@ -352,6 +352,8 @@ export async function deleteLegacyInventoryVehicle(input: {
     )) as Array<{ id: string }>;
     publicId = rows[0]?.id ?? null;
   }
+  if (!publicId) return;
+
 
   await rest(`leads?vehicle_id=eq.${encodeURIComponent(publicId)}`, {
     method: "PATCH",
