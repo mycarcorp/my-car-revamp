@@ -65,7 +65,7 @@ function decodeDataUrl(dataUrl: string): { bytes: Uint8Array; contentType: strin
 
 /** `uploads/cars/<vin>/photo-3.jpg` or `/api/public/vehicle-photos/<vin>/photo-3.jpg` -> storage key */
 function storageKeyFromUrl(url: string, vin: string): string | null {
-  const m = url.match(/photo-(\d+)\.(?:jpe?g|png|webp)$/i);
+  const m = (url.split("?")[0] ?? "").match(/photo-(\d+)\.(?:jpe?g|png|webp)$/i);
   if (!m) return null;
   return `${vin}/photo-${m[1]}.jpg`;
 }
@@ -139,28 +139,37 @@ export async function saveVehiclePhotos(input: {
       .filter((k): k is string => Boolean(k)),
   );
 
-  // Assign sequential slots to the final order so photo-1 is always the cover.
-  const finalKeys: string[] = [];
-  for (let i = 0; i < input.order.length; i++) {
-    const item = input.order[i]!;
-    const key = `${vin}/photo-${i + 1}.jpg`;
+  // Resolve every photo's bytes BEFORE writing anything: slots are reused, so
+  // uploading in place would overwrite a kept photo before it has been read.
+  const resolved: Array<{ bytes: Uint8Array; contentType: string }> = [];
+  for (const item of input.order) {
     if (item.kind === "new") {
       const photo = input.newPhotos[item.index];
       if (!photo) continue;
-      const { bytes, contentType } = decodeDataUrl(photo.dataUrl);
-      await uploadObject(key, bytes, photo.contentType || contentType);
+      const decoded = decodeDataUrl(photo.dataUrl);
+      resolved.push({ bytes: decoded.bytes, contentType: photo.contentType || decoded.contentType });
     } else {
       const sourceKey = storageKeyFromUrl(item.url, vin);
-      if (sourceKey && sourceKey !== key) {
-        const c = storageCreds();
-        const res = await fetch(`${c.url}/storage/v1/object/vehicle-photos/${sourceKey}`, {
-          headers: { apikey: c.key, Authorization: `Bearer ${c.key}` },
-        });
-        if (!res.ok) continue;
-        const buffer = new Uint8Array(await res.arrayBuffer());
-        await uploadObject(key, buffer, res.headers.get("content-type") ?? "image/jpeg");
-      }
+      if (!sourceKey) continue;
+      const c = storageCreds();
+      const res = await fetch(`${c.url}/storage/v1/object/vehicle-photos/${sourceKey}`, {
+        headers: { apikey: c.key, Authorization: `Bearer ${c.key}` },
+        cache: "no-store",
+      });
+      if (!res.ok) continue;
+      resolved.push({
+        bytes: new Uint8Array(await res.arrayBuffer()),
+        contentType: res.headers.get("content-type") ?? "image/jpeg",
+      });
     }
+  }
+
+  // Assign sequential slots to the final order so photo-1 is always the cover.
+  const finalKeys: string[] = [];
+  for (let i = 0; i < resolved.length; i++) {
+    const key = `${vin}/photo-${i + 1}.jpg`;
+    const photo = resolved[i]!;
+    await uploadObject(key, photo.bytes, photo.contentType);
     finalKeys.push(key);
   }
 
@@ -168,7 +177,10 @@ export async function saveVehiclePhotos(input: {
   await removeObjects([...new Set(stale)]);
 
   const storedPaths = finalKeys.map((k) => `uploads/cars/${k}`);
-  const appUrls = finalKeys.map((k) => `/api/public/vehicle-photos/${k}`);
+  // Slot names are reused, so a version stamp keeps browsers and the edge cache
+  // from serving the photo that was just replaced.
+  const stamp = Date.now();
+  const appUrls = finalKeys.map((k) => `/api/public/vehicle-photos/${k}?v=${stamp}`);
 
   if (legacy) {
     await rest(`mc_cars?id=eq.${legacy.id}`, {
