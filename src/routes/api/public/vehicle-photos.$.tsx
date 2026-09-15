@@ -29,7 +29,32 @@ export const Route = createFileRoute("/api/public/vehicle-photos/$")({
           },
         );
         const vehicles = (await vehicleResponse.json().catch(() => [])) as Array<{ status?: string }>;
-        if (!vehicleResponse.ok || !vehicles[0]) {
+        let known = vehicleResponse.ok && Boolean(vehicles[0]);
+
+        // Vehicles added through the admin area may only exist in the legacy
+        // inventory table yet, so fall back to that before refusing the photo.
+        if (!known) {
+          const legacyUrl = process.env["LEGACY_SUPABASE_URL"];
+          const legacyKey = process.env["LEGACY_SUPABASE_SERVICE_ROLE_KEY"];
+          if (legacyUrl && legacyKey) {
+            const legacyResponse = await fetch(
+              `${legacyUrl}/rest/v1/mc_cars?select=id&source_id=eq.${encodeURIComponent((vin ?? "").toLowerCase())}&limit=1`,
+              {
+                headers: {
+                  apikey: legacyKey,
+                  Authorization: `Bearer ${legacyKey}`,
+                  "Accept-Profile": "mycarco_db",
+                },
+              },
+            ).catch(() => null);
+            const legacyRows = (await legacyResponse?.json().catch(() => [])) as
+              | Array<{ id: number }>
+              | undefined;
+            known = Boolean(legacyRows?.[0]);
+          }
+        }
+
+        if (!known) {
           return new Response("Not found", { status: 404 });
         }
 
