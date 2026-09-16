@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
-import { GripVertical, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { GripVertical, ImagePlus, Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -14,28 +14,15 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Switch } from "@/components/ui/switch";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/app-client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
-import {
-  MAX_PHOTOS,
-  MAX_PHOTO_BYTES,
-  type PhotoDraft,
-  type Vehicle,
-  type VehiclePhoto,
-} from "@/lib/admin-inventory";
+import { MAX_PHOTOS, MAX_PHOTO_BYTES, type PhotoDraft, type Vehicle, type VehiclePhoto } from "@/lib/admin-inventory";
 import { VIN_RE, vehicleSlug } from "@/lib/inventory-csv";
 import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
 import { saveVehiclePhotosFn, type PhotoOrderInput } from "@/lib/vehicle-photos.functions";
 import { decodeVin, type VinDecodedVehicle } from "@/lib/vin-decoder.functions";
-
 
 function fileToDataUrl(file: File): Promise<string> {
   return new Promise((resolve, reject) => {
@@ -115,20 +102,20 @@ const empty: FormState = {
 };
 
 function applyDecodedVehicle(form: FormState, decoded: VinDecodedVehicle): FormState {
-  const body = BODY_STYLES.find((option) =>
-    decoded.bodyStyle?.toLowerCase().includes(option.toLowerCase()),
-  );
+  const body = BODY_STYLES.find((option) => decoded.bodyStyle?.toLowerCase().includes(option.toLowerCase()));
   const fuelText = decoded.fuelType?.toLowerCase() ?? "";
-  const fuel = fuelText.includes("plug-in") || fuelText.includes("plug in")
-    ? "Plug-in Hybrid"
-    : FUEL_TYPES.find((option) => fuelText.includes(option.toLowerCase()));
-  const drivetrain = decoded.drivetrain?.toLowerCase().includes("all") || decoded.drivetrain?.toLowerCase().includes("4wd")
-    ? "AWD/4WD"
-    : decoded.drivetrain?.toLowerCase().includes("rear")
-      ? "RWD"
-      : decoded.drivetrain?.toLowerCase().includes("front")
-        ? "FWD"
-        : undefined;
+  const fuel =
+    fuelText.includes("plug-in") || fuelText.includes("plug in")
+      ? "Plug-in Hybrid"
+      : FUEL_TYPES.find((option) => fuelText.includes(option.toLowerCase()));
+  const drivetrain =
+    decoded.drivetrain?.toLowerCase().includes("all") || decoded.drivetrain?.toLowerCase().includes("4wd")
+      ? "AWD/4WD"
+      : decoded.drivetrain?.toLowerCase().includes("rear")
+        ? "RWD"
+        : decoded.drivetrain?.toLowerCase().includes("front")
+          ? "FWD"
+          : undefined;
 
   return {
     ...form,
@@ -190,35 +177,37 @@ export function VehicleFormDialog({
   const [existing, setExisting] = useState<VehiclePhoto[]>([]);
   const [saving, setSaving] = useState(false);
   const [decoding, setDecoding] = useState(false);
+  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
+  const [draggedPhotoIndex, setDraggedPhotoIndex] = useState<number | null>(null);
 
   useEffect(() => {
     if (!open) return;
     setForm(vehicle ? fromVehicle(vehicle) : empty);
-    setPhotos([]);
+    setPhotos((current) => {
+      current.forEach((photo) => {
+        if (photo.kind === "new") URL.revokeObjectURL(photo.previewUrl);
+      });
+      return [];
+    });
     setExisting([]);
+    setIsDraggingFiles(false);
+    setDraggedPhotoIndex(null);
     if (!vehicle) return;
     void (async () => {
-      const { data } = await supabase
-        .from("vehicle_photos")
-        .select("*")
-        .eq("vehicle_id", vehicle.id)
-        .order("position");
+      const { data } = await supabase.from("vehicle_photos").select("*").eq("vehicle_id", vehicle.id).order("position");
       setExisting(data ?? []);
-      setPhotos(
-        (data ?? []).map((p) => ({ kind: "existing" as const, id: p.id, url: p.url, alt: p.alt })),
-      );
+      setPhotos((data ?? []).map((p) => ({ kind: "existing" as const, id: p.id, url: p.url, alt: p.alt })));
     })();
   }, [open, vehicle]);
 
-  const set = <K extends keyof FormState>(k: K, v: FormState[K]) =>
-    setForm((f) => ({ ...f, [k]: v }));
+  const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
 
   const title = useMemo(
     () => `${form.year} ${form.make} ${form.model} ${form.trim}`.trim(),
     [form.year, form.make, form.model, form.trim],
   );
 
-  function addFiles(list: FileList | null) {
+  function addFiles(list: FileList | File[] | null) {
     if (!list) return;
     const room = MAX_PHOTOS - photos.length;
     const files = Array.from(list)
@@ -235,6 +224,28 @@ export function VehicleFormDialog({
         previewUrl: URL.createObjectURL(file),
       })),
     ]);
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((current) => {
+      const photo = current[index];
+      if (photo?.kind === "new") URL.revokeObjectURL(photo.previewUrl);
+      return current.filter((_, photoIndex) => photoIndex !== index);
+    });
+  }
+
+  function moveTo(from: number, to: number) {
+    setPhotos((current) => {
+      if (from === to || from < 0 || to < 0 || from >= current.length || to >= current.length) {
+        return current;
+      }
+
+      const next = [...current];
+      const [moved] = next.splice(from, 1);
+      if (!moved) return current;
+      next.splice(to, 0, moved);
+      return next;
+    });
   }
 
   function move(index: number, delta: number) {
@@ -321,9 +332,7 @@ export function VehicleFormDialog({
           .filter(Boolean),
         status: form.status,
         is_featured: form.is_featured,
-        slug:
-          form.slug.trim() ||
-          vehicleSlug({ year, make: form.make, model: form.model, trim: form.trim, vin }),
+        slug: form.slug.trim() || vehicleSlug({ year, make: form.make, model: form.model, trim: form.trim, vin }),
       };
 
       if (!session?.access_token) throw new Error("Your session has expired. Please sign in again.");
@@ -400,49 +409,22 @@ export function VehicleFormDialog({
             <Input value={form.trim} onChange={(e) => set("trim", e.target.value)} />
           </Field>
           <Field label="Body style">
-            <Choice
-              value={form.body_style}
-              options={BODY_STYLES}
-              onChange={(v) => set("body_style", v as BodyStyle)}
-            />
+            <Choice value={form.body_style} options={BODY_STYLES} onChange={(v) => set("body_style", v as BodyStyle)} />
           </Field>
           <Field label="Mileage">
-            <Input
-              type="number"
-              value={form.mileage}
-              onChange={(e) => set("mileage", e.target.value)}
-            />
+            <Input type="number" value={form.mileage} onChange={(e) => set("mileage", e.target.value)} />
           </Field>
           <Field label="Price (USD)">
-            <Input
-              type="number"
-              step="0.01"
-              value={form.price}
-              onChange={(e) => set("price", e.target.value)}
-            />
+            <Input type="number" step="0.01" value={form.price} onChange={(e) => set("price", e.target.value)} />
           </Field>
           <Field label="Status">
-            <Choice
-              value={form.status}
-              options={STATUSES}
-              onChange={(v) => set("status", v as VehicleStatus)}
-            />
+            <Choice value={form.status} options={STATUSES} onChange={(v) => set("status", v as VehicleStatus)} />
           </Field>
           <Field label="Fuel type">
-            <Choice
-              value={form.fuel_type}
-              options={FUEL_TYPES}
-              allowNone
-              onChange={(v) => set("fuel_type", v)}
-            />
+            <Choice value={form.fuel_type} options={FUEL_TYPES} allowNone onChange={(v) => set("fuel_type", v)} />
           </Field>
           <Field label="Drivetrain">
-            <Choice
-              value={form.drivetrain}
-              options={DRIVETRAINS}
-              allowNone
-              onChange={(v) => set("drivetrain", v)}
-            />
+            <Choice value={form.drivetrain} options={DRIVETRAINS} allowNone onChange={(v) => set("drivetrain", v)} />
           </Field>
           <Field label="Transmission">
             <Input value={form.transmission} onChange={(e) => set("transmission", e.target.value)} />
@@ -451,54 +433,28 @@ export function VehicleFormDialog({
             <Input value={form.engine} onChange={(e) => set("engine", e.target.value)} />
           </Field>
           <Field label="Exterior color">
-            <Input
-              value={form.exterior_color}
-              onChange={(e) => set("exterior_color", e.target.value)}
-            />
+            <Input value={form.exterior_color} onChange={(e) => set("exterior_color", e.target.value)} />
           </Field>
           <Field label="Interior color">
-            <Input
-              value={form.interior_color}
-              onChange={(e) => set("interior_color", e.target.value)}
-            />
+            <Input value={form.interior_color} onChange={(e) => set("interior_color", e.target.value)} />
           </Field>
           <Field label="Combined MPG">
-            <Input
-              type="number"
-              value={form.mpg_combined}
-              onChange={(e) => set("mpg_combined", e.target.value)}
-            />
+            <Input type="number" value={form.mpg_combined} onChange={(e) => set("mpg_combined", e.target.value)} />
           </Field>
           <Field label="URL slug">
-            <Input
-              value={form.slug}
-              placeholder="auto-generated"
-              onChange={(e) => set("slug", e.target.value)}
-            />
+            <Input value={form.slug} placeholder="auto-generated" onChange={(e) => set("slug", e.target.value)} />
           </Field>
         </div>
 
         <Field label="Description">
-          <Textarea
-            rows={4}
-            value={form.description}
-            onChange={(e) => set("description", e.target.value)}
-          />
+          <Textarea rows={4} value={form.description} onChange={(e) => set("description", e.target.value)} />
         </Field>
         <Field label="Features (one per line)">
-          <Textarea
-            rows={3}
-            value={form.features}
-            onChange={(e) => set("features", e.target.value)}
-          />
+          <Textarea rows={3} value={form.features} onChange={(e) => set("features", e.target.value)} />
         </Field>
 
         <div className="flex items-center gap-3">
-          <Switch
-            id="featured"
-            checked={form.is_featured}
-            onCheckedChange={(v) => set("is_featured", v)}
-          />
+          <Switch id="featured" checked={form.is_featured} onCheckedChange={(v) => set("is_featured", v)} />
           <Label htmlFor="featured">Feature this vehicle on the homepage</Label>
         </div>
 
@@ -506,9 +462,7 @@ export function VehicleFormDialog({
           <div className="flex items-center justify-between">
             <div>
               <p className="text-sm font-medium">Photos</p>
-              <p className="text-xs text-muted-foreground">
-                Up to {MAX_PHOTOS}. The first photo is the main image.
-              </p>
+              <p className="text-xs text-muted-foreground">Up to {MAX_PHOTOS}. The first photo is the main image.</p>
             </div>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
               <Upload className="size-4" />
@@ -525,14 +479,98 @@ export function VehicleFormDialog({
               />
             </label>
           </div>
+          <div
+            role="button"
+            tabIndex={0}
+            aria-label="Drop vehicle photos here or click to browse"
+            onDragEnter={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setIsDraggingFiles(true);
+            }}
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              event.stopPropagation();
+              event.dataTransfer.dropEffect = "copy";
+              setIsDraggingFiles(true);
+            }}
+            onDragLeave={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              event.stopPropagation();
+              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
+                setIsDraggingFiles(false);
+              }
+            }}
+            onDrop={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              event.stopPropagation();
+              setIsDraggingFiles(false);
+              addFiles(event.dataTransfer.files);
+            }}
+            onKeyDown={(event) => {
+              if (event.key === "Enter" || event.key === " ") {
+                event.preventDefault();
+                document.getElementById("vehicle-photo-upload")?.click();
+              }
+            }}
+            onClick={() => document.getElementById("vehicle-photo-upload")?.click()}
+            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors ${
+              isDraggingFiles
+                ? "border-[#F7941D] bg-[#F7941D]/10"
+                : "border-border bg-muted/30 hover:border-[#F7941D]/60 hover:bg-muted/50"
+            }`}
+          >
+            <ImagePlus className={`mb-2 size-8 ${isDraggingFiles ? "text-[#F7941D]" : "text-muted-foreground"}`} />
+            <p className="text-sm font-semibold text-foreground">
+              {isDraggingFiles ? "Drop photos here" : "Drag and drop vehicle photos"}
+            </p>
+            <p className="mt-1 text-xs text-muted-foreground">or click to browse JPG, PNG, or WebP files under 10 MB</p>
+            <input
+              id="vehicle-photo-upload"
+              type="file"
+              accept="image/jpeg,image/png,image/webp"
+              multiple
+              className="hidden"
+              onChange={(event) => {
+                addFiles(event.target.files);
+                event.target.value = "";
+              }}
+            />
+          </div>
+
           {photos.length === 0 ? (
-            <p className="text-xs text-muted-foreground">No photos yet.</p>
+            <p className="text-center text-xs text-muted-foreground">No photos yet.</p>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-3">
               {photos.map((p, i) => (
                 <li
                   key={p.kind === "existing" ? p.id : p.previewUrl}
-                  className="overflow-hidden rounded-md border border-border"
+                  draggable
+                  onDragStart={(event) => {
+                    setDraggedPhotoIndex(i);
+                    event.dataTransfer.effectAllowed = "move";
+                    event.dataTransfer.setData("text/plain", String(i));
+                  }}
+                  onDragOver={(event) => {
+                    if (draggedPhotoIndex === null) return;
+                    event.preventDefault();
+                    event.dataTransfer.dropEffect = "move";
+                  }}
+                  onDrop={(event) => {
+                    if (draggedPhotoIndex === null) return;
+                    event.preventDefault();
+                    event.stopPropagation();
+                    moveTo(draggedPhotoIndex, i);
+                    setDraggedPhotoIndex(null);
+                  }}
+                  onDragEnd={() => setDraggedPhotoIndex(null)}
+                  className={`overflow-hidden rounded-md border bg-background transition ${
+                    draggedPhotoIndex === i ? "scale-[0.98] border-[#F7941D] opacity-60" : "border-border"
+                  }`}
                 >
                   <img
                     src={p.kind === "existing" ? p.url : p.previewUrl}
@@ -540,7 +578,10 @@ export function VehicleFormDialog({
                     className="h-24 w-full object-cover"
                   />
                   <div className="flex items-center justify-between gap-1 p-1">
-                    <span className="pl-1 text-xs text-muted-foreground">#{i + 1}</span>
+                    <span className="flex items-center gap-1 pl-1 text-xs text-muted-foreground">
+                      <GripVertical className="size-3" />#{i + 1}
+                      {i === 0 ? " · Main" : ""}
+                    </span>
                     <div className="flex">
                       <Button size="icon" variant="ghost" onClick={() => move(i, -1)} aria-label="Move earlier">
                         <GripVertical className="size-3 rotate-180" />
@@ -548,12 +589,7 @@ export function VehicleFormDialog({
                       <Button size="icon" variant="ghost" onClick={() => move(i, 1)} aria-label="Move later">
                         <GripVertical className="size-3" />
                       </Button>
-                      <Button
-                        size="icon"
-                        variant="ghost"
-                        onClick={() => setPhotos((prev) => prev.filter((_, j) => j !== i))}
-                        aria-label="Remove photo"
-                      >
+                      <Button size="icon" variant="ghost" onClick={() => removePhoto(i)} aria-label="Remove photo">
                         <Trash2 className="size-3 text-destructive" />
                       </Button>
                     </div>
