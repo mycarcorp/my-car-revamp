@@ -48,19 +48,14 @@ export const Route = createFileRoute("/sitemap.xml")({
           console.error("[sitemap] blog list unavailable", error);
         }
 
-        const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="http://www.w3.org/1999/9/xhtml/sitemap">${entries.join("")}</urlset>`;
-        return new Response(
-          xml.replace(
-            "http://www.w3.org/1999/9/xhtml/sitemap",
-            "http://www.sitemaps.org/schemas/sitemap/0.9",
-          ),
-          {
-            headers: {
-              "content-type": "application/xml; charset=utf-8",
-              "cache-control": "public, max-age=3600",
-            },
+        const ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
+        const xml = `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="${ns}">${entries.join("")}</urlset>`;
+        return new Response(xml, {
+          headers: {
+            "content-type": "application/xml; charset=utf-8",
+            "cache-control": "public, max-age=3600",
           },
-        );
+        });
       },
     },
   },

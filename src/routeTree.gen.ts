@@ -20,6 +20,7 @@ import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ScheduleRouteImport } from './routes/schedule'
 import { Route as SearchRouteImport } from './routes/search'
 import { Route as SellRouteImport } from './routes/sell'
+import { Route as SitemapDotxmlRouteImport } from './routes/sitemap[.]xml'
 import { Route as TermsRouteImport } from './routes/terms'
 import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminCustomersRouteImport } from './routes/admin.customers'
@@ -33,6 +34,7 @@ import { Route as LocationsIndexRouteImport } from './routes/locations.index'
 import { Route as LocationsSlugRouteImport } from './routes/locations.$slug'
 import { Route as AdminBlogIndexRouteImport } from './routes/admin.blog.index'
 import { Route as AdminBlogNewRouteImport } from './routes/admin.blog.new'
+import { Route as ApiPublicReceiveArticleRouteImport } from './routes/api/public/receive-article'
 import { Route as AdminBlogIdEditRouteImport } from './routes/admin.blog.$id.edit'
 import { Route as ApiPublicVehiclePhotosSplatRouteImport } from './routes/api/public/vehicle-photos.$'
 
@@ -89,6 +91,11 @@ const SearchRoute = SearchRouteImport.update({
 const SellRoute = SellRouteImport.update({
   id: '/sell',
   path: '/sell',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const SitemapDotxmlRoute = SitemapDotxmlRouteImport.update({
+  id: '/sitemap.xml',
+  path: '/sitemap.xml',
   getParentRoute: () => rootRouteImport,
 } as any)
 const TermsRoute = TermsRouteImport.update({
@@ -156,6 +163,11 @@ const AdminBlogNewRoute = AdminBlogNewRouteImport.update({
   path: '/blog/new',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApiPublicReceiveArticleRoute = ApiPublicReceiveArticleRouteImport.update({
+  id: '/api/public/receive-article',
+  path: '/api/public/receive-article',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AdminBlogIdEditRoute = AdminBlogIdEditRouteImport.update({
   id: '/blog/$id/edit',
   path: '/blog/$id/edit',
@@ -180,6 +192,7 @@ export interface FileRoutesByFullPath {
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/inventory': typeof AdminInventoryRoute
@@ -192,6 +205,7 @@ export interface FileRoutesByFullPath {
   '/blog/': typeof BlogIndexRoute
   '/locations/': typeof LocationsIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
+  '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
@@ -207,6 +221,7 @@ export interface FileRoutesByTo {
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/inventory': typeof AdminInventoryRoute
@@ -219,6 +234,7 @@ export interface FileRoutesByTo {
   '/blog': typeof BlogIndexRoute
   '/locations': typeof LocationsIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
+  '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
   '/admin/blog': typeof AdminBlogIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
@@ -236,6 +252,7 @@ export interface FileRoutesById {
   '/schedule': typeof ScheduleRoute
   '/search': typeof SearchRoute
   '/sell': typeof SellRoute
+  '/sitemap.xml': typeof SitemapDotxmlRoute
   '/terms': typeof TermsRoute
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/inventory': typeof AdminInventoryRoute
@@ -248,6 +265,7 @@ export interface FileRoutesById {
   '/blog/': typeof BlogIndexRoute
   '/locations/': typeof LocationsIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
+  '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
@@ -266,6 +284,7 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/search'
     | '/sell'
+    | '/sitemap.xml'
     | '/terms'
     | '/admin/customers'
     | '/admin/inventory'
@@ -278,6 +297,7 @@ export interface FileRouteTypes {
     | '/blog/'
     | '/locations/'
     | '/admin/blog/new'
+    | '/api/public/receive-article'
     | '/admin/blog/'
     | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
@@ -293,6 +313,7 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/search'
     | '/sell'
+    | '/sitemap.xml'
     | '/terms'
     | '/admin/customers'
     | '/admin/inventory'
@@ -305,6 +326,7 @@ export interface FileRouteTypes {
     | '/blog'
     | '/locations'
     | '/admin/blog/new'
+    | '/api/public/receive-article'
     | '/admin/blog'
     | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
@@ -321,6 +343,7 @@ export interface FileRouteTypes {
     | '/schedule'
     | '/search'
     | '/sell'
+    | '/sitemap.xml'
     | '/terms'
     | '/admin/customers'
     | '/admin/inventory'
@@ -333,6 +356,7 @@ export interface FileRouteTypes {
     | '/blog/'
     | '/locations/'
     | '/admin/blog/new'
+    | '/api/public/receive-article'
     | '/admin/blog/'
     | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
@@ -350,12 +374,14 @@ export interface RootRouteChildren {
   ScheduleRoute: typeof ScheduleRoute
   SearchRoute: typeof SearchRoute
   SellRoute: typeof SellRoute
+  SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
   BlogSlugRoute: typeof BlogSlugRoute
   InventorySlugRoute: typeof InventorySlugRoute
   LocationsSlugRoute: typeof LocationsSlugRoute
   BlogIndexRoute: typeof BlogIndexRoute
   LocationsIndexRoute: typeof LocationsIndexRoute
+  ApiPublicReceiveArticleRoute: typeof ApiPublicReceiveArticleRoute
   ApiPublicVehiclePhotosSplatRoute: typeof ApiPublicVehiclePhotosSplatRoute
 }
 
@@ -436,6 +462,13 @@ declare module '@tanstack/react-router' {
       path: '/sell'
       fullPath: '/sell'
       preLoaderRoute: typeof SellRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/sitemap.xml': {
+      id: '/sitemap.xml'
+      path: '/sitemap.xml'
+      fullPath: '/sitemap.xml'
+      preLoaderRoute: typeof SitemapDotxmlRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/terms': {
@@ -529,6 +562,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminBlogNewRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/api/public/receive-article': {
+      id: '/api/public/receive-article'
+      path: '/api/public/receive-article'
+      fullPath: '/api/public/receive-article'
+      preLoaderRoute: typeof ApiPublicReceiveArticleRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/admin/blog/$id/edit': {
       id: '/admin/blog/$id/edit'
       path: '/blog/$id/edit'
@@ -590,12 +630,14 @@ const rootRouteChildren: RootRouteChildren = {
   ScheduleRoute: ScheduleRoute,
   SearchRoute: SearchRoute,
   SellRoute: SellRoute,
+  SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsRoute: TermsRoute,
   BlogSlugRoute: BlogSlugRoute,
   InventorySlugRoute: InventorySlugRoute,
   LocationsSlugRoute: LocationsSlugRoute,
   BlogIndexRoute: BlogIndexRoute,
   LocationsIndexRoute: LocationsIndexRoute,
+  ApiPublicReceiveArticleRoute: ApiPublicReceiveArticleRoute,
   ApiPublicVehiclePhotosSplatRoute: ApiPublicVehiclePhotosSplatRoute,
 }
 export const routeTree = rootRouteImport
