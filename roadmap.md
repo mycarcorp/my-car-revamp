@@ -22,3 +22,9 @@
 - Fixed: account creation + sign-in now run against project rpmmlzyeqpvczuuobddt
 - Open: password-reset / verification emails fail (project email sending returns 500) — needs SMTP setup
 - Open: Google sign-in provider is disabled on that project
+
+## AutoSEO blog (Sep 16)
+- Done: `mycarco_db.blog_posts` SQL (supabase/migrations_legacy/2026_autoseo_blog_posts.sql), webhook
+  `/api/public/receive-article` (bearer AUTOSEO_WEBHOOK_TOKEN), combined /blog listing + /blog/$slug
+  article view (hero, prose, FAQ accordion, related, JSON-LD), /sitemap.xml, robots sitemap line
+- Open: run the SQL once in the project's SQL editor — until then the webhook returns 500 (table missing)
