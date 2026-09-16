@@ -184,28 +184,28 @@ function VehicleDetail() {
 
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.4fr_1fr]">
         <div>
-          <div className="overflow-hidden rounded-xl border border-border bg-muted">
+          <div className="mx-auto w-full max-w-2xl overflow-hidden rounded-xl border border-border bg-muted">
             {photos[active] && !failedPhotoIds.includes(photos[active].id) ? (
               <img
                 src={photos[active].url}
                 alt={photos[active].alt ?? vehicleTitle(v)}
                 onError={() => markFailed(photos[active]!.id)}
-                className="aspect-[4/3] w-full object-cover"
+                className="max-h-[420px] w-full object-contain"
               />
             ) : (
-              <div className="flex aspect-[4/3] w-full flex-col items-center justify-center gap-2 text-muted-foreground">
+              <div className="flex h-[280px] w-full flex-col items-center justify-center gap-2 text-muted-foreground">
                 <Camera className="size-8" />
                 <span className="text-sm">Photos of this vehicle are being uploaded</span>
               </div>
             )}
           </div>
           {photos.length > 1 && (
-            <div className="mt-3 flex gap-3 overflow-x-auto pb-1">
+            <div className="mx-auto mt-3 grid w-full max-w-2xl grid-cols-4 gap-2 sm:grid-cols-6">
               {photos.map((p, i) => (
                 <button
                   key={p.id}
                   onClick={() => setActive(i)}
-                  className={`size-20 shrink-0 overflow-hidden rounded-md border ${
+                  className={`aspect-[4/3] overflow-hidden rounded-md border ${
                     i === active ? "border-primary" : "border-border"
                   }`}
                 >
