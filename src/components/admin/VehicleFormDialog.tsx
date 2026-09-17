@@ -472,6 +472,7 @@ export function VehicleFormDialog({
     } catch (e) {
       toast.error(e instanceof Error ? e.message : "Could not save this vehicle.");
     } finally {
+      setUploadLabel(null);
       setSaving(false);
     }
   }
