@@ -1,13 +1,23 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
-import { CalendarDays, MoreHorizontal, MoreVertical, Plus, Trash2 } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  CalendarDays,
+  MapPin,
+  MoreHorizontal,
+  MoreVertical,
+  Plus,
+  UserRound,
+  UsersRound,
+  Trash2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LeadForm } from "@/components/LeadForm";
-import { PageHero } from "@/components/PageHero";
 import { siteSettingsQuery } from "@/lib/queries";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -308,7 +318,7 @@ function moneyOnBlur(value: string) {
 function FinancePage() {
   const { data: settings } = useQuery(siteSettingsQuery());
   const { user } = useAuth();
-
+  const [activeStep, setActiveStep] = useState("applicant");
 
   const [buyerName, setBuyerName] = useState("");
   const [showBuyerNameDetails, setShowBuyerNameDetails] = useState(false);
@@ -399,7 +409,6 @@ function FinancePage() {
     if (metaName) setBuyerName((current) => current || metaName);
     if (metaPhone) setCellPhone((current) => current || digitsOnly(metaPhone, 10));
   }, [user]);
-
 
   useEffect(() => {
     const scope = leadFormScopeRef.current;
@@ -512,15 +521,20 @@ function FinancePage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface">
-      <PageHero
-        eyebrow="Financing"
-        title="Get pre-qualified in minutes."
-        subtitle="Share a few details and our finance team lines up options for your situation. No credit pull to start."
-      />
-      <div className="mx-auto w-full max-w-[1200px] px-3 py-8 sm:px-5">
-        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
-          <div className="border border-slate-300 bg-white p-2 shadow-sm sm:p-3">
+    <div className="min-h-screen bg-slate-50/70">
+      <div className="mx-auto w-full max-w-[1180px] px-4 py-8 sm:px-6 lg:py-10">
+        <div className="mb-6 max-w-2xl">
+          <p className="text-sm font-semibold text-primary">Financing</p>
+          <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+            Finance application
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600">
+            Complete each section below. Your information is sent securely to our finance team.
+          </p>
+        </div>
+
+        <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_290px]">
+          <div className="overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm">
             <div ref={leadFormScopeRef}>
               <LeadForm
                 leadType="finance"
@@ -565,554 +579,603 @@ function FinancePage() {
                   loan_term: term,
                   apr,
                   estimated_payment: estimate,
-
                 })}
               >
-                <div className="space-y-3">
-                  <FormSection
-                    title="Buyer Info"
-                    description="Personal and identification information for the applicant."
-                  >
-                    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
-                      <div className="sm:col-span-2 lg:col-span-2">
-                        <Label htmlFor="buyer-name" className="text-[11px] font-medium text-slate-700">
-                          Buyer
-                        </Label>
-                        <div className="relative mt-1">
-                          <Input
-                            id="buyer-name"
-                            value={buyerName}
-                            onChange={(event) => setBuyerName(event.target.value)}
-                            autoComplete="name"
-                            placeholder="Enter buyer's full name"
-                            className="h-8 rounded-sm border-slate-300 bg-white pr-8 text-xs focus-visible:ring-1"
-                          />
-                          <button
-                            type="button"
-                            aria-label="Open detailed buyer name fields"
-                            aria-expanded={showBuyerNameDetails}
-                            className="absolute right-0.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-sm text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-700"
-                            onClick={() => setShowBuyerNameDetails((current) => !current)}
-                          >
-                            <MoreVertical className="size-3.5" />
-                          </button>
-                          {showBuyerNameDetails && (
-                            <div className="absolute left-0 top-full z-50 mt-1 grid w-[620px] max-w-[calc(100vw-3rem)] gap-x-3 gap-y-2 border border-slate-300 bg-white p-3 shadow-xl sm:grid-cols-2 lg:grid-cols-3">
-                              <ComboField
-                                id="salutation"
-                                label="Salutation"
-                                value={salutation}
-                                options={["Mr.", "Mrs.", "Ms.", "Miss", "Dr."]}
-                                onChange={(value) => {
-                                  setSalutation(value);
-                                  updateBuyerNameParts({ salutation: value });
-                                }}
+                <Tabs value={activeStep} onValueChange={setActiveStep} className="w-full">
+                  <div className="border-b border-slate-200 px-3 pt-3 sm:px-5 sm:pt-5">
+                    <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 lg:grid-cols-4">
+                      <TabsTrigger value="applicant" className="gap-2 rounded-lg py-2.5 text-xs sm:text-sm">
+                        <UserRound className="size-4" /> Applicant
+                      </TabsTrigger>
+                      <TabsTrigger value="address" className="gap-2 rounded-lg py-2.5 text-xs sm:text-sm">
+                        <MapPin className="size-4" /> Address
+                      </TabsTrigger>
+                      <TabsTrigger value="employment" className="gap-2 rounded-lg py-2.5 text-xs sm:text-sm">
+                        <BriefcaseBusiness className="size-4" /> Employment
+                      </TabsTrigger>
+                      <TabsTrigger value="references" className="gap-2 rounded-lg py-2.5 text-xs sm:text-sm">
+                        <UsersRound className="size-4" /> References
+                      </TabsTrigger>
+                    </TabsList>
+                    <div className="flex items-center justify-between py-3 text-xs text-slate-500">
+                      <span>
+                        Step{" "}
+                        {activeStep === "applicant"
+                          ? 1
+                          : activeStep === "address"
+                            ? 2
+                            : activeStep === "employment"
+                              ? 3
+                              : 4}{" "}
+                        of 4
+                      </span>
+                      <span className="hidden sm:inline">Complete the current section, then continue.</span>
+                    </div>
+                  </div>
+
+                  <div className="p-3 sm:p-5">
+                    <TabsContent value="applicant" className="m-0 focus-visible:outline-none">
+                      <FormSection
+                        title="Buyer Info"
+                        description="Enter the applicant's contact and identification information."
+                      >
+                        <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
+                          <div className="sm:col-span-2 lg:col-span-2">
+                            <Label htmlFor="buyer-name" className="text-[11px] font-medium text-slate-700">
+                              Buyer
+                            </Label>
+                            <div className="relative mt-1">
+                              <Input
+                                id="buyer-name"
+                                value={buyerName}
+                                onChange={(event) => setBuyerName(event.target.value)}
+                                autoComplete="name"
+                                placeholder="Enter buyer's full name"
+                                className="h-8 rounded-sm border-slate-300 bg-white pr-8 text-xs focus-visible:ring-1"
                               />
-                              <TextField
-                                id="first-name"
-                                label="First Name"
-                                value={firstName}
-                                onChange={(value) => {
-                                  setFirstName(value);
-                                  updateBuyerNameParts({ firstName: value });
-                                }}
-                              />
-                              <TextField
-                                id="middle-name"
-                                label="Middle Name"
-                                value={middleName}
-                                onChange={(value) => {
-                                  setMiddleName(value);
-                                  updateBuyerNameParts({ middleName: value });
-                                }}
-                              />
-                              <TextField
-                                id="last-name"
-                                label="Last Name"
-                                value={lastName}
-                                onChange={(value) => {
-                                  setLastName(value);
-                                  updateBuyerNameParts({ lastName: value });
-                                }}
-                              />
-                              <ComboField
-                                id="suffix"
-                                label="Suffix"
-                                value={suffix}
-                                options={["Jr.", "Sr.", "II", "III", "IV", "V"]}
-                                onChange={(value) => {
-                                  setSuffix(value);
-                                  updateBuyerNameParts({ suffix: value });
-                                }}
-                              />
-                              <TextField
-                                id="nick-name"
-                                label="Nick Name"
-                                value={nickName}
-                                onChange={(value) => {
-                                  setNickName(value);
-                                  updateBuyerNameParts({ nickName: value });
-                                }}
-                              />
+                              <button
+                                type="button"
+                                aria-label="Open detailed buyer name fields"
+                                aria-expanded={showBuyerNameDetails}
+                                className="absolute right-0.5 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-sm text-slate-500 transition-colors hover:bg-slate-100 hover:text-slate-800 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-cyan-700"
+                                onClick={() => setShowBuyerNameDetails((current) => !current)}
+                              >
+                                <MoreVertical className="size-3.5" />
+                              </button>
+                              {showBuyerNameDetails && (
+                                <div className="absolute left-0 top-full z-50 mt-1 grid w-[620px] max-w-[calc(100vw-3rem)] gap-x-3 gap-y-2 border border-slate-300 bg-white p-3 shadow-xl sm:grid-cols-2 lg:grid-cols-3">
+                                  <ComboField
+                                    id="salutation"
+                                    label="Salutation"
+                                    value={salutation}
+                                    options={["Mr.", "Mrs.", "Ms.", "Miss", "Dr."]}
+                                    onChange={(value) => {
+                                      setSalutation(value);
+                                      updateBuyerNameParts({ salutation: value });
+                                    }}
+                                  />
+                                  <TextField
+                                    id="first-name"
+                                    label="First Name"
+                                    value={firstName}
+                                    onChange={(value) => {
+                                      setFirstName(value);
+                                      updateBuyerNameParts({ firstName: value });
+                                    }}
+                                  />
+                                  <TextField
+                                    id="middle-name"
+                                    label="Middle Name"
+                                    value={middleName}
+                                    onChange={(value) => {
+                                      setMiddleName(value);
+                                      updateBuyerNameParts({ middleName: value });
+                                    }}
+                                  />
+                                  <TextField
+                                    id="last-name"
+                                    label="Last Name"
+                                    value={lastName}
+                                    onChange={(value) => {
+                                      setLastName(value);
+                                      updateBuyerNameParts({ lastName: value });
+                                    }}
+                                  />
+                                  <ComboField
+                                    id="suffix"
+                                    label="Suffix"
+                                    value={suffix}
+                                    options={["Jr.", "Sr.", "II", "III", "IV", "V"]}
+                                    onChange={(value) => {
+                                      setSuffix(value);
+                                      updateBuyerNameParts({ suffix: value });
+                                    }}
+                                  />
+                                  <TextField
+                                    id="nick-name"
+                                    label="Nick Name"
+                                    value={nickName}
+                                    onChange={(value) => {
+                                      setNickName(value);
+                                      updateBuyerNameParts({ nickName: value });
+                                    }}
+                                  />
+                                </div>
+                              )}
                             </div>
-                          )}
+                          </div>
+                          <SelectField
+                            label="Gender"
+                            value={gender}
+                            onChange={setGender}
+                            placeholder="Select gender"
+                            options={[
+                              ["female", "Female"],
+                              ["male", "Male"],
+                              ["non-binary", "Non-binary"],
+                              ["prefer-not-to-say", "Prefer not to say"],
+                            ]}
+                          />
+                          <CurrencyField
+                            id="cash-down"
+                            label="Cash Down"
+                            value={cashDown}
+                            onChange={setCashDown}
+                            placeholder="$2,000"
+                          />
+                          <TextField
+                            id="ssn"
+                            label="SSN"
+                            inputMode="numeric"
+                            autoComplete="off"
+                            maxLength={11}
+                            value={formatSsn(ssn)}
+                            onChange={(value) => setSsn(digitsOnly(value, 9))}
+                            placeholder="000-00-0000"
+                          />
+                          <TextField
+                            id="date-of-birth"
+                            label="Date of Birth"
+                            type="date"
+                            value={dateOfBirth}
+                            onChange={setDateOfBirth}
+                          />
+                          <TextField
+                            id="cell-phone"
+                            label="Cell Phone"
+                            type="tel"
+                            autoComplete="tel"
+                            maxLength={14}
+                            value={formatPhone(cellPhone)}
+                            onChange={(value) => setCellPhone(digitsOnly(value, 10))}
+                          />
+                          <TextField
+                            id="home-phone"
+                            label="Home Phone"
+                            type="tel"
+                            maxLength={14}
+                            value={formatPhone(homePhone)}
+                            onChange={(value) => setHomePhone(digitsOnly(value, 10))}
+                          />
+                          <TextField
+                            id="work-phone"
+                            label="Work Phone"
+                            type="tel"
+                            maxLength={14}
+                            value={formatPhone(workPhone)}
+                            onChange={(value) => setWorkPhone(digitsOnly(value, 10))}
+                          />
+                          <TextField
+                            id="buyer-email"
+                            label="Email"
+                            type="email"
+                            autoComplete="email"
+                            value={buyerEmail}
+                            onChange={setBuyerEmail}
+                          />
+                          <SelectField
+                            label="ID Type"
+                            value={idType}
+                            onChange={setIdType}
+                            placeholder="Select ID type"
+                            options={[
+                              ["us-drivers-license", "US Driver's Licence"],
+                              ["us-passport", "US Passport"],
+                              ["us-id-card", "US ID Card"],
+                              ["foreign-id", "Foreign DL/ID/Passport"],
+                            ]}
+                          />
+                          <SelectField
+                            label="ID State"
+                            value={idState}
+                            onChange={setIdState}
+                            placeholder="Select state"
+                            options={US_STATES.map(([abbreviation]) => [abbreviation, abbreviation])}
+                          />
+                          <TextField id="id-number" label="ID No." value={idNumber} onChange={setIdNumber} />
+                          <TextField
+                            id="issued-date"
+                            label="Issued Date"
+                            type="date"
+                            value={issuedDate}
+                            onChange={setIssuedDate}
+                          />
+                          <TextField
+                            id="expiration-date"
+                            label="Expiration Date"
+                            type="date"
+                            value={expirationDate}
+                            onChange={setExpirationDate}
+                          />
                         </div>
-                      </div>
-                      <SelectField
-                        label="Gender"
-                        value={gender}
-                        onChange={setGender}
-                        placeholder="Select gender"
-                        options={[
-                          ["female", "Female"],
-                          ["male", "Male"],
-                          ["non-binary", "Non-binary"],
-                          ["prefer-not-to-say", "Prefer not to say"],
-                        ]}
-                      />
-                      <CurrencyField
-                        id="cash-down"
-                        label="Cash Down"
-                        value={cashDown}
-                        onChange={setCashDown}
-                        placeholder="$2,000"
-                      />
-                      <TextField
-                        id="ssn"
-                        label="SSN"
-                        inputMode="numeric"
-                        autoComplete="off"
-                        maxLength={11}
-                        value={formatSsn(ssn)}
-                        onChange={(value) => setSsn(digitsOnly(value, 9))}
-                        placeholder="000-00-0000"
-                      />
-                      <TextField
-                        id="date-of-birth"
-                        label="Date of Birth"
-                        type="date"
-                        value={dateOfBirth}
-                        onChange={setDateOfBirth}
-                      />
-                      <TextField
-                        id="cell-phone"
-                        label="Cell Phone"
-                        type="tel"
-                        autoComplete="tel"
-                        maxLength={14}
-                        value={formatPhone(cellPhone)}
-                        onChange={(value) => setCellPhone(digitsOnly(value, 10))}
-                      />
-                      <TextField
-                        id="home-phone"
-                        label="Home Phone"
-                        type="tel"
-                        maxLength={14}
-                        value={formatPhone(homePhone)}
-                        onChange={(value) => setHomePhone(digitsOnly(value, 10))}
-                      />
-                      <TextField
-                        id="work-phone"
-                        label="Work Phone"
-                        type="tel"
-                        maxLength={14}
-                        value={formatPhone(workPhone)}
-                        onChange={(value) => setWorkPhone(digitsOnly(value, 10))}
-                      />
-                      <TextField
-                        id="buyer-email"
-                        label="Email"
-                        type="email"
-                        autoComplete="email"
-                        value={buyerEmail}
-                        onChange={setBuyerEmail}
-                      />
-                      <SelectField
-                        label="ID Type"
-                        value={idType}
-                        onChange={setIdType}
-                        placeholder="Select ID type"
-                        options={[
-                          ["us-drivers-license", "US Driver's Licence"],
-                          ["us-passport", "US Passport"],
-                          ["us-id-card", "US ID Card"],
-                          ["foreign-id", "Foreign DL/ID/Passport"],
-                        ]}
-                      />
-                      <SelectField
-                        label="ID State"
-                        value={idState}
-                        onChange={setIdState}
-                        placeholder="Select state"
-                        options={US_STATES.map(([abbreviation]) => [abbreviation, abbreviation])}
-                      />
-                      <TextField id="id-number" label="ID No." value={idNumber} onChange={setIdNumber} />
-                      <TextField
-                        id="issued-date"
-                        label="Issued Date"
-                        type="date"
-                        value={issuedDate}
-                        onChange={setIssuedDate}
-                      />
-                      <TextField
-                        id="expiration-date"
-                        label="Expiration Date"
-                        type="date"
-                        value={expirationDate}
-                        onChange={setExpirationDate}
-                      />
-                    </div>
-                  </FormSection>
+                      </FormSection>
+                      <StepActions onNext={() => setActiveStep("address")} />
+                    </TabsContent>
 
-                  <FormSection title="Address">
-                    <Subsection title="Current Address">
-                      <AddressFields
-                        idPrefix="current-address"
-                        value={currentAddress}
-                        onChange={setCurrentAddress}
-                        showHousingDetails
-                      />
-                    </Subsection>
+                    <TabsContent value="address" className="m-0 focus-visible:outline-none">
+                      <FormSection title="Address">
+                        <Subsection title="Current Address">
+                          <AddressFields
+                            idPrefix="current-address"
+                            value={currentAddress}
+                            onChange={setCurrentAddress}
+                            showHousingDetails
+                          />
+                        </Subsection>
 
-                    <Subsection title="Mailing Address">
-                      <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm font-medium">
-                        <input
-                          type="checkbox"
-                          checked={sameAsCurrent}
-                          onChange={(event) => setSameAsCurrent(event.target.checked)}
-                          className="size-4 rounded border-border accent-primary"
-                        />
-                        Same as Current Address
-                      </label>
-                      <AddressFields
-                        idPrefix="mailing-address"
-                        value={sameAsCurrent ? currentAddress : mailingAddress}
-                        onChange={setMailingAddress}
-                        disabled={sameAsCurrent}
-                        showCountyCode
-                      />
-                    </Subsection>
+                        <Subsection title="Mailing Address">
+                          <label className="mb-4 flex cursor-pointer items-center gap-2 text-sm font-medium">
+                            <input
+                              type="checkbox"
+                              checked={sameAsCurrent}
+                              onChange={(event) => setSameAsCurrent(event.target.checked)}
+                              className="size-4 rounded border-border accent-primary"
+                            />
+                            Same as Current Address
+                          </label>
+                          <AddressFields
+                            idPrefix="mailing-address"
+                            value={sameAsCurrent ? currentAddress : mailingAddress}
+                            onChange={setMailingAddress}
+                            disabled={sameAsCurrent}
+                            showCountyCode
+                          />
+                        </Subsection>
 
-                    {showPreviousAddress ? (
-                      <Subsection
-                        title="Previous Address"
-                        action={
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => {
-                              setShowPreviousAddress(false);
-                              setPreviousAddress({ ...emptyAddress });
-                            }}
-                          >
-                            <Trash2 className="size-4" />
-                            Remove
-                          </Button>
-                        }
-                      >
-                        <AddressFields
-                          idPrefix="previous-address"
-                          value={previousAddress}
-                          onChange={setPreviousAddress}
-                          showHousingDetails
-                          showCountyCode
-                        />
-                      </Subsection>
-                    ) : (
-                      <Button type="button" variant="outline" onClick={() => setShowPreviousAddress(true)}>
-                        <Plus className="size-4" />
-                        Add Previous Address
-                      </Button>
-                    )}
-                  </FormSection>
-
-                  <FormSection title="Employment">
-                    <Subsection title="Current Employer">
-                      <EmployerFields
-                        idPrefix="current-employer-1"
-                        value={currentEmployer1}
-                        onChange={setCurrentEmployer1}
-                        employerNameLabel="Current Employer Name"
-                      />
-                    </Subsection>
-
-                    {showCurrentEmployer2 && (
-                      <Subsection
-                        title="Current Employer 2"
-                        action={
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => {
-                              setShowCurrentEmployer2(false);
-                              setCurrentEmployer2({ ...emptyEmployer });
-                            }}
-                          >
-                            <Trash2 className="size-4" />
-                            Remove
-                          </Button>
-                        }
-                      >
-                        <EmployerFields
-                          idPrefix="current-employer-2"
-                          value={currentEmployer2}
-                          onChange={setCurrentEmployer2}
-                          employerNameLabel="Current Employer Name"
-                        />
-                      </Subsection>
-                    )}
-
-                    {showPreviousEmployer && (
-                      <Subsection
-                        title="Previous Employer 1"
-                        action={
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => {
-                              if (showPreviousEmployer2) {
-                                setPreviousEmployer(previousEmployer2);
-                                setPreviousEmployer2({ ...emptyEmployer });
-                                setShowPreviousEmployer2(false);
-                              } else {
-                                setShowPreviousEmployer(false);
-                                setPreviousEmployer({ ...emptyEmployer });
-                              }
-                            }}
-                          >
-                            <Trash2 className="size-4" />
-                            Remove
-                          </Button>
-                        }
-                      >
-                        <EmployerFields
-                          idPrefix="previous-employer-1"
-                          value={previousEmployer}
-                          onChange={setPreviousEmployer}
-                          employerNameLabel="Previous Employer Name"
-                        />
-                      </Subsection>
-                    )}
-
-                    {showPreviousEmployer2 && (
-                      <Subsection
-                        title="Previous Employer 2"
-                        action={
-                          <Button
-                            type="button"
-                            variant="ghost"
-                            size="sm"
-                            className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                            onClick={() => {
-                              setShowPreviousEmployer2(false);
-                              setPreviousEmployer2({ ...emptyEmployer });
-                            }}
-                          >
-                            <Trash2 className="size-4" />
-                            Remove
-                          </Button>
-                        }
-                      >
-                        <EmployerFields
-                          idPrefix="previous-employer-2"
-                          value={previousEmployer2}
-                          onChange={setPreviousEmployer2}
-                          employerNameLabel="Previous Employer Name"
-                        />
-                      </Subsection>
-                    )}
-
-                    <div className="flex flex-wrap gap-3">
-                      {!showCurrentEmployer2 && (
-                        <Button type="button" variant="outline" onClick={() => setShowCurrentEmployer2(true)}>
-                          <Plus className="size-4" />
-                          Add Current Employer
-                        </Button>
-                      )}
-                      {(!showPreviousEmployer || !showPreviousEmployer2) && (
-                        <Button
-                          type="button"
-                          variant="outline"
-                          onClick={() => {
-                            if (!showPreviousEmployer) setShowPreviousEmployer(true);
-                            else setShowPreviousEmployer2(true);
-                          }}
-                        >
-                          <Plus className="size-4" />
-                          Add Previous Employer
-                        </Button>
-                      )}
-                    </div>
-                  </FormSection>
-
-                  <FormSection title="Other Income">
-                    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
-                      <CurrencyField
-                        id="other-income-amount"
-                        label="Income Amount"
-                        value={otherIncomeAmount}
-                        onChange={setOtherIncomeAmount}
-                      />
-                      <TextField
-                        id="other-income-source"
-                        label="Income Source"
-                        value={otherIncomeSource}
-                        onChange={setOtherIncomeSource}
-                      />
-                    </div>
-                  </FormSection>
-
-                  <FormSection title="Reference">
-                    <div className="space-y-2">
-                      {references.map((reference, index) => (
-                        <Subsection
-                          key={reference.id}
-                          title={`Reference ${index + 1}`}
-                          action={
-                            references.length > 1 ? (
+                        {showPreviousAddress ? (
+                          <Subsection
+                            title="Previous Address"
+                            action={
                               <Button
                                 type="button"
                                 variant="ghost"
                                 size="sm"
                                 className="text-destructive hover:bg-destructive/10 hover:text-destructive"
-                                onClick={() => removeReference(reference.id)}
+                                onClick={() => {
+                                  setShowPreviousAddress(false);
+                                  setPreviousAddress({ ...emptyAddress });
+                                }}
                               >
                                 <Trash2 className="size-4" />
                                 Remove
                               </Button>
-                            ) : undefined
-                          }
-                        >
-                          <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
-                            <TextField
-                              id={`reference-${reference.id}-name`}
-                              label="Name"
-                              value={reference.name}
-                              onChange={(value) => updateReference(reference.id, "name", value)}
+                            }
+                          >
+                            <AddressFields
+                              idPrefix="previous-address"
+                              value={previousAddress}
+                              onChange={setPreviousAddress}
+                              showHousingDetails
+                              showCountyCode
                             />
-                            <TextField
-                              id={`reference-${reference.id}-phone`}
-                              label="Phone"
-                              type="tel"
-                              inputMode="numeric"
-                              maxLength={14}
-                              value={formatPhone(reference.phone)}
-                              onChange={(value) => updateReference(reference.id, "phone", digitsOnly(value, 10))}
-                            />
-                            <ComboField
-                              id={`reference-${reference.id}-relationship`}
-                              label="Relationship"
-                              value={reference.relationship}
-                              onChange={(value) => updateReference(reference.id, "relationship", value)}
-                              options={RELATIONSHIPS}
-                            />
-                            <div className="sm:col-span-2">
-                              <Label htmlFor={`reference-${reference.id}-address`}>Address</Label>
-                              <div className="mt-2 flex gap-2">
-                                <Input
-                                  id={`reference-${reference.id}-address`}
-                                  value={reference.address}
-                                  onChange={(event) => updateReference(reference.id, "address", event.target.value)}
-                                  placeholder="Type the full address"
-                                />
-                                <Button
-                                  type="button"
-                                  variant="outline"
-                                  size="icon"
-                                  aria-label="Open detailed reference address fields"
-                                  aria-expanded={expandedReferenceAddresses.includes(reference.id)}
-                                  onClick={() =>
-                                    setExpandedReferenceAddresses((current) =>
-                                      current.includes(reference.id)
-                                        ? current.filter((id) => id !== reference.id)
-                                        : [...current, reference.id],
-                                    )
-                                  }
-                                >
-                                  <MoreHorizontal className="size-4" />
-                                </Button>
-                              </div>
-                            </div>
+                          </Subsection>
+                        ) : (
+                          <Button type="button" variant="outline" onClick={() => setShowPreviousAddress(true)}>
+                            <Plus className="size-4" />
+                            Add Previous Address
+                          </Button>
+                        )}
+                      </FormSection>
+                      <StepActions
+                        onBack={() => setActiveStep("applicant")}
+                        onNext={() => setActiveStep("employment")}
+                      />
+                    </TabsContent>
 
-                            {expandedReferenceAddresses.includes(reference.id) && (
-                              <div className="grid gap-x-3 gap-y-2 border border-slate-300 bg-slate-50 p-3 sm:col-span-2 lg:col-span-4 sm:grid-cols-2 lg:grid-cols-4">
-                                <div className="sm:col-span-2">
-                                  <TextField
-                                    id={`reference-${reference.id}-street`}
-                                    label="Street"
-                                    value={reference.street}
-                                    onChange={(value) => updateReferenceAddressField(reference.id, "street", value)}
-                                  />
-                                </div>
-                                <TextField
-                                  id={`reference-${reference.id}-street-2`}
-                                  label="Street 2 (Apt, Unit, Suite, Bldg.)"
-                                  value={reference.street2}
-                                  onChange={(value) => updateReferenceAddressField(reference.id, "street2", value)}
-                                />
-                                <TextField
-                                  id={`reference-${reference.id}-city`}
-                                  label="City"
-                                  value={reference.city}
-                                  onChange={(value) => updateReferenceAddressField(reference.id, "city", value)}
-                                />
-                                <SelectField
-                                  label="State"
-                                  value={reference.state}
-                                  onChange={(value) => updateReferenceAddressField(reference.id, "state", value)}
-                                  placeholder="Select state"
-                                  options={US_STATES.map(([abbreviation, name]) => [abbreviation, name])}
-                                />
-                                <TextField
-                                  id={`reference-${reference.id}-zip`}
-                                  label="Zip"
-                                  inputMode="numeric"
-                                  maxLength={10}
-                                  value={formatZip(reference.zip)}
-                                  onChange={(value) =>
-                                    updateReferenceAddressField(reference.id, "zip", digitsOnly(value, 9))
-                                  }
-                                />
-                                <TextField
-                                  id={`reference-${reference.id}-county`}
-                                  label="County"
-                                  value={reference.county}
-                                  onChange={(value) => updateReferenceAddressField(reference.id, "county", value)}
-                                />
-                                <TextField
-                                  id={`reference-${reference.id}-county-code`}
-                                  label="County Code"
-                                  value={reference.countyCode}
-                                  onChange={(value) => updateReferenceAddressField(reference.id, "countyCode", value)}
-                                />
-                              </div>
-                            )}
-                          </div>
+                    <TabsContent value="employment" className="m-0 space-y-4 focus-visible:outline-none">
+                      <FormSection title="Employment">
+                        <Subsection title="Current Employer">
+                          <EmployerFields
+                            idPrefix="current-employer-1"
+                            value={currentEmployer1}
+                            onChange={setCurrentEmployer1}
+                            employerNameLabel="Current Employer Name"
+                          />
                         </Subsection>
-                      ))}
-                    </div>
-                    <Button type="button" variant="outline" onClick={addReference}>
-                      <Plus className="size-4" />
-                      Add More Reference
-                    </Button>
-                  </FormSection>
-                </div>
+
+                        {showCurrentEmployer2 && (
+                          <Subsection
+                            title="Current Employer 2"
+                            action={
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() => {
+                                  setShowCurrentEmployer2(false);
+                                  setCurrentEmployer2({ ...emptyEmployer });
+                                }}
+                              >
+                                <Trash2 className="size-4" />
+                                Remove
+                              </Button>
+                            }
+                          >
+                            <EmployerFields
+                              idPrefix="current-employer-2"
+                              value={currentEmployer2}
+                              onChange={setCurrentEmployer2}
+                              employerNameLabel="Current Employer Name"
+                            />
+                          </Subsection>
+                        )}
+
+                        {showPreviousEmployer && (
+                          <Subsection
+                            title="Previous Employer 1"
+                            action={
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() => {
+                                  if (showPreviousEmployer2) {
+                                    setPreviousEmployer(previousEmployer2);
+                                    setPreviousEmployer2({ ...emptyEmployer });
+                                    setShowPreviousEmployer2(false);
+                                  } else {
+                                    setShowPreviousEmployer(false);
+                                    setPreviousEmployer({ ...emptyEmployer });
+                                  }
+                                }}
+                              >
+                                <Trash2 className="size-4" />
+                                Remove
+                              </Button>
+                            }
+                          >
+                            <EmployerFields
+                              idPrefix="previous-employer-1"
+                              value={previousEmployer}
+                              onChange={setPreviousEmployer}
+                              employerNameLabel="Previous Employer Name"
+                            />
+                          </Subsection>
+                        )}
+
+                        {showPreviousEmployer2 && (
+                          <Subsection
+                            title="Previous Employer 2"
+                            action={
+                              <Button
+                                type="button"
+                                variant="ghost"
+                                size="sm"
+                                className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                onClick={() => {
+                                  setShowPreviousEmployer2(false);
+                                  setPreviousEmployer2({ ...emptyEmployer });
+                                }}
+                              >
+                                <Trash2 className="size-4" />
+                                Remove
+                              </Button>
+                            }
+                          >
+                            <EmployerFields
+                              idPrefix="previous-employer-2"
+                              value={previousEmployer2}
+                              onChange={setPreviousEmployer2}
+                              employerNameLabel="Previous Employer Name"
+                            />
+                          </Subsection>
+                        )}
+
+                        <div className="flex flex-wrap gap-3">
+                          {!showCurrentEmployer2 && (
+                            <Button type="button" variant="outline" onClick={() => setShowCurrentEmployer2(true)}>
+                              <Plus className="size-4" />
+                              Add Current Employer
+                            </Button>
+                          )}
+                          {(!showPreviousEmployer || !showPreviousEmployer2) && (
+                            <Button
+                              type="button"
+                              variant="outline"
+                              onClick={() => {
+                                if (!showPreviousEmployer) setShowPreviousEmployer(true);
+                                else setShowPreviousEmployer2(true);
+                              }}
+                            >
+                              <Plus className="size-4" />
+                              Add Previous Employer
+                            </Button>
+                          )}
+                        </div>
+                      </FormSection>
+
+                      <FormSection title="Other Income">
+                        <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
+                          <CurrencyField
+                            id="other-income-amount"
+                            label="Income Amount"
+                            value={otherIncomeAmount}
+                            onChange={setOtherIncomeAmount}
+                          />
+                          <TextField
+                            id="other-income-source"
+                            label="Income Source"
+                            value={otherIncomeSource}
+                            onChange={setOtherIncomeSource}
+                          />
+                        </div>
+                      </FormSection>
+                      <StepActions onBack={() => setActiveStep("address")} onNext={() => setActiveStep("references")} />
+                    </TabsContent>
+
+                    <TabsContent value="references" className="m-0 focus-visible:outline-none">
+                      <FormSection title="Reference">
+                        <div className="space-y-2">
+                          {references.map((reference, index) => (
+                            <Subsection
+                              key={reference.id}
+                              title={`Reference ${index + 1}`}
+                              action={
+                                references.length > 1 ? (
+                                  <Button
+                                    type="button"
+                                    variant="ghost"
+                                    size="sm"
+                                    className="text-destructive hover:bg-destructive/10 hover:text-destructive"
+                                    onClick={() => removeReference(reference.id)}
+                                  >
+                                    <Trash2 className="size-4" />
+                                    Remove
+                                  </Button>
+                                ) : undefined
+                              }
+                            >
+                              <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
+                                <TextField
+                                  id={`reference-${reference.id}-name`}
+                                  label="Name"
+                                  value={reference.name}
+                                  onChange={(value) => updateReference(reference.id, "name", value)}
+                                />
+                                <TextField
+                                  id={`reference-${reference.id}-phone`}
+                                  label="Phone"
+                                  type="tel"
+                                  inputMode="numeric"
+                                  maxLength={14}
+                                  value={formatPhone(reference.phone)}
+                                  onChange={(value) => updateReference(reference.id, "phone", digitsOnly(value, 10))}
+                                />
+                                <ComboField
+                                  id={`reference-${reference.id}-relationship`}
+                                  label="Relationship"
+                                  value={reference.relationship}
+                                  onChange={(value) => updateReference(reference.id, "relationship", value)}
+                                  options={RELATIONSHIPS}
+                                />
+                                <div className="sm:col-span-2">
+                                  <Label htmlFor={`reference-${reference.id}-address`}>Address</Label>
+                                  <div className="mt-2 flex gap-2">
+                                    <Input
+                                      id={`reference-${reference.id}-address`}
+                                      value={reference.address}
+                                      onChange={(event) => updateReference(reference.id, "address", event.target.value)}
+                                      placeholder="Type the full address"
+                                    />
+                                    <Button
+                                      type="button"
+                                      variant="outline"
+                                      size="icon"
+                                      aria-label="Open detailed reference address fields"
+                                      aria-expanded={expandedReferenceAddresses.includes(reference.id)}
+                                      onClick={() =>
+                                        setExpandedReferenceAddresses((current) =>
+                                          current.includes(reference.id)
+                                            ? current.filter((id) => id !== reference.id)
+                                            : [...current, reference.id],
+                                        )
+                                      }
+                                    >
+                                      <MoreHorizontal className="size-4" />
+                                    </Button>
+                                  </div>
+                                </div>
+
+                                {expandedReferenceAddresses.includes(reference.id) && (
+                                  <div className="grid gap-x-3 gap-y-2 border border-slate-300 bg-slate-50 p-3 sm:col-span-2 lg:col-span-4 sm:grid-cols-2 lg:grid-cols-4">
+                                    <div className="sm:col-span-2">
+                                      <TextField
+                                        id={`reference-${reference.id}-street`}
+                                        label="Street"
+                                        value={reference.street}
+                                        onChange={(value) => updateReferenceAddressField(reference.id, "street", value)}
+                                      />
+                                    </div>
+                                    <TextField
+                                      id={`reference-${reference.id}-street-2`}
+                                      label="Street 2 (Apt, Unit, Suite, Bldg.)"
+                                      value={reference.street2}
+                                      onChange={(value) => updateReferenceAddressField(reference.id, "street2", value)}
+                                    />
+                                    <TextField
+                                      id={`reference-${reference.id}-city`}
+                                      label="City"
+                                      value={reference.city}
+                                      onChange={(value) => updateReferenceAddressField(reference.id, "city", value)}
+                                    />
+                                    <SelectField
+                                      label="State"
+                                      value={reference.state}
+                                      onChange={(value) => updateReferenceAddressField(reference.id, "state", value)}
+                                      placeholder="Select state"
+                                      options={US_STATES.map(([abbreviation, name]) => [abbreviation, name])}
+                                    />
+                                    <TextField
+                                      id={`reference-${reference.id}-zip`}
+                                      label="Zip"
+                                      inputMode="numeric"
+                                      maxLength={10}
+                                      value={formatZip(reference.zip)}
+                                      onChange={(value) =>
+                                        updateReferenceAddressField(reference.id, "zip", digitsOnly(value, 9))
+                                      }
+                                    />
+                                    <TextField
+                                      id={`reference-${reference.id}-county`}
+                                      label="County"
+                                      value={reference.county}
+                                      onChange={(value) => updateReferenceAddressField(reference.id, "county", value)}
+                                    />
+                                    <TextField
+                                      id={`reference-${reference.id}-county-code`}
+                                      label="County Code"
+                                      value={reference.countyCode}
+                                      onChange={(value) =>
+                                        updateReferenceAddressField(reference.id, "countyCode", value)
+                                      }
+                                    />
+                                  </div>
+                                )}
+                              </div>
+                            </Subsection>
+                          ))}
+                        </div>
+                        <Button type="button" variant="outline" onClick={addReference}>
+                          <Plus className="size-4" />
+                          Add More Reference
+                        </Button>
+                      </FormSection>
+                      <StepActions onBack={() => setActiveStep("employment")} />
+                    </TabsContent>
+                  </div>
+                </Tabs>
               </LeadForm>
             </div>
           </div>
 
-          <aside className="space-y-3 xl:sticky xl:top-4">
-            <div className="border border-slate-300 bg-white shadow-sm">
-              <h2 className="border-b border-cyan-200 bg-[#e8f7f7] px-3 py-2 text-xs font-semibold text-slate-800">
+          <aside className="space-y-4 xl:sticky xl:top-6">
+            <div className="overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-sm">
+              <h2 className="border-b border-slate-200 px-5 py-4 text-sm font-semibold text-slate-900">
                 Payment Estimator
               </h2>
-              <div className="space-y-2 p-3">
+              <div className="space-y-3 p-5">
                 <TextField
                   id="price"
                   label="Vehicle Price"
@@ -1136,18 +1199,18 @@ function FinancePage() {
                   options={[36, 48, 60, 72, 84].map((months) => [String(months), `${months} months`])}
                 />
               </div>
-              <p className="px-3 pt-1 text-2xl font-bold text-cyan-800">${estimate}/mo</p>
-              <p className="px-3 pb-3 text-[10px] leading-4 text-slate-500">
+              <p className="px-5 pt-1 text-3xl font-bold tracking-tight text-primary">${estimate}/mo</p>
+              <p className="px-5 pb-5 pt-1 text-xs leading-5 text-slate-500">
                 Based on {apr}% APR. {settings?.finance_disclosure}
               </p>
             </div>
 
-            <div className="border border-slate-300 bg-white p-3 text-xs text-slate-500 shadow-sm">
-              <h3 className="font-semibold text-slate-800">What Happens Next</h3>
-              <ol className="mt-2 list-decimal space-y-1.5 pl-4">
-                <li>We securely review the information you submitted.</li>
-                <li>Our finance manager contacts you to confirm details and explain next steps.</li>
-                <li>Any lender authorization or credit-pull consent is handled separately when required.</li>
+            <div className="rounded-2xl border border-slate-200 bg-white p-5 text-xs leading-5 text-slate-500 shadow-sm">
+              <h3 className="text-sm font-semibold text-slate-900">Next steps</h3>
+              <ol className="mt-3 list-decimal space-y-2 pl-4">
+                <li>Our finance team reviews your application.</li>
+                <li>We contact you to confirm details and discuss options.</li>
+                <li>Credit authorization is handled separately when required.</li>
               </ol>
             </div>
           </aside>
@@ -1167,13 +1230,30 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="relative overflow-visible border border-slate-300 bg-white">
-      <div className="border-b border-cyan-200 bg-[#e8f7f7] px-3 py-1.5">
-        <h2 className="text-xs font-semibold text-slate-800">{title}</h2>
-        {description && <p className="mt-0.5 text-[10px] text-slate-500">{description}</p>}
+    <section className="relative overflow-visible rounded-xl border border-slate-200 bg-white">
+      <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
+        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+        {description && <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>}
       </div>
-      <div className="space-y-3 p-3">{children}</div>
+      <div className="space-y-4 p-4 sm:p-5">{children}</div>
     </section>
+  );
+}
+
+function StepActions({ onBack, onNext }: { onBack?: () => void; onNext?: () => void }) {
+  return (
+    <div className={`mt-5 flex items-center ${onBack ? "justify-between" : "justify-end"}`}>
+      {onBack && (
+        <Button type="button" variant="ghost" onClick={onBack}>
+          Back
+        </Button>
+      )}
+      {onNext && (
+        <Button type="button" onClick={onNext}>
+          Continue
+        </Button>
+      )}
+    </div>
   );
 }
 
@@ -1414,7 +1494,6 @@ function SelectField({
             </SelectItem>
           ))}
         </SelectContent>
-
       </Select>
     </div>
   );
