@@ -3,15 +3,8 @@ import { useQuery } from "@tanstack/react-query";
 import { useState } from "react";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LeadForm } from "@/components/LeadForm";
-import { PageHero } from "@/components/PageHero";
 import { siteSettingsQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/schedule")({
@@ -23,7 +16,10 @@ export const Route = createFileRoute("/schedule")({
         content:
           "Reserve a time at MyCar in Fredericksburg for a test drive, trade appraisal or financing consultation. Pick a day and time that works for you.",
       },
-      { property: "og:title", content: "Book a Visit — MyCar Fredericksburg" },
+      {
+        property: "og:title",
+        content: "Book a Visit — MyCar Fredericksburg",
+      },
       {
         property: "og:description",
         content: "Reserve a test drive, trade appraisal or financing consultation.",
@@ -38,6 +34,7 @@ const TIMES = ["9:30 AM", "11:00 AM", "1:00 PM", "2:30 PM", "4:00 PM", "5:30 PM"
 function SchedulePage() {
   const { data: settings } = useQuery(siteSettingsQuery());
   const hours = (settings?.hours ?? {}) as Record<string, string>;
+
   const [type, setType] = useState("test_drive");
   const [date, setDate] = useState("");
   const [time, setTime] = useState(TIMES[0]);
@@ -45,12 +42,6 @@ function SchedulePage() {
 
   return (
     <div className="bg-surface">
-      <PageHero
-        eyebrow="Book a visit"
-        title="Pick a time that works."
-        subtitle="Test drive, trade appraisal or financing — reserve a slot and we'll have everything ready."
-      />
-
       <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 lg:grid-cols-[1.4fr_1fr] lg:px-12">
         <div className="rounded-xl border border-border bg-card p-6">
           <LeadForm
@@ -69,8 +60,12 @@ function SchedulePage() {
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Appointment type</Label>
+
                 <Select value={type} onValueChange={setType}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+
                   <SelectContent>
                     <SelectItem value="test_drive">Test drive</SelectItem>
                     <SelectItem value="trade_appraisal">Trade appraisal</SelectItem>
@@ -79,26 +74,37 @@ function SchedulePage() {
                   </SelectContent>
                 </Select>
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="vehicle">Vehicle (optional)</Label>
+
                 <Input
                   id="vehicle"
                   value={vehicle}
-                  onChange={(e) => setVehicle(e.target.value)}
+                  onChange={(event) => setVehicle(event.target.value)}
                   placeholder="Stock # or model"
                 />
               </div>
+
               <div className="space-y-2">
                 <Label htmlFor="date">Preferred date</Label>
-                <Input id="date" type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+
+                <Input id="date" type="date" value={date} onChange={(event) => setDate(event.target.value)} required />
               </div>
+
               <div className="space-y-2">
                 <Label>Preferred time</Label>
+
                 <Select value={time ?? ""} onValueChange={setTime}>
-                  <SelectTrigger><SelectValue /></SelectTrigger>
+                  <SelectTrigger>
+                    <SelectValue />
+                  </SelectTrigger>
+
                   <SelectContent>
-                    {TIMES.map((t) => (
-                      <SelectItem key={t} value={t}>{t}</SelectItem>
+                    {TIMES.map((availableTime) => (
+                      <SelectItem key={availableTime} value={availableTime}>
+                        {availableTime}
+                      </SelectItem>
                     ))}
                   </SelectContent>
                 </Select>
@@ -109,16 +115,18 @@ function SchedulePage() {
 
         <aside className="rounded-xl border border-border bg-surface p-6 text-sm">
           <h2 className="font-display text-lg font-bold">Showroom hours</h2>
+
           <ul className="mt-3 space-y-1 text-muted-foreground">
             <li>Mon–Fri: {hours["mon_fri"] ?? "—"}</li>
             <li>Saturday: {hours["sat"] ?? "—"}</li>
             <li>Sunday: {hours["sun"] ?? "—"}</li>
           </ul>
+
           <p className="mt-4 text-muted-foreground">{settings?.address_line}</p>
+
           <p className="mt-1 font-semibold text-foreground">{settings?.phone}</p>
         </aside>
       </div>
     </div>
   );
 }
-
