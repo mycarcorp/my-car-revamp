@@ -19,6 +19,13 @@ import { supabase } from "@/integrations/supabase/app-client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, type PhotoDraft, type Vehicle, type VehiclePhoto } from "@/lib/admin-inventory";
+import {
+  ALLOWED_VIDEO_TYPES,
+  MAX_VIDEOS,
+  MAX_VIDEO_BYTES,
+  isVideoUrl,
+} from "@/lib/vehicle-media";
+
 import { VIN_RE, vehicleSlug } from "@/lib/inventory-csv";
 import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
 import { saveVehiclePhotosFn, type PhotoOrderInput } from "@/lib/vehicle-photos.functions";
@@ -33,7 +40,12 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+function isVideoDraft(draft: PhotoDraft): boolean {
+  return draft.kind === "new" ? draft.file.type.startsWith("video/") : isVideoUrl(draft.url);
+}
+
 type BodyStyle = Database["public"]["Enums"]["body_style"];
+
 type FuelType = Database["public"]["Enums"]["fuel_type"];
 type Drivetrain = Database["public"]["Enums"]["drivetrain"];
 type VehicleStatus = Database["public"]["Enums"]["vehicle_status"];
@@ -256,22 +268,46 @@ export function VehicleFormDialog({
 
   function addFiles(list: FileList | File[] | null) {
     if (!list) return;
-    const room = MAX_PHOTOS - photos.length;
-    const files = Array.from(list)
-      .filter((f) => ["image/jpeg", "image/png", "image/webp"].includes(f.type) && f.size <= MAX_PHOTO_BYTES)
-      .slice(0, Math.max(0, room));
-    if (files.length < list.length) {
-      toast.warning(`Use JPG, PNG, or WebP files under 10 MB. Up to ${MAX_PHOTOS} photos per vehicle.`);
+    const incoming = Array.from(list);
+    let photoRoom = MAX_PHOTOS - photos.filter((p) => !isVideoDraft(p)).length;
+    let videoRoom = MAX_VIDEOS - photos.filter((p) => isVideoDraft(p)).length;
+    const accepted: File[] = [];
+    let rejected = 0;
+
+    for (const file of incoming) {
+      const isVideo = file.type.startsWith("video/");
+      if (isVideo) {
+        if (!ALLOWED_VIDEO_TYPES.includes(file.type) || file.size > MAX_VIDEO_BYTES || videoRoom <= 0) {
+          rejected++;
+          continue;
+        }
+        videoRoom--;
+      } else {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > MAX_PHOTO_BYTES || photoRoom <= 0) {
+          rejected++;
+          continue;
+        }
+        photoRoom--;
+      }
+      accepted.push(file);
     }
+
+    if (rejected > 0) {
+      toast.warning(
+        `Photos: JPG, PNG or WebP under 10 MB (up to ${MAX_PHOTOS}). Videos: MP4, WebM or MOV under 25 MB (up to ${MAX_VIDEOS}).`,
+      );
+    }
+
     setPhotos((p) => [
       ...p,
-      ...files.map((file) => ({
+      ...accepted.map((file) => ({
         kind: "new" as const,
         file,
         previewUrl: URL.createObjectURL(file),
       })),
     ]);
   }
+
 
   function removePhoto(index: number) {
     setPhotos((current) => {
@@ -390,13 +426,15 @@ export function VehicleFormDialog({
       const newPhotos: Array<{ dataUrl: string; contentType?: string }> = [];
       const order: PhotoOrderInput[] = [];
       for (const p of photos) {
+        const media = isVideoDraft(p) ? ("video" as const) : ("photo" as const);
         if (p.kind === "existing") {
-          order.push({ kind: "keep", url: p.url });
+          order.push({ kind: "keep", url: p.url, media });
         } else {
-          order.push({ kind: "new", index: newPhotos.length });
+          order.push({ kind: "new", index: newPhotos.length, media });
           newPhotos.push({ dataUrl: await fileToDataUrl(p.file), contentType: p.file.type });
         }
       }
+
       await saveVehiclePhotosFn({
         data: {
           accessToken: session.access_token,
@@ -508,16 +546,19 @@ export function VehicleFormDialog({
         <div className="space-y-3 rounded-lg border border-border p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium">Photos</p>
-              <p className="text-xs text-muted-foreground">Up to {MAX_PHOTOS}. The first photo is the main image.</p>
+              <p className="text-sm font-medium">Photos &amp; videos</p>
+              <p className="text-xs text-muted-foreground">
+                Up to {MAX_PHOTOS} photos and {MAX_VIDEOS} videos. The first photo is the main image.
+              </p>
             </div>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
               <Upload className="size-4" />
-              Add photos
+              Add media
               <input
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
                 multiple
+
                 className="hidden"
                 onChange={(e) => {
                   addFiles(e.target.files);
@@ -573,13 +614,15 @@ export function VehicleFormDialog({
           >
             <ImagePlus className={`mb-2 size-8 ${isDraggingFiles ? "text-[#F7941D]" : "text-muted-foreground"}`} />
             <p className="text-sm font-semibold text-foreground">
-              {isDraggingFiles ? "Drop photos here" : "Drag and drop vehicle photos"}
+              {isDraggingFiles ? "Drop photos or videos here" : "Drag and drop vehicle photos or videos"}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">or click to browse JPG, PNG, or WebP files under 10 MB</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              or click to browse JPG, PNG, WebP under 10 MB — or MP4, WebM, MOV videos under 25 MB
+            </p>
             <input
               id="vehicle-photo-upload"
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
               multiple
               className="hidden"
               onChange={(event) => {
@@ -587,6 +630,7 @@ export function VehicleFormDialog({
                 event.target.value = "";
               }}
             />
+
           </div>
 
           {photos.length === 0 ? (
@@ -619,11 +663,23 @@ export function VehicleFormDialog({
                     draggedPhotoIndex === i ? "scale-[0.98] border-[#F7941D] opacity-60" : "border-border"
                   }`}
                 >
-                  <img
-                    src={p.kind === "existing" ? p.url : p.previewUrl}
-                    alt={`Photo ${i + 1}`}
-                    className="h-24 w-full object-cover"
-                  />
+                  {isVideoDraft(p) ? (
+                    <video
+                      src={p.kind === "existing" ? p.url : p.previewUrl}
+                      className="h-24 w-full bg-black object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                      controls
+                    />
+                  ) : (
+                    <img
+                      src={p.kind === "existing" ? p.url : p.previewUrl}
+                      alt={`Photo ${i + 1}`}
+                      className="h-24 w-full object-cover"
+                    />
+                  )}
+
                   <div className="flex items-center justify-between gap-1 p-1">
                     <span className="flex items-center gap-1 pl-1 text-xs text-muted-foreground">
                       <GripVertical className="size-3" />#{i + 1}

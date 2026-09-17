@@ -1,7 +1,9 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Camera, Check, Heart, Phone } from "lucide-react";
+import { Camera, Check, Heart, Phone, Play } from "lucide-react";
+import { isVideoUrl } from "@/lib/vehicle-media";
+
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -186,12 +188,25 @@ function VehicleDetail() {
         <div>
           <div className="mx-auto w-full max-w-2xl overflow-hidden rounded-xl border border-border bg-muted">
             {photos[active] && !failedPhotoIds.includes(photos[active].id) ? (
-              <img
-                src={photos[active].url}
-                alt={photos[active].alt ?? vehicleTitle(v)}
-                onError={() => markFailed(photos[active]!.id)}
-                className="max-h-[420px] w-full object-contain"
-              />
+              isVideoUrl(photos[active].url) ? (
+                <video
+                  key={photos[active].url}
+                  src={photos[active].url}
+                  controls
+                  autoPlay
+                  playsInline
+                  preload="metadata"
+                  onError={() => markFailed(photos[active]!.id)}
+                  className="max-h-[420px] w-full bg-black object-contain"
+                />
+              ) : (
+                <img
+                  src={photos[active].url}
+                  alt={photos[active].alt ?? vehicleTitle(v)}
+                  onError={() => markFailed(photos[active]!.id)}
+                  className="max-h-[420px] w-full object-contain"
+                />
+              )
             ) : (
               <div className="flex h-[280px] w-full flex-col items-center justify-center gap-2 text-muted-foreground">
                 <Camera className="size-8" />
@@ -205,20 +220,30 @@ function VehicleDetail() {
                 <button
                   key={p.id}
                   onClick={() => setActive(i)}
-                  className={`aspect-[4/3] overflow-hidden rounded-md border ${
+                  className={`relative aspect-[4/3] overflow-hidden rounded-md border ${
                     i === active ? "border-primary" : "border-border"
                   }`}
                 >
-                  <img
-                    src={p.url}
-                    alt={p.alt ?? `${vehicleTitle(v)} photo ${i + 1}`}
-                    loading="lazy"
-                    className="size-full object-cover"
-                  />
+                  {isVideoUrl(p.url) ? (
+                    <>
+                      <video src={p.url} muted playsInline preload="metadata" className="size-full bg-black object-cover" />
+                      <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                        <Play className="size-5 text-white" />
+                      </span>
+                    </>
+                  ) : (
+                    <img
+                      src={p.url}
+                      alt={p.alt ?? `${vehicleTitle(v)} photo ${i + 1}`}
+                      loading="lazy"
+                      className="size-full object-cover"
+                    />
+                  )}
                 </button>
               ))}
             </div>
           )}
+
 
           <section className="mt-10">
             <h2 className="font-display text-xl font-bold">Specifications</h2>

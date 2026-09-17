@@ -2,7 +2,9 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Camera, Check, Plus, Search, SlidersHorizontal, Upload, X } from "lucide-react";
+import { Camera, Check, Play, Plus, Search, SlidersHorizontal, Upload, X } from "lucide-react";
+import { isVideoUrl } from "@/lib/vehicle-media";
+
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -496,7 +498,9 @@ function AdminInventory() {
             ) : (
               <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {visible.map((v) => {
-                  const photo = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position)[0];
+                  const sortedMedia = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
+                  const photo = sortedMedia.find((m) => !isVideoUrl(m.url)) ?? sortedMedia[0];
+
 
                   const title = vehicleTitle(v);
 
@@ -748,13 +752,27 @@ function AdminVehicleDetailsDialog({
           <div className="min-w-0">
             <div className="flex min-h-[300px] items-center justify-center overflow-hidden rounded-xl border border-border bg-muted sm:min-h-[420px]">
               {selectedPhoto && !failedPhotoUrls.includes(selectedPhoto.url) ? (
-                <img
-                  src={selectedPhoto.url}
-                  alt={`${title} photo ${activePhoto + 1}`}
-                  onError={() => onPhotoError(selectedPhoto.url)}
-                  className="max-h-[520px] w-full object-contain"
-                />
+                isVideoUrl(selectedPhoto.url) ? (
+                  <video
+                    key={selectedPhoto.url}
+                    src={selectedPhoto.url}
+                    controls
+                    autoPlay
+                    playsInline
+                    preload="metadata"
+                    onError={() => onPhotoError(selectedPhoto.url)}
+                    className="max-h-[520px] w-full bg-black object-contain"
+                  />
+                ) : (
+                  <img
+                    src={selectedPhoto.url}
+                    alt={`${title} photo ${activePhoto + 1}`}
+                    onError={() => onPhotoError(selectedPhoto.url)}
+                    className="max-h-[520px] w-full object-contain"
+                  />
+                )
               ) : (
+
                 <div className="flex min-h-[300px] w-full flex-col items-center justify-center gap-2 text-muted-foreground sm:min-h-[420px]">
                   <Camera className="size-9" />
                   <span className="text-sm">No vehicle photo available</span>
@@ -771,7 +789,7 @@ function AdminVehicleDetailsDialog({
                     onClick={() => onActivePhotoChange(index)}
                     aria-label={`View photo ${index + 1} of ${photos.length}`}
                     aria-pressed={index === activePhoto}
-                    className={`aspect-[4/3] overflow-hidden rounded-md border-2 bg-muted transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] ${
+                    className={`relative aspect-[4/3] overflow-hidden rounded-md border-2 bg-muted transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] ${
                       index === activePhoto ? "border-[#F7941D]" : "border-transparent"
                     }`}
                   >
@@ -779,6 +797,13 @@ function AdminVehicleDetailsDialog({
                       <span className="flex size-full items-center justify-center">
                         <Camera className="size-4 text-muted-foreground" />
                       </span>
+                    ) : isVideoUrl(photo.url) ? (
+                      <>
+                        <video src={photo.url} muted playsInline preload="metadata" className="size-full bg-black object-cover" />
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <Play className="size-4 text-white" />
+                        </span>
+                      </>
                     ) : (
                       <img
                         src={photo.url}
@@ -788,6 +813,7 @@ function AdminVehicleDetailsDialog({
                         className="size-full object-cover"
                       />
                     )}
+
                   </button>
                 ))}
               </div>

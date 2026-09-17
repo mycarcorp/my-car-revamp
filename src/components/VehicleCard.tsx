@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Camera, TrendingDown } from "lucide-react";
+import { Camera, Play, TrendingDown } from "lucide-react";
+import { isVideoUrl } from "@/lib/vehicle-media";
+
 import { Badge } from "@/components/ui/badge";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 import type { VehicleWithPhotos, SiteSettings } from "@/lib/queries";
@@ -13,8 +15,10 @@ export function VehicleCard({
   settings?: SiteSettings | null | undefined;
 }) {
   const photos = [...(vehicle.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
-  const cover = photos[0];
+  const cover = photos.find((p) => !isVideoUrl(p.url)) ?? photos[0];
+  const hasVideo = photos.some((p) => isVideoUrl(p.url));
   const [coverFailed, setCoverFailed] = useState(false);
+
   const payment = settings
     ? monthlyPayment(Number(vehicle.price_cents), {
         apr: Number(settings.finance_apr),
@@ -34,19 +38,36 @@ export function VehicleCard({
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
         {cover && !coverFailed ? (
-          <img
-            src={cover.url}
-            alt={cover.alt ?? vehicleTitle(vehicle)}
-            loading="lazy"
-            onError={() => setCoverFailed(true)}
-            className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-          />
+          isVideoUrl(cover.url) ? (
+            <video
+              src={cover.url}
+              muted
+              playsInline
+              preload="metadata"
+              onError={() => setCoverFailed(true)}
+              className="size-full bg-black object-cover"
+            />
+          ) : (
+            <img
+              src={cover.url}
+              alt={cover.alt ?? vehicleTitle(vehicle)}
+              loading="lazy"
+              onError={() => setCoverFailed(true)}
+              className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          )
         ) : (
           <div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
             <Camera className="size-6" />
             <span className="text-xs">Photos coming soon</span>
           </div>
         )}
+        {hasVideo && (
+          <Badge variant="secondary" className="absolute bottom-3 left-3 gap-1">
+            <Play className="size-3" /> Video
+          </Badge>
+        )}
+
         {priceDrop && (
           <Badge className="absolute left-3 top-3 gap-1 bg-success text-success-foreground">
             <TrendingDown className="size-3" /> Price drop
