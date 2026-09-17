@@ -20,8 +20,7 @@ type Card = {
 };
 
 const PAGE = 12;
-const trim = (s: string | null, n = 160) =>
-  s ? (s.length > n ? `${s.slice(0, n).trimEnd()}…` : s) : null;
+const trim = (s: string | null, n = 160) => (s ? (s.length > n ? `${s.slice(0, n).trimEnd()}…` : s) : null);
 
 export const Route = createFileRoute("/blog/")({
   loader: async () => {
@@ -84,7 +83,11 @@ export const Route = createFileRoute("/blog/")({
   head: () => ({
     meta: [
       { title: "Blog | MyCar — Car Buying Advice & Dealership News" },
-      { name: "description", content: "Read our latest articles and insights on buying, financing and trading in used cars in Fredericksburg, Virginia." },
+      {
+        name: "description",
+        content:
+          "Read our latest articles and insights on buying, financing and trading in used cars in Fredericksburg, Virginia.",
+      },
       { property: "og:title", content: "Blog | MyCar" },
       { property: "og:description", content: "Read our latest articles and insights." },
       { property: "og:type", content: "website" },
@@ -107,120 +110,109 @@ function BlogIndex() {
 
   return (
     <div>
-      <PageHero
-        eyebrow="The MyCar journal"
-        title="Straight answers for the road ahead."
-        subtitle="Practical buying, financing and trade-in advice from our team in Fredericksburg, Virginia."
-      >
-        <Button asChild className={ctaButtonClass}>
-          <Link to="/search">Shop inventory</Link>
-        </Button>
-      </PageHero>
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-8 lg:px-12">
+        {topics.length > 0 && (
+          <nav className="flex gap-5 overflow-x-auto py-4 text-sm font-semibold text-muted-foreground">
+            <span className="shrink-0 text-foreground">All posts</span>
+            {topics.map((topic) => (
+              <span key={topic} className="shrink-0">
+                {topic}
+              </span>
+            ))}
+          </nav>
+        )}
 
-
-      {topics.length > 0 && (
-        <nav className="flex gap-5 overflow-x-auto py-4 text-sm font-semibold text-muted-foreground">
-          <span className="shrink-0 text-foreground">All posts</span>
-          {topics.map((topic) => (
-            <span key={topic} className="shrink-0">
-              {topic}
-            </span>
-          ))}
-        </nav>
-      )}
-
-      {cards.length === 0 ? (
-        <div className="mt-10 rounded-xl border border-dashed border-border p-14 text-center">
-          <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted text-3xl">📰</div>
-          <p className="mt-5 text-sm text-muted-foreground">Articles are on the way! Check back soon.</p>
-        </div>
-      ) : (
-        <div className="mt-10">
-          {featured && (
-            <Link
-              to="/blog/$slug"
-              params={{ slug: featured.slug }}
-              className="group grid cursor-pointer overflow-hidden rounded-2xl border border-border bg-card transition duration-300 hover:shadow-lg md:grid-cols-[1.35fr_1fr]"
-            >
-              {featured.image ? (
-                <img
-                  src={featured.image}
-                  alt={featured.title}
-                  onError={(e) => {
-                    e.currentTarget.style.display = "none";
-                  }}
-                  className="aspect-[16/9] h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
-                />
-              ) : (
-                <div className="aspect-[16/9] bg-muted" />
-              )}
-              <div className="flex flex-col justify-center p-6 sm:p-9">
-                <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
-                  Featured {featured.category ? `· ${featured.category}` : ""}
-                </p>
-                <h2 className="mt-4 font-display text-3xl font-bold leading-tight">{featured.title}</h2>
-                {featured.excerpt && (
-                  <p className="mt-4 text-sm leading-6 text-muted-foreground">{featured.excerpt}</p>
-                )}
-                <p className="mt-auto pt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                  {formatDate(featured.date)} {featured.readTime ? `· ${featured.readTime} min read` : ""}
-                </p>
-              </div>
-            </Link>
-          )}
-
-          {shown.length > 0 && <h2 className="mt-12 font-display text-2xl font-bold">Latest posts</h2>}
-          <div className="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
-            {shown.map((p) => (
+        {cards.length === 0 ? (
+          <div className="mt-10 rounded-xl border border-dashed border-border p-14 text-center">
+            <div className="mx-auto flex h-16 w-16 items-center justify-center rounded-full bg-muted text-3xl">📰</div>
+            <p className="mt-5 text-sm text-muted-foreground">Articles are on the way! Check back soon.</p>
+          </div>
+        ) : (
+          <div className="mt-10">
+            {featured && (
               <Link
-                key={p.key}
                 to="/blog/$slug"
-                params={{ slug: p.slug }}
-                className="flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-border bg-card transition duration-300 hover:-translate-y-1 hover:shadow-lg"
+                params={{ slug: featured.slug }}
+                className="group grid cursor-pointer overflow-hidden rounded-2xl border border-border bg-card transition duration-300 hover:shadow-lg md:grid-cols-[1.35fr_1fr]"
               >
-                {p.image ? (
+                {featured.image ? (
                   <img
-                    src={p.image}
-                    alt={p.title}
-                    loading="lazy"
+                    src={featured.image}
+                    alt={featured.title}
                     onError={(e) => {
                       e.currentTarget.style.display = "none";
                     }}
-                    className="aspect-[16/9] w-full rounded-t-xl object-cover"
+                    className="aspect-[16/9] h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
                   />
                 ) : (
                   <div className="aspect-[16/9] bg-muted" />
                 )}
-                <div className="flex flex-1 flex-col p-5">
-                  <p className="text-xs font-semibold uppercase tracking-wide text-primary">
-                    {p.category ?? "MyCar"}
+                <div className="flex flex-col justify-center p-6 sm:p-9">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">
+                    Featured {featured.category ? `· ${featured.category}` : ""}
                   </p>
-                  <h3 className="mt-2 font-display text-xl font-semibold">{p.title}</h3>
-                  {p.excerpt && (
-                    <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">{p.excerpt}</p>
+                  <h2 className="mt-4 font-display text-3xl font-bold leading-tight">{featured.title}</h2>
+                  {featured.excerpt && (
+                    <p className="mt-4 text-sm leading-6 text-muted-foreground">{featured.excerpt}</p>
                   )}
-                  <p className="mt-auto pt-5 text-xs uppercase tracking-wide text-muted-foreground">
-                    {formatDate(p.date)} {p.readTime ? `· ${p.readTime} min read` : ""}
+                  <p className="mt-auto pt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                    {formatDate(featured.date)} {featured.readTime ? `· ${featured.readTime} min read` : ""}
                   </p>
                 </div>
               </Link>
-            ))}
-          </div>
+            )}
 
-          {rest.length > visible && (
-            <div className="mt-10 text-center">
-              <button
-                type="button"
-                onClick={() => setVisible((v) => v + PAGE)}
-                className={`${ctaButtonClass} cursor-pointer`}
-              >
-                Load more articles
-              </button>
+            {shown.length > 0 && <h2 className="mt-12 font-display text-2xl font-bold">Latest posts</h2>}
+            <div className="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
+              {shown.map((p) => (
+                <Link
+                  key={p.key}
+                  to="/blog/$slug"
+                  params={{ slug: p.slug }}
+                  className="flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-border bg-card transition duration-300 hover:-translate-y-1 hover:shadow-lg"
+                >
+                  {p.image ? (
+                    <img
+                      src={p.image}
+                      alt={p.title}
+                      loading="lazy"
+                      onError={(e) => {
+                        e.currentTarget.style.display = "none";
+                      }}
+                      className="aspect-[16/9] w-full rounded-t-xl object-cover"
+                    />
+                  ) : (
+                    <div className="aspect-[16/9] bg-muted" />
+                  )}
+                  <div className="flex flex-1 flex-col p-5">
+                    <p className="text-xs font-semibold uppercase tracking-wide text-primary">
+                      {p.category ?? "MyCar"}
+                    </p>
+                    <h3 className="mt-2 font-display text-xl font-semibold">{p.title}</h3>
+                    {p.excerpt && (
+                      <p className="mt-2 line-clamp-3 text-sm leading-6 text-muted-foreground">{p.excerpt}</p>
+                    )}
+                    <p className="mt-auto pt-5 text-xs uppercase tracking-wide text-muted-foreground">
+                      {formatDate(p.date)} {p.readTime ? `· ${p.readTime} min read` : ""}
+                    </p>
+                  </div>
+                </Link>
+              ))}
             </div>
-          )}
-        </div>
-      )}
+
+            {rest.length > visible && (
+              <div className="mt-10 text-center">
+                <button
+                  type="button"
+                  onClick={() => setVisible((v) => v + PAGE)}
+                  className={`${ctaButtonClass} cursor-pointer`}
+                >
+                  Load more articles
+                </button>
+              </div>
+            )}
+          </div>
+        )}
       </div>
     </div>
   );
