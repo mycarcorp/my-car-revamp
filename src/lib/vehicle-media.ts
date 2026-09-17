@@ -1,7 +1,8 @@
 /** Shared helpers for vehicle media (photos + videos). */
 
 export const MAX_VIDEOS = 5;
-export const MAX_VIDEO_BYTES = 25 * 1024 * 1024;
+/** Matches the storage bucket cap; videos upload straight to storage. */
+export const MAX_VIDEO_BYTES = 5 * 1024 * 1024 * 1024;
 export const ALLOWED_VIDEO_TYPES = ["video/mp4", "video/webm", "video/quicktime"];
 
 const VIDEO_EXT_RE = /\.(mp4|webm|mov|m4v)$/i;
