@@ -546,16 +546,19 @@ export function VehicleFormDialog({
         <div className="space-y-3 rounded-lg border border-border p-4">
           <div className="flex items-center justify-between">
             <div>
-              <p className="text-sm font-medium">Photos</p>
-              <p className="text-xs text-muted-foreground">Up to {MAX_PHOTOS}. The first photo is the main image.</p>
+              <p className="text-sm font-medium">Photos &amp; videos</p>
+              <p className="text-xs text-muted-foreground">
+                Up to {MAX_PHOTOS} photos and {MAX_VIDEOS} videos. The first photo is the main image.
+              </p>
             </div>
             <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
               <Upload className="size-4" />
-              Add photos
+              Add media
               <input
                 type="file"
-                accept="image/*"
+                accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
                 multiple
+
                 className="hidden"
                 onChange={(e) => {
                   addFiles(e.target.files);
