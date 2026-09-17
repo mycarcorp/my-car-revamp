@@ -1403,17 +1403,18 @@ function SelectField({
   return (
     <div className="space-y-1">
       <Label className="text-[10px] font-medium leading-none text-slate-700">{label}</Label>
-      <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <Select value={value} onValueChange={onChange} disabled={disabled ?? false}>
         <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white px-2 text-xs focus:ring-1">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
           {options.map(([optionValue, optionLabel]) => (
-            <SelectItem key={optionValue} value={optionValue}>
+            <SelectItem key={optionValue ?? ""} value={optionValue ?? ""}>
               {optionLabel}
             </SelectItem>
           ))}
         </SelectContent>
+
       </Select>
     </div>
   );
