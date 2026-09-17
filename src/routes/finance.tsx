@@ -444,7 +444,13 @@ function FinancePage() {
       const wrapper = labelElement.parentElement;
       if (wrapper) wrapper.style.display = "none";
     });
-  }, [buyerName, buyerEmail, cellPhone]);
+
+    const generatedSubmitButton = Array.from(scope.querySelectorAll<HTMLButtonElement>('button[type="submit"]')).find(
+      (button) => !button.hasAttribute("data-finance-submit"),
+    );
+
+    if (generatedSubmitButton) generatedSubmitButton.style.display = "none";
+  }, [buyerName, buyerEmail, cellPhone, activeStep]);
 
   function addReference() {
     setReferences((current) => [
@@ -537,7 +543,7 @@ function FinancePage() {
             <div ref={leadFormScopeRef}>
               <LeadForm
                 leadType="finance"
-                submitLabel="Submit financing application"
+                submitLabel="Submit"
                 successTitle="Financing application received"
                 successBody="Our finance manager will review your information and contact you about the next steps."
                 messageLabel="Anything else we should know?"
@@ -608,7 +614,7 @@ function FinancePage() {
                               : 4}{" "}
                         of 4
                       </span>
-                      <span className="hidden sm:inline">Complete the current section, then continue.</span>
+                      <span className="hidden sm:inline">Use the tabs to review each section.</span>
                     </div>
                   </div>
 
@@ -805,7 +811,6 @@ function FinancePage() {
                           />
                         </div>
                       </FormSection>
-                      <StepActions onNext={() => setActiveStep("address")} />
                     </TabsContent>
 
                     <TabsContent value="address" className="m-0 focus-visible:outline-none">
@@ -872,10 +877,7 @@ function FinancePage() {
                           </Button>
                         )}
                       </FormSection>
-                      <StepActions
-                        onBack={() => setActiveStep("applicant")}
-                        onNext={() => setActiveStep("employment")}
-                      />
+                      <StepActions onBack={() => setActiveStep("applicant")} />
                     </TabsContent>
 
                     <TabsContent value="employment" className="m-0 space-y-4 focus-visible:outline-none">
@@ -1018,7 +1020,7 @@ function FinancePage() {
                           />
                         </div>
                       </FormSection>
-                      <StepActions onBack={() => setActiveStep("address")} onNext={() => setActiveStep("references")} />
+                      <StepActions onBack={() => setActiveStep("address")} />
                     </TabsContent>
 
                     <TabsContent value="references" className="m-0 focus-visible:outline-none">
@@ -1158,7 +1160,14 @@ function FinancePage() {
                           Add More Reference
                         </Button>
                       </FormSection>
-                      <StepActions onBack={() => setActiveStep("employment")} />
+                      <div className="mt-5 flex items-center justify-between">
+                        <Button type="button" variant="ghost" onClick={() => setActiveStep("employment")}>
+                          Back
+                        </Button>
+                        <Button type="submit" data-finance-submit>
+                          Submit
+                        </Button>
+                      </div>
                     </TabsContent>
                   </div>
                 </Tabs>
@@ -1236,19 +1245,12 @@ function FormSection({
   );
 }
 
-function StepActions({ onBack, onNext }: { onBack?: () => void; onNext?: () => void }) {
+function StepActions({ onBack }: { onBack: () => void }) {
   return (
-    <div className={`mt-5 flex items-center ${onBack ? "justify-between" : "justify-end"}`}>
-      {onBack && (
-        <Button type="button" variant="ghost" onClick={onBack}>
-          Back
-        </Button>
-      )}
-      {onNext && (
-        <Button type="button" onClick={onNext}>
-          Continue
-        </Button>
-      )}
+    <div className="mt-5 flex items-center justify-start">
+      <Button type="button" variant="ghost" onClick={onBack}>
+        Back
+      </Button>
     </div>
   );
 }
