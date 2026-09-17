@@ -40,7 +40,12 @@ function fileToDataUrl(file: File): Promise<string> {
   });
 }
 
+function isVideoDraft(draft: PhotoDraft): boolean {
+  return draft.kind === "new" ? draft.file.type.startsWith("video/") : isVideoUrl(draft.url);
+}
+
 type BodyStyle = Database["public"]["Enums"]["body_style"];
+
 type FuelType = Database["public"]["Enums"]["fuel_type"];
 type Drivetrain = Database["public"]["Enums"]["drivetrain"];
 type VehicleStatus = Database["public"]["Enums"]["vehicle_status"];
