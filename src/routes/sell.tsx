@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, type ReactNode } from "react";
-import { Camera, CarFront, Check, ImagePlus, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import { Camera, CarFront, Check, Copy, ImagePlus, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -57,12 +57,14 @@ type TradeInRecord = {
 };
 
 const emptyTradeIn: Record<string, string> = {
-  status: "Trade In",
+  status: "Trade-In",
   customStatus: "",
   newUsed: "Used",
   vehicleType: "Auto",
   vin: "",
+  vinAuto: "true",
   odometer: "",
+  mileageType: "TMU",
   year: "",
   make: "",
   model: "",
@@ -247,6 +249,37 @@ const WISH_FEATURES = [
   "Keyless Entry",
   "Backup Camera",
   "Navigation System",
+];
+
+const TRADE_COLORS = [
+  "Barcelona Red",
+  "Beige",
+  "Black",
+  "Blue",
+  "Brown",
+  "Burgundy",
+  "Gold",
+  "Gray",
+  "Green",
+  "Orange",
+  "Pink",
+  "Purple",
+  "Red",
+  "Silver",
+  "White",
+  "Yellow",
+];
+const TRADE_YEARS = Array.from({ length: 36 }, (_, index) => String(2027 - index));
+const PURCHASE_SOURCES = [
+  "Auction",
+  "Consignment",
+  "Private Party",
+  "Referral",
+  "Repeat",
+  "Repo",
+  "Trade-In",
+  "Wholesale",
+  "Other",
 ];
 
 const fieldClass =
@@ -812,21 +845,22 @@ function TradeInDialog({
           <aside className="overflow-y-auto border-b border-slate-300 bg-white lg:border-b-0 lg:border-r">
             <ModalSectionTitle title="Vehicle Info" />
             <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1">
-              <ModalChoice
+              <ModalCombo
                 label="Status"
                 value={value.status}
-                options={["Trade In", "Appraisal", "Purchased"]}
+                options={["Trade-In", "Appraisal"]}
                 onChange={(next) => set("status", next)}
               />
-              <ModalInput
+              <ModalCombo
                 label="Custom Status"
                 value={value.customStatus}
+                options={["Clean Title", "Green", "Red", "Wholesale"]}
                 onChange={(next) => set("customStatus", next)}
               />
               <ModalChoice
                 label="New / Used"
                 value={value.newUsed}
-                options={["New", "Used", "Manufacturer Search"]}
+                options={["New", "Used", "Manufacturer Certified"]}
                 onChange={(next) => set("newUsed", next)}
               />
               <ModalChoice
@@ -835,32 +869,63 @@ function TradeInDialog({
                 options={VEHICLE_TYPES}
                 onChange={(next) => set("vehicleType", next)}
               />
-              <ModalInput
-                label="VIN"
-                value={value.vin}
-                maxLength={17}
-                onChange={(next) =>
-                  set(
-                    "vin",
-                    next
-                      .toUpperCase()
-                      .replace(/[^A-HJ-NPR-Z0-9]/g, "")
-                      .slice(0, 17),
-                  )
-                }
-              />
-              <ModalInput
-                label="Odometer"
-                value={value.odometer}
-                inputMode="numeric"
-                onChange={(next) => set("odometer", digitsOnly(next))}
-              />
-              <ModalInput
+              <div className="space-y-1">
+                <Label className="text-[10px] font-medium text-slate-700">VIN</Label>
+                <div className="flex items-center gap-1">
+                  <Input
+                    value={value.vin}
+                    maxLength={17}
+                    onChange={(event) =>
+                      set(
+                        "vin",
+                        event.target.value
+                          .toUpperCase()
+                          .replace(/[^A-HJ-NPR-Z0-9]/g, "")
+                          .slice(0, 17),
+                      )
+                    }
+                    className={`${fieldClass} min-w-0 flex-1`}
+                  />
+                  <button
+                    type="button"
+                    title="Copy VIN"
+                    aria-label="Copy VIN"
+                    className="flex size-8 shrink-0 items-center justify-center border border-slate-300 bg-white text-slate-500 hover:bg-slate-50 hover:text-slate-800"
+                    onClick={() => void navigator.clipboard?.writeText(value.vin)}
+                  >
+                    <Copy className="size-3.5" />
+                  </button>
+                  <label className="flex h-8 shrink-0 cursor-pointer items-center gap-1 border border-slate-300 bg-white px-2 text-[10px] text-slate-700">
+                    <input
+                      type="checkbox"
+                      checked={value.vinAuto === "true"}
+                      onChange={(event) => set("vinAuto", String(event.target.checked))}
+                      className="size-3 accent-cyan-700"
+                    />
+                    Auto
+                  </label>
+                </div>
+              </div>
+              <div className="grid grid-cols-[1fr_95px] gap-2">
+                <ModalInput
+                  label="Odometer"
+                  value={value.odometer}
+                  inputMode="numeric"
+                  onChange={(next) => set("odometer", digitsOnly(next))}
+                />
+                <ModalChoice
+                  label="Mileage Type"
+                  value={value.mileageType}
+                  options={["TMU", "EML", "Exempt"]}
+                  onChange={(next) => set("mileageType", next)}
+                />
+              </div>
+              <ModalChoice
                 label="Year"
                 value={value.year}
-                inputMode="numeric"
-                maxLength={4}
-                onChange={(next) => set("year", digitsOnly(next, 4))}
+                options={TRADE_YEARS}
+                allowEmpty
+                onChange={(next) => set("year", next === "none" ? "" : next)}
               />
               <ModalInput label="Make" value={value.make} onChange={(next) => set("make", next)} />
               <ModalInput label="Model" value={value.model} onChange={(next) => set("model", next)} />
@@ -915,14 +980,16 @@ function TradeInDialog({
                 onChange={(next) => set("horsepower", digitsOnly(next))}
               />
               <div className="grid grid-cols-2 gap-2">
-                <ModalInput
+                <ModalCombo
                   label="Exterior Color"
                   value={value.exteriorColor}
+                  options={TRADE_COLORS}
                   onChange={(next) => set("exteriorColor", next)}
                 />
-                <ModalInput
+                <ModalCombo
                   label="Interior Color"
                   value={value.interiorColor}
+                  options={TRADE_COLORS}
                   onChange={(next) => set("interiorColor", next)}
                 />
               </div>
@@ -1054,10 +1121,10 @@ function TradeInDialog({
                   <div className="grid gap-3 xl:grid-cols-3">
                     <ModalPanel title="Purchase Info">
                       <div className="space-y-2">
-                        <ModalChoice
+                        <ModalCombo
                           label="Source"
                           value={value.source}
-                          options={["Trade-In", "Customer Purchase", "Auction", "Other"]}
+                          options={PURCHASE_SOURCES}
                           onChange={(next) => set("source", next)}
                         />
                         <ModalInput
@@ -1460,6 +1527,38 @@ function ModalInput({
         maxLength={maxLength}
         className={fieldClass}
       />
+    </div>
+  );
+}
+
+function ModalCombo({
+  label,
+  value,
+  options,
+  onChange,
+}: {
+  label: string;
+  value: string;
+  options: readonly string[];
+  onChange: (value: string) => void;
+}) {
+  const listId = `trade-${label.toLowerCase().replace(/[^a-z0-9]+/g, "-")}-options`;
+  return (
+    <div className="space-y-1">
+      <Label className="text-[10px] font-medium text-slate-700">{label}</Label>
+      <Input
+        list={listId}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder="Type or select"
+        autoComplete="off"
+        className={fieldClass}
+      />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
     </div>
   );
 }
