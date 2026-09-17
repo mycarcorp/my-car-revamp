@@ -6,9 +6,11 @@ import {
   Banknote,
   Car,
   Handshake,
+  Linkedin,
   MapPin,
   Search,
   ShieldCheck,
+  Youtube,
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
@@ -48,31 +50,44 @@ const BODY_STYLES = ["SUV", "Sedan", "Truck", "Coupe", "Hatchback", "Convertible
 
 const makeVehicleImages: Record<string, string> = {
   tesla: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
-  chevrolet: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/chevrolet-equinox.png?format=auto&quality=90",
+  chevrolet:
+    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/chevrolet-equinox.png?format=auto&quality=90",
   toyota: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/toyota-camry.png?format=auto&quality=90",
   honda: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/honda-accord.png?format=auto&quality=90",
   ford: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/ford-f150.png?format=auto&quality=90",
   jeep: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/jeep-grand-cherokee.png?format=auto&quality=90",
-  nissan: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
-  hyundai: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/toyota-camry.png?format=auto&quality=90",
+  nissan:
+    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
+  hyundai:
+    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/toyota-camry.png?format=auto&quality=90",
   kia: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/chevrolet-equinox.png?format=auto&quality=90",
   subaru: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/honda-accord.png?format=auto&quality=90",
   bmw: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/ford-f150.png?format=auto&quality=90",
-  mercedes: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/jeep-grand-cherokee.png?format=auto&quality=90",
+  mercedes:
+    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/jeep-grand-cherokee.png?format=auto&quality=90",
   lexus: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/toyota-camry.png?format=auto&quality=90",
   acura: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/honda-accord.png?format=auto&quality=90",
-  mazda: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/chevrolet-equinox.png?format=auto&quality=90",
-  volkswagen: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
-  chrysler: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/jeep-grand-cherokee.png?format=auto&quality=90",
+  mazda:
+    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/chevrolet-equinox.png?format=auto&quality=90",
+  volkswagen:
+    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
+  chrysler:
+    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/jeep-grand-cherokee.png?format=auto&quality=90",
   gmc: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/ford-f150.png?format=auto&quality=90",
-  buick: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/chevrolet-equinox.png?format=auto&quality=90",
-  cadillac: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
-  dodge: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/jeep-grand-cherokee.png?format=auto&quality=90",
+  buick:
+    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/chevrolet-equinox.png?format=auto&quality=90",
+  cadillac:
+    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
+  dodge:
+    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/jeep-grand-cherokee.png?format=auto&quality=90",
 };
 
 function getMakeVehicleImage(make: string) {
   const key = make.trim().toLowerCase();
-  return makeVehicleImages[key] ?? "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90";
+  return (
+    makeVehicleImages[key] ??
+    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90"
+  );
 }
 
 function Home() {
@@ -86,7 +101,9 @@ function Home() {
   const [reduceMotion, setReduceMotion] = useState(false);
   const badges = (settings?.trust_badges ?? []) as { label: string; enabled: boolean }[];
   const displayName =
-    String(user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "").trim().split(/\s+/)[0] ||
+    String(user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "")
+      .trim()
+      .split(/\s+/)[0] ||
     user?.email?.split("@")[0] ||
     "there";
 
@@ -152,7 +169,8 @@ function Home() {
         <div
           className="absolute inset-0 z-10"
           style={{
-            background: "linear-gradient(90deg, rgba(4,9,15,0.94) 0%, rgba(7,17,27,0.85) 20%, rgba(7,17,27,0.68) 38%, rgba(7,17,27,0.3) 58%, rgba(7,17,27,0.06) 76%, rgba(7,17,27,0) 100%)",
+            background:
+              "linear-gradient(90deg, rgba(4,9,15,0.94) 0%, rgba(7,17,27,0.85) 20%, rgba(7,17,27,0.68) 38%, rgba(7,17,27,0.3) 58%, rgba(7,17,27,0.06) 76%, rgba(7,17,27,0) 100%)",
           }}
         />
         <div className="absolute inset-y-0 right-0 z-10 hidden w-[28%] bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.18),_transparent_60%)] md:block" />
@@ -178,8 +196,8 @@ function Home() {
               {user
                 ? "Pick up where you left off and find the right next step for your car journey."
                 : facets?.total
-                ? `Search over 30,000 used vehicles with real monthly payments built in from day one.`
-                : "Inspected used vehicles with a real monthly payment estimate on every listing."}
+                  ? `Search over 30,000 used vehicles with real monthly payments built in from day one.`
+                  : "Inspected used vehicles with a real monthly payment estimate on every listing."}
             </p>
 
             <form
@@ -260,14 +278,14 @@ function Home() {
         </div>
       </section>
 
-        {/* DUAL CTA */}
+      {/* DUAL CTA */}
       <section className="mx-auto grid max-w-7xl gap-6 px-4 py-14 md:grid-cols-2">
         <div className="card-lift rounded-xl border border-border bg-card p-8">
           <Banknote className="size-8 text-accent" />
           <h2 className="mt-4 font-display text-2xl font-bold">Financing made simple</h2>
           <p className="mt-2 text-muted-foreground">
-            Tell us what works for your budget and our finance team lines up lenders for your
-            situation. Submitting the form is a request, not a credit application — no bureau pull.
+            Tell us what works for your budget and our finance team lines up lenders for your situation. Submitting the
+            form is a request, not a credit application — no bureau pull.
           </p>
           <Button asChild className={`${ctaButtonClass} mt-5`}>
             <Link to="/finance">
@@ -279,8 +297,8 @@ function Home() {
           <Handshake className="size-8 text-accent" />
           <h2 className="mt-4 font-display text-2xl font-bold">Sell or trade your car</h2>
           <p className="mt-2 text-muted-foreground">
-            Send us the VIN or plate plus mileage and condition. We review every vehicle by hand and
-            respond with a real number, usually the same business day.
+            Send us the VIN or plate plus mileage and condition. We review every vehicle by hand and respond with a real
+            number, usually the same business day.
           </p>
           <Button asChild className={`${ctaButtonClass} mt-5`}>
             <Link to="/sell">
@@ -289,7 +307,6 @@ function Home() {
           </Button>
         </div>
       </section>
-
 
       {/* INVENTORY */}
       <section className="mx-auto max-w-7xl px-4 pb-14">
@@ -309,8 +326,8 @@ function Home() {
           <div className="mt-6 rounded-xl border border-dashed border-border p-10 text-center">
             <p className="font-medium">Inventory is being loaded.</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Our current stock list is being imported. Call {settings?.phone ?? "(540) 426-3322"} and
-              we'll tell you exactly what's on the lot today.
+              Our current stock list is being imported. Call {settings?.phone ?? "(540) 426-3322"} and we'll tell you
+              exactly what's on the lot today.
             </p>
             <Button asChild className={`${ctaButtonClass} mt-4`}>
               <Link to="/contact">Ask about a specific vehicle</Link>
@@ -403,9 +420,7 @@ function Home() {
               </div>
               <div className="mt-4 flex-1">
                 <h3 className="font-display text-xl font-bold text-foreground">Go the distance</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Vehicles with 40 MPG/MPGe or greater.
-                </p>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">Vehicles with 40 MPG/MPGe or greater.</p>
               </div>
               <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
                 Shop fuel efficient <ArrowRight className="size-4" />
@@ -496,6 +511,75 @@ function Home() {
           ))}
         </div>
       </section>
+
+      {/* FOOTER */}
+      <footer className="border-t border-slate-800 bg-[#07111b] text-slate-300">
+        <div className="mx-auto flex max-w-7xl flex-col items-center justify-between gap-4 px-4 py-6 sm:flex-row">
+          <p className="text-center text-xs text-slate-400 sm:text-left">
+            © {new Date().getFullYear()} MyCar Corporation. All rights reserved.
+          </p>
+
+          <div className="flex items-center gap-2" aria-label="MyCar social media links">
+            <a
+              href="https://www.youtube.com/@MyCarCorporation"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="MyCar Corporation on YouTube"
+              title="YouTube"
+              className="inline-flex size-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-slate-300 transition hover:border-[#F7941D] hover:bg-[#F7941D] hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D]"
+            >
+              <Youtube className="size-4" aria-hidden="true" />
+            </a>
+
+            <a
+              href="https://www.tiktok.com/@mycarcorporation?is_from_webapp=1&sender_device=pc"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="MyCar Corporation on TikTok"
+              title="TikTok"
+              className="inline-flex size-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-slate-300 transition hover:border-[#F7941D] hover:bg-[#F7941D] hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D]"
+            >
+              <svg
+                viewBox="0 0 24 24"
+                className="size-4"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                aria-hidden="true"
+              >
+                <path d="M15 3v10.5a4.5 4.5 0 1 1-4.5-4.5" />
+                <path d="M15 3c.7 2.2 2.3 3.8 4.5 4.5" />
+              </svg>
+            </a>
+
+            <a
+              href="https://www.linkedin.com/company/108650053/"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="MyCar Corporation on LinkedIn"
+              title="LinkedIn"
+              className="inline-flex size-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-slate-300 transition hover:border-[#F7941D] hover:bg-[#F7941D] hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D]"
+            >
+              <Linkedin className="size-4" aria-hidden="true" />
+            </a>
+
+            <a
+              href="https://x.com/MyCarCorp1"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="MyCar Corporation on X"
+              title="X"
+              className="inline-flex size-9 items-center justify-center rounded-full border border-white/15 bg-white/5 text-slate-300 transition hover:border-[#F7941D] hover:bg-[#F7941D] hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D]"
+            >
+              <svg viewBox="0 0 24 24" className="size-3.5" fill="currentColor" aria-hidden="true">
+                <path d="M18.244 2.25h3.308l-7.227 8.26 8.502 11.24h-6.657l-5.214-6.817L4.99 21.75H1.68l7.73-8.835L1.254 2.25H8.08l4.713 6.231 5.45-6.231Zm-1.161 17.52h1.833L7.084 4.126H5.117L17.083 19.77Z" />
+              </svg>
+            </a>
+          </div>
+        </div>
+      </footer>
     </>
   );
 }
