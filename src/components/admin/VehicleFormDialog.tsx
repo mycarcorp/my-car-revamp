@@ -611,13 +611,15 @@ export function VehicleFormDialog({
           >
             <ImagePlus className={`mb-2 size-8 ${isDraggingFiles ? "text-[#F7941D]" : "text-muted-foreground"}`} />
             <p className="text-sm font-semibold text-foreground">
-              {isDraggingFiles ? "Drop photos here" : "Drag and drop vehicle photos"}
+              {isDraggingFiles ? "Drop photos or videos here" : "Drag and drop vehicle photos or videos"}
             </p>
-            <p className="mt-1 text-xs text-muted-foreground">or click to browse JPG, PNG, or WebP files under 10 MB</p>
+            <p className="mt-1 text-xs text-muted-foreground">
+              or click to browse JPG, PNG, WebP under 10 MB — or MP4, WebM, MOV videos under 25 MB
+            </p>
             <input
               id="vehicle-photo-upload"
               type="file"
-              accept="image/jpeg,image/png,image/webp"
+              accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
               multiple
               className="hidden"
               onChange={(event) => {
@@ -625,6 +627,7 @@ export function VehicleFormDialog({
                 event.target.value = "";
               }}
             />
+
           </div>
 
           {photos.length === 0 ? (
