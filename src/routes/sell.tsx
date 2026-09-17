@@ -440,8 +440,13 @@ function SellPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f4f7f7] px-3 py-6 sm:px-5">
-      <div className="mx-auto w-full max-w-[1200px]">
+    <div className="min-h-screen bg-surface">
+      <PageHero
+        eyebrow="Sell or trade"
+        title="Know what your car is worth."
+        subtitle="Send the VIN or plate with mileage and condition. We reply with a real number, usually the same day."
+      />
+      <div className="mx-auto w-full max-w-[1200px] px-3 py-8 sm:px-5">
         <div
           ref={leadFormScopeRef}
           className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 [&_button]:rounded-lg [&_input]:h-9 [&_input]:rounded-lg [&_label]:text-xs [&_textarea]:rounded-lg [&_textarea]:border-slate-300 [&_textarea]:text-sm"
