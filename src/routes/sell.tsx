@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LeadForm } from "@/components/LeadForm";
+import { PageHero } from "@/components/PageHero";
 import { supabase } from "@/integrations/supabase/app-client";
 import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
 import type { VehicleWithPhotos } from "@/lib/queries";
@@ -441,6 +442,11 @@ function SellPage() {
 
   return (
     <div className="min-h-screen bg-surface">
+      <PageHero
+        eyebrow="Sell or trade"
+        title="Know what your car is worth."
+        subtitle="Send the VIN or plate with mileage and condition. We reply with a real number, usually the same day."
+      />
       <div className="mx-auto w-full max-w-[1200px] px-3 py-8 sm:px-5">
         <div
           ref={leadFormScopeRef}
@@ -483,13 +489,9 @@ function SellPage() {
               trade_in_records: JSON.stringify(tradeIns),
             })}
           >
-            <div className="grid items-start gap-5 lg:grid-cols-[260px_minmax(0,1fr)]">
-              <section className="space-y-4 border border-slate-200 bg-slate-50 p-4">
-                <div>
-                  <h2 className="text-sm font-semibold text-slate-900">Your Information</h2>
-                  <p className="mt-1 text-xs leading-5 text-slate-500">Tell us how to reach you about your offer.</p>
-                </div>
-                <div className="grid gap-3 [&_input]:!h-10 [&_label]:!text-xs">
+            <div className="space-y-5">
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 [&_input]:!h-10 [&_label]:!text-xs">
                   <CompactField label="Full Name" htmlFor="customer-full-name">
                     <Input
                       id="customer-full-name"
@@ -541,10 +543,7 @@ function SellPage() {
                     />
                   </CompactField>
                 </div>
-              </section>
 
-              <div className="space-y-5">
-                <div className="space-y-4">
                 <div
                   className="grid gap-1 rounded-xl bg-slate-100 p-1 sm:grid-cols-3"
                   role="radiogroup"
@@ -1940,7 +1939,15 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function VehicleImage({ vehicle, url, className }: { vehicle: VehicleWithPhotos; url?: string | undefined; className: string }) {
+function VehicleImage({
+  vehicle,
+  url,
+  className,
+}: {
+  vehicle: VehicleWithPhotos;
+  url?: string | undefined;
+  className: string;
+}) {
   return url ? (
     <img
       src={url}
