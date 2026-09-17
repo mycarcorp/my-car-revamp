@@ -85,27 +85,37 @@ export const Route = createFileRoute("/api/public/vehicle-photos/$")({
           return new Response("Not configured", { status: 500 });
         }
 
+        // Videos are seekable, so the browser's Range request is forwarded and
+        // the partial response (206 + content-range) is passed straight back.
+        const range = request.headers.get("range");
+
         for (const target of storageTargets) {
+          const upstreamHeaders: Record<string, string> = {
+            apikey: target.key,
+            Authorization: `Bearer ${target.key}`,
+          };
+          if (range) upstreamHeaders["Range"] = range;
           const upstream = await fetch(
             `${target.url}/storage/v1/object/vehicle-photos/${path}`,
-            {
-              headers: { apikey: target.key, Authorization: `Bearer ${target.key}` },
-              cache: "no-store",
-            },
+            { headers: upstreamHeaders, cache: "no-store" },
           ).catch(() => null);
 
-          if (upstream?.ok && upstream.body) {
-            return new Response(upstream.body, {
-              status: 200,
-              headers: {
-                "content-type": upstream.headers.get("content-type") ?? "image/jpeg",
-                "cache-control": versioned
-                  ? "public, max-age=31536000, immutable"
-                  : "no-cache, must-revalidate",
-              },
+          if (upstream && (upstream.ok || upstream.status === 206) && upstream.body) {
+            const headers = new Headers({
+              "content-type": upstream.headers.get("content-type") ?? fallbackContentType(path),
+              "cache-control": versioned
+                ? "public, max-age=31536000, immutable"
+                : "no-cache, must-revalidate",
+              "accept-ranges": "bytes",
             });
+            const contentRange = upstream.headers.get("content-range");
+            const contentLength = upstream.headers.get("content-length");
+            if (contentRange) headers.set("content-range", contentRange);
+            if (contentLength) headers.set("content-length", contentLength);
+            return new Response(upstream.body, { status: upstream.status === 206 ? 206 : 200, headers });
           }
         }
+
 
         return new Response("Not found", { status: 404 });
       },
