@@ -239,6 +239,7 @@ export function VehicleFormDialog({
   const [photos, setPhotos] = useState<PhotoDraft[]>([]);
   const [existing, setExisting] = useState<VehiclePhoto[]>([]);
   const [saving, setSaving] = useState(false);
+  const [uploadLabel, setUploadLabel] = useState<string | null>(null);
   const [decoding, setDecoding] = useState(false);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [draggedPhotoIndex, setDraggedPhotoIndex] = useState<number | null>(null);
@@ -744,7 +745,7 @@ export function VehicleFormDialog({
           )}
           <Button onClick={() => void submit()} disabled={saving}>
             {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-            {vehicle ? "Save changes" : "Add vehicle"}
+            {uploadLabel ?? (vehicle ? "Save changes" : "Add vehicle")}
           </Button>
         </DialogFooter>
       </DialogContent>
