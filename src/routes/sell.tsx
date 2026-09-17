@@ -65,10 +65,118 @@ const emptyWishList: WishListState = {
   features: [],
 };
 
-const BODY_TYPES = ["SUV", "Sedan", "Truck", "Coupe", "Hatchback", "Convertible", "Minivan", "Wagon", "Van"];
-const TRANSMISSIONS = ["Automatic", "Manual", "CVT"];
-const DRIVETRAINS = ["AWD/4WD", "FWD", "RWD"];
-const FUEL_TYPES = ["Gas", "Diesel", "Electric", "Hybrid", "Plug-in Hybrid"];
+const VEHICLE_TYPES = ["Auto", "Motorcycle", "ATV", "Watercraft", "Snowmobile", "RV", "Classic", "Exotic", "Other"];
+const BODY_TYPES = [
+  "Sedan",
+  "Coupe",
+  "Wagon",
+  "SUV",
+  "Hatchback",
+  "Convertible",
+  "Van",
+  "Pickup",
+  "Cab_Chassis",
+  "Cargo",
+  "Cutaway",
+  "Passenger",
+];
+const TRANSMISSIONS = ["Automatic", "Manual"];
+const DRIVETRAINS = ["AWD", "4WD", "FWD", "RWD", "2WD"];
+const FUEL_TYPES = ["Gasoline", "Diesel", "Hybrid", "Electric", "Flexible_Fuel", "Natural_Gas", "Hydrogen"];
+const COLORS = [
+  "Any Color",
+  "Beige",
+  "Black",
+  "Blue",
+  "Brown",
+  "Burgundy",
+  "Charcoal",
+  "Gold",
+  "Gray",
+  "Green",
+  "Off-White",
+  "Orange",
+  "Pink",
+  "Purple",
+  "Red",
+  "Silver",
+  "Tan",
+  "Turquoise",
+  "White",
+  "Yellow",
+];
+const MAX_PRICES = [
+  "$10,000",
+  "$12,000",
+  "$14,000",
+  "$15,000",
+  "$16,000",
+  "$18,000",
+  "$20,000",
+  "$22,000",
+  "$24,000",
+  "$25,000",
+  "$26,000",
+  "$28,000",
+  "$30,000",
+  "$35,000",
+  "$40,000",
+  "$45,000",
+  "$50,000",
+];
+const MAX_MILEAGES = ["Any Mileage", "15,000", "30,000", "45,000", "60,000", "75,000", "120,000", "200,000"];
+const MAKE_MODELS = [
+  "AODES Desert Cross 1000-3",
+  "AODES Desert Cross 1000-3 HVA",
+  "AODES Desert Cross 1000-6 HVA",
+  "AODES E-Trail Cross Dump Bed",
+  "AODES E-Trail Cross Golf",
+  "AODES Jungle Cross 1000 LT-2",
+  "AODES Jungle Cross 1000 LT-5",
+  "AODES Jungle Cross 800 ST-2",
+  "AODES Jungle Cross 800 ST-5",
+  "AODES Path Cross 1000 L",
+  "AODES Path Cross 1000 XL",
+  "AODES Path Cross 1000 SX",
+  "AODES Path Cross 1000 S",
+  "AODES Path Cross 650 L",
+  "AODES Path Cross 650 S",
+  "AODES Trail Cross 250 Dump Bed",
+  "AODES Trail Cross 250 Go",
+  "AODES Trail Cross 400 Dump Bed",
+  "AODES Trail Cross 400 Go",
+  "AODES Work Cross 1000-3",
+  "Arctic Cat Alterra",
+  "Arctic Cat Prowler",
+  "Arctic Cat Wildcat",
+  "Bennche Big Horn",
+  "Bennche Gray Wolf",
+  "Bennche Spire",
+  "Bombardier Outlander",
+  "Bombardier Quest",
+  "Bombardier Rally",
+  "Bombardier Traxter",
+  "CFMOTO CForce 1000",
+  "Can-Am Commander",
+  "Can-Am DS",
+  "Can-Am Defender",
+  "Kawasaki Brute Force",
+  "Kawasaki KFX",
+  "Kawasaki Mule",
+  "Kawasaki Teryx",
+  "Polaris General",
+  "Polaris Ranger",
+  "Polaris RZR",
+  "Polaris Sportsman",
+  "Suzuki KingQuad",
+  "Suzuki QuadSport",
+  "Yamaha Grizzly",
+  "Yamaha Kodiak",
+  "Yamaha Raptor",
+  "Yamaha Viking",
+  "Yamaha Wolverine",
+  "Yamaha YFZ",
+];
 const WISH_FEATURES = [
   "Dual Power Seats",
   "Leather Seats",
@@ -226,9 +334,9 @@ function SellPage() {
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">New or Used</SelectItem>
                         <SelectItem value="new">New</SelectItem>
                         <SelectItem value="used">Used</SelectItem>
+                        <SelectItem value="manufacturer-search">Manufacturer Search</SelectItem>
                       </SelectContent>
                     </Select>
                   </CompactSelect>
@@ -242,24 +350,23 @@ function SellPage() {
                         <SelectValue placeholder="All types" />
                       </SelectTrigger>
                       <SelectContent>
-                        <SelectItem value="all">All Types</SelectItem>
-                        <SelectItem value="car">Car</SelectItem>
-                        <SelectItem value="suv">SUV</SelectItem>
-                        <SelectItem value="truck">Truck</SelectItem>
-                        <SelectItem value="van">Van / Minivan</SelectItem>
+                        {VEHICLE_TYPES.map((option) => (
+                          <SelectItem key={option} value={option.toLowerCase()}>
+                            {option}
+                          </SelectItem>
+                        ))}
                       </SelectContent>
                     </Select>
                   </CompactSelect>
 
-                  <CompactField label="Make and Model" htmlFor="wish-make-model">
-                    <Input
-                      id="wish-make-model"
-                      value={wishList.makeModel}
-                      onChange={(event) => updateWishList("makeModel", event.target.value)}
-                      placeholder="Toyota RAV4"
-                      className={fieldClass}
-                    />
-                  </CompactField>
+                  <DatalistField
+                    id="wish-make-model"
+                    label="Make and Model"
+                    value={wishList.makeModel}
+                    options={MAKE_MODELS}
+                    onChange={(value) => updateWishList("makeModel", value)}
+                    placeholder="Type or select a make and model"
+                  />
 
                   <OptionSelect
                     label="Body Type"
@@ -279,66 +386,65 @@ function SellPage() {
                     />
                   </CompactField>
 
-                  <CompactField label="Max Price" htmlFor="wish-max-price">
-                    <Input
-                      id="wish-max-price"
-                      value={wishList.maxPrice}
-                      onChange={(event) => updateWishList("maxPrice", digitsOnly(event.target.value))}
-                      inputMode="numeric"
-                      placeholder="$25,000"
-                      className={fieldClass}
-                    />
-                  </CompactField>
+                  <DatalistField
+                    id="wish-max-price"
+                    label="Max Price"
+                    value={wishList.maxPrice}
+                    options={MAX_PRICES}
+                    onChange={(value) => updateWishList("maxPrice", value)}
+                    placeholder="Type or select a price"
+                    inputMode="decimal"
+                  />
 
-                  <CompactField label="Max Mileage" htmlFor="wish-max-mileage">
-                    <Input
-                      id="wish-max-mileage"
-                      value={wishList.maxMileage}
-                      onChange={(event) => updateWishList("maxMileage", digitsOnly(event.target.value))}
-                      inputMode="numeric"
-                      placeholder="100,000"
-                      className={fieldClass}
-                    />
-                  </CompactField>
+                  <DatalistField
+                    id="wish-max-mileage"
+                    label="Max Mileage"
+                    value={wishList.maxMileage}
+                    options={MAX_MILEAGES}
+                    onChange={(value) => updateWishList("maxMileage", value)}
+                    placeholder="Any Mileage"
+                    inputMode="numeric"
+                  />
 
-                  <OptionSelect
+                  <DatalistField
+                    id="wish-transmission"
                     label="Transmission"
-                    value={wishList.transmission}
+                    value={wishList.transmission === "all" ? "" : wishList.transmission}
                     options={TRANSMISSIONS}
-                    onChange={(value) => updateWishList("transmission", value)}
+                    onChange={(value) => updateWishList("transmission", value || "all")}
                   />
-                  <OptionSelect
+                  <DatalistField
+                    id="wish-drivetrain"
                     label="Drive Train"
-                    value={wishList.drivetrain}
+                    value={wishList.drivetrain === "all" ? "" : wishList.drivetrain}
                     options={DRIVETRAINS}
-                    onChange={(value) => updateWishList("drivetrain", value)}
+                    onChange={(value) => updateWishList("drivetrain", value || "all")}
                   />
-                  <OptionSelect
+                  <DatalistField
+                    id="wish-fuel-type"
                     label="Fuel Type"
-                    value={wishList.fuelType}
+                    value={wishList.fuelType === "all" ? "" : wishList.fuelType}
                     options={FUEL_TYPES}
-                    onChange={(value) => updateWishList("fuelType", value)}
+                    onChange={(value) => updateWishList("fuelType", value || "all")}
                   />
 
-                  <CompactField label="Exterior Color" htmlFor="wish-exterior-color">
-                    <Input
-                      id="wish-exterior-color"
-                      value={wishList.exteriorColor}
-                      onChange={(event) => updateWishList("exteriorColor", event.target.value)}
-                      placeholder="Any color"
-                      className={fieldClass}
-                    />
-                  </CompactField>
+                  <DatalistField
+                    id="wish-exterior-color"
+                    label="Exterior Color"
+                    value={wishList.exteriorColor}
+                    options={COLORS}
+                    onChange={(value) => updateWishList("exteriorColor", value === "Any Color" ? "" : value)}
+                    placeholder="Any Color"
+                  />
 
-                  <CompactField label="Interior Color" htmlFor="wish-interior-color">
-                    <Input
-                      id="wish-interior-color"
-                      value={wishList.interiorColor}
-                      onChange={(event) => updateWishList("interiorColor", event.target.value)}
-                      placeholder="Any color"
-                      className={fieldClass}
-                    />
-                  </CompactField>
+                  <DatalistField
+                    id="wish-interior-color"
+                    label="Interior Color"
+                    value={wishList.interiorColor}
+                    options={COLORS}
+                    onChange={(value) => updateWishList("interiorColor", value === "Any Color" ? "" : value)}
+                    placeholder="Any Color"
+                  />
                 </div>
 
                 <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-4">
@@ -723,6 +829,45 @@ function CompactSelect({ label, children }: { label: string; children: ReactNode
   );
 }
 
+function DatalistField({
+  id,
+  label,
+  value,
+  options,
+  onChange,
+  placeholder = "Type or select",
+  inputMode,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  options: readonly string[];
+  onChange: (value: string) => void;
+  placeholder?: string;
+  inputMode?: "text" | "numeric" | "decimal";
+}) {
+  const listId = `${id}-options`;
+  return (
+    <CompactField label={label} htmlFor={id}>
+      <Input
+        id={id}
+        list={listId}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        autoComplete="off"
+        className={fieldClass}
+      />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
+    </CompactField>
+  );
+}
+
 function OptionSelect({
   label,
   value,
@@ -834,11 +979,19 @@ function includesText(value: string | null | undefined, expected: string) {
   return (value ?? "").toLowerCase().includes(expected.trim().toLowerCase());
 }
 
+function numericValue(value: string) {
+  const numeric = Number(value.replace(/[^\d.]/g, ""));
+  return Number.isFinite(numeric) ? numeric : 0;
+}
+
 function matchesWishList(vehicle: VehicleWithPhotos, wish: WishListState) {
   if (wish.makeModel && !includesText(`${vehicle.make} ${vehicle.model} ${vehicle.trim ?? ""}`, wish.makeModel))
     return false;
-  if (wish.bodyType !== "all" && vehicle.body_style !== wish.bodyType) return false;
-  if (wish.vehicleType !== "all") {
+  if (wish.bodyType !== "all") {
+    const selectedBody = wish.bodyType === "Pickup" ? "Truck" : wish.bodyType.replace("_", " ");
+    if (!includesText(vehicle.body_style, selectedBody)) return false;
+  }
+  if (wish.vehicleType !== "all" && wish.vehicleType !== "auto") {
     const body = vehicle.body_style.toLowerCase();
     const matchesType =
       wish.vehicleType === "car"
@@ -849,8 +1002,9 @@ function matchesWishList(vehicle: VehicleWithPhotos, wish: WishListState) {
     if (!matchesType) return false;
   }
   if (wish.minYear && vehicle.year < Number(wish.minYear)) return false;
-  if (wish.maxPrice && Number(vehicle.price_cents) / 100 > Number(wish.maxPrice)) return false;
-  if (wish.maxMileage && vehicle.mileage > Number(wish.maxMileage)) return false;
+  if (wish.maxPrice && Number(vehicle.price_cents) / 100 > numericValue(wish.maxPrice)) return false;
+  if (wish.maxMileage && wish.maxMileage !== "Any Mileage" && vehicle.mileage > numericValue(wish.maxMileage))
+    return false;
   if (wish.transmission !== "all" && !includesText(vehicle.transmission, wish.transmission)) return false;
   if (wish.drivetrain !== "all" && !includesText(vehicle.drivetrain, wish.drivetrain)) return false;
   if (wish.fuelType !== "all" && !includesText(vehicle.fuel_type, wish.fuelType)) return false;
