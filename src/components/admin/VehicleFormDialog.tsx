@@ -101,36 +101,83 @@ const empty: FormState = {
   slug: "",
 };
 
+function matchBodyStyle(text: string | undefined, doors: string | undefined): BodyStyle | undefined {
+  const t = (text ?? "").toLowerCase();
+  if (!t) return undefined;
+  if (t.includes("convertible") || t.includes("cabriolet") || t.includes("roadster")) return "Convertible";
+  if (t.includes("pickup") || t.includes("truck")) return "Truck";
+  if (t.includes("minivan")) return "Minivan";
+  if (t.includes("van")) return "Van";
+  if (t.includes("wagon") || t.includes("estate")) return "Wagon";
+  if (t.includes("hatchback") || t.includes("liftback")) return "Hatchback";
+  if (t.includes("coupe")) return "Coupe";
+  if (t.includes("sport utility") || t.includes("suv") || t.includes("crossover")) return "SUV";
+  if (t.includes("sedan") || t.includes("saloon")) return "Sedan";
+  if (doors === "2") return "Coupe";
+  return BODY_STYLES.find((option) => t.includes(option.toLowerCase()));
+}
+
 function applyDecodedVehicle(form: FormState, decoded: VinDecodedVehicle): FormState {
-  const body = BODY_STYLES.find((option) => decoded.bodyStyle?.toLowerCase().includes(option.toLowerCase()));
-  const fuelText = decoded.fuelType?.toLowerCase() ?? "";
-  const fuel =
-    fuelText.includes("plug-in") || fuelText.includes("plug in")
-      ? "Plug-in Hybrid"
-      : FUEL_TYPES.find((option) => fuelText.includes(option.toLowerCase()));
+  const body = matchBodyStyle(decoded.bodyStyle ?? decoded.vehicleType, decoded.doors);
+  const fuelText = `${decoded.electrification ?? ""} ${decoded.fuelType ?? ""} ${decoded.fuelTypeSecondary ?? ""}`.toLowerCase();
+  const fuel = fuelText.includes("plug-in") || fuelText.includes("plug in")
+    ? "Plug-in Hybrid"
+    : fuelText.includes("hybrid")
+      ? "Hybrid"
+      : fuelText.includes("electric") && !fuelText.includes("gas")
+        ? "Electric"
+        : fuelText.includes("diesel")
+          ? "Diesel"
+          : fuelText.includes("gasoline") || fuelText.includes("petrol") || fuelText.includes("flexible")
+            ? "Gas"
+            : FUEL_TYPES.find((option) => fuelText.includes(option.toLowerCase()));
+  const dt = decoded.drivetrain?.toLowerCase() ?? "";
   const drivetrain =
-    decoded.drivetrain?.toLowerCase().includes("all") || decoded.drivetrain?.toLowerCase().includes("4wd")
+    dt.includes("all") || dt.includes("4wd") || dt.includes("4x4")
       ? "AWD/4WD"
-      : decoded.drivetrain?.toLowerCase().includes("rear")
+      : dt.includes("rear")
         ? "RWD"
-        : decoded.drivetrain?.toLowerCase().includes("front")
+        : dt.includes("front")
           ? "FWD"
           : undefined;
+
+  const extraFeatures = [
+    decoded.doors ? `${decoded.doors} doors` : null,
+    decoded.seats ? `${decoded.seats} seats` : null,
+    decoded.mpgCity && decoded.mpgHighway ? `${decoded.mpgCity} city / ${decoded.mpgHighway} hwy MPG` : null,
+  ].filter((v): v is string => Boolean(v));
+  const decodedFeatures = [...decoded.features, ...extraFeatures];
+  const existingFeatures = form.features
+    .split("\n")
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const mergedFeatures = Array.from(new Set([...existingFeatures, ...decodedFeatures]));
+
+  const year = decoded.year ? String(decoded.year) : form.year;
+  const make = decoded.make ?? form.make;
+  const model = decoded.model ?? form.model;
+  const trim = decoded.trim ?? form.trim;
 
   return {
     ...form,
     vin: decoded.vin,
-    year: decoded.year ? String(decoded.year) : form.year,
-    make: decoded.make ?? form.make,
-    model: decoded.model ?? form.model,
-    trim: decoded.trim ?? form.trim,
+    stock_number: form.stock_number.trim() || decoded.vin.slice(-8),
+    year,
+    make,
+    model,
+    trim,
     body_style: body ?? form.body_style,
     fuel_type: fuel ?? form.fuel_type,
     drivetrain: drivetrain ?? form.drivetrain,
     transmission: decoded.transmission ?? form.transmission,
     engine: decoded.engine ?? form.engine,
+    mpg_combined: decoded.mpgCombined ? String(decoded.mpgCombined) : form.mpg_combined,
+    description: form.description.trim() || decoded.description || "",
+    features: mergedFeatures.join("\n"),
+    slug: form.slug.trim() || vehicleSlug({ year: Number(year), make, model, trim, vin: decoded.vin }),
   };
 }
+
 
 function fromVehicle(v: Vehicle): FormState {
   return {
