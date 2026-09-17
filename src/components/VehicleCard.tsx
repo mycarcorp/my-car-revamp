@@ -38,14 +38,26 @@ export function VehicleCard({
     >
       <div className="relative aspect-[4/3] overflow-hidden bg-muted">
         {cover && !coverFailed ? (
-          <img
-            src={cover.url}
-            alt={cover.alt ?? vehicleTitle(vehicle)}
-            loading="lazy"
-            onError={() => setCoverFailed(true)}
-            className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
-          />
+          isVideoUrl(cover.url) ? (
+            <video
+              src={cover.url}
+              muted
+              playsInline
+              preload="metadata"
+              onError={() => setCoverFailed(true)}
+              className="size-full bg-black object-cover"
+            />
+          ) : (
+            <img
+              src={cover.url}
+              alt={cover.alt ?? vehicleTitle(vehicle)}
+              loading="lazy"
+              onError={() => setCoverFailed(true)}
+              className="size-full object-cover transition-transform duration-300 group-hover:scale-105"
+            />
+          )
         ) : (
+
           <div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
             <Camera className="size-6" />
             <span className="text-xs">Photos coming soon</span>
