@@ -1,11 +1,12 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState, type ReactNode } from "react";
-import { Camera, CarFront, Check, Plus, Search, SlidersHorizontal, X } from "lucide-react";
+import { Camera, CarFront, Check, ImagePlus, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LeadForm } from "@/components/LeadForm";
 import { supabase } from "@/integrations/supabase/app-client";
@@ -47,6 +48,66 @@ type WishListState = {
   exteriorColor: string;
   interiorColor: string;
   features: string[];
+};
+
+type TradeInRecord = {
+  id: string;
+  data: Record<string, string>;
+  photoNames: string[];
+};
+
+const emptyTradeIn: Record<string, string> = {
+  status: "Trade In",
+  customStatus: "",
+  newUsed: "Used",
+  vehicleType: "Auto",
+  vin: "",
+  odometer: "",
+  year: "",
+  make: "",
+  model: "",
+  trim: "",
+  engine: "",
+  transmission: "",
+  drivetrain: "",
+  doors: "",
+  cylinders: "",
+  bodyType: "",
+  fuelType: "",
+  horsepower: "",
+  exteriorColor: "",
+  interiorColor: "",
+  mpgCity: "",
+  mpgHighway: "",
+  vehicleWeight: "",
+  gvw: "",
+  stockNumber: "",
+  appraisalDate: new Date().toISOString().slice(0, 10),
+  location: "",
+  condition: "",
+  appraiserName: "",
+  salesRep: "",
+  targetSellingPrice: "",
+  recondition: "",
+  packs: "",
+  additional: "",
+  grossProfit: "",
+  appraisalValue: "",
+  source: "Trade-In",
+  customer: "",
+  lienholder: "",
+  lienAccountNumber: "",
+  payoffAmount: "",
+  payoffDueDate: "",
+  perDiem: "",
+  memo: "",
+  titleOwner: "",
+  titleState: "",
+  titleBrand: "",
+  licenseNumber: "",
+  licenseState: "",
+  licenseExpiryDate: "",
+  notes: "",
 };
 
 const emptyWishList: WishListState = {
@@ -206,6 +267,11 @@ function SellPage() {
   const [pickerTab, setPickerTab] = useState<PickerTab>("matching");
   const [inventorySearch, setInventorySearch] = useState("");
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [tradeInOpen, setTradeInOpen] = useState(false);
+  const [tradeInTab, setTradeInTab] = useState<"details" | "books" | "market">("details");
+  const [tradeInDraft, setTradeInDraft] = useState<Record<string, string>>({ ...emptyTradeIn });
+  const [tradeInPhotoNames, setTradeInPhotoNames] = useState<string[]>([]);
+  const [tradeIns, setTradeIns] = useState<TradeInRecord[]>([]);
 
   const { data: inventory = [], isLoading: inventoryLoading } = useQuery({
     queryKey: ["sell", "available-inventory"],
@@ -271,6 +337,32 @@ function SellPage() {
     setPickerOpen(true);
   }
 
+  function openNewTradeIn() {
+    setTradeInDraft({ ...emptyTradeIn, vin, odometer: mileage, condition });
+    setTradeInPhotoNames([]);
+    setTradeInTab("details");
+    setTradeInOpen(true);
+  }
+
+  function saveTradeIn(closeAfterSave = true) {
+    const record: TradeInRecord = {
+      id: `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`,
+      data: { ...tradeInDraft },
+      photoNames: [...tradeInPhotoNames],
+    };
+    setTradeIns((current) => [...current, record]);
+    if (tradeInDraft.vin) setVin(tradeInDraft.vin);
+    if (tradeInDraft.odometer) setMileage(digitsOnly(tradeInDraft.odometer));
+    if ([tradeInDraft.year, tradeInDraft.make, tradeInDraft.model, tradeInDraft.trim].some(Boolean)) {
+      setYmm([tradeInDraft.year, tradeInDraft.make, tradeInDraft.model, tradeInDraft.trim].filter(Boolean).join(" "));
+    }
+    if (closeAfterSave) setTradeInOpen(false);
+    else {
+      setTradeInDraft({ ...emptyTradeIn });
+      setTradeInPhotoNames([]);
+    }
+  }
+
   return (
     <div className="min-h-screen bg-[#f4f7f7] px-3 py-5 sm:px-5">
       <div className="mx-auto w-full max-w-[1180px]">
@@ -309,6 +401,7 @@ function SellPage() {
                   price_cents: vehicle.price_cents,
                 })),
               ),
+              trade_in_records: JSON.stringify(tradeIns),
             })}
           >
             <div className="space-y-3">
@@ -589,6 +682,49 @@ function SellPage() {
                   </div>
                 </div>
               </Panel>
+
+              <Panel
+                title={`Trade-In Records (${tradeIns.length})`}
+                description="Add detailed information for each vehicle included with this appraisal request."
+              >
+                <div className="space-y-2">
+                  {tradeIns.map((record, index) => (
+                    <div
+                      key={record.id}
+                      className="flex flex-wrap items-center justify-between gap-3 border border-slate-300 bg-slate-50 px-3 py-2"
+                    >
+                      <div className="min-w-0">
+                        <p className="truncate text-xs font-semibold text-slate-800">
+                          {record.data.year || record.data.make || record.data.model
+                            ? [record.data.year, record.data.make, record.data.model, record.data.trim]
+                                .filter(Boolean)
+                                .join(" ")
+                            : `Trade-In Record ${index + 1}`}
+                        </p>
+                        <p className="mt-0.5 text-[10px] text-slate-500">
+                          VIN: {record.data.vin || "Not provided"} · Odometer: {record.data.odometer || "Not provided"}
+                          {record.photoNames.length > 0 ? ` · ${record.photoNames.length} photo(s)` : ""}
+                        </p>
+                      </div>
+                      <Button
+                        type="button"
+                        variant="ghost"
+                        size="sm"
+                        className="h-7 text-red-600 hover:bg-red-50 hover:text-red-700"
+                        onClick={() => setTradeIns((current) => current.filter((item) => item.id !== record.id))}
+                      >
+                        <Trash2 className="size-3.5" />
+                        Remove
+                      </Button>
+                    </div>
+                  ))}
+
+                  <Button type="button" variant="outline" className="h-8 rounded-sm text-xs" onClick={openNewTradeIn}>
+                    <Plus className="size-3.5" />
+                    Add New Trade-In
+                  </Button>
+                </div>
+              </Panel>
             </div>
           </LeadForm>
         </div>
@@ -608,7 +744,501 @@ function SellPage() {
         onToggle={toggleSelectedVehicle}
         loading={inventoryLoading}
       />
+
+      <TradeInDialog
+        open={tradeInOpen}
+        onOpenChange={setTradeInOpen}
+        tab={tradeInTab}
+        onTabChange={setTradeInTab}
+        value={tradeInDraft}
+        onChange={setTradeInDraft}
+        photoNames={tradeInPhotoNames}
+        onPhotoNamesChange={setTradeInPhotoNames}
+        onSave={() => saveTradeIn(true)}
+        onSaveAndAddAnother={() => saveTradeIn(false)}
+      />
     </div>
+  );
+}
+
+function TradeInDialog({
+  open,
+  onOpenChange,
+  tab,
+  onTabChange,
+  value,
+  onChange,
+  photoNames,
+  onPhotoNamesChange,
+  onSave,
+  onSaveAndAddAnother,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  tab: "details" | "books" | "market";
+  onTabChange: (tab: "details" | "books" | "market") => void;
+  value: Record<string, string>;
+  onChange: (value: Record<string, string>) => void;
+  photoNames: string[];
+  onPhotoNamesChange: (names: string[]) => void;
+  onSave: () => void;
+  onSaveAndAddAnother: () => void;
+}) {
+  const set = (field: string, nextValue: string) => onChange({ ...value, [field]: nextValue });
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="flex h-[94vh] max-h-[94vh] w-[96vw] max-w-[1500px] flex-col gap-0 overflow-hidden rounded-sm border-slate-300 p-0">
+        <DialogHeader className="border-b border-slate-300 bg-white px-4 py-3 text-left">
+          <div className="flex flex-wrap items-center justify-between gap-3 pr-8">
+            <div>
+              <DialogTitle className="text-sm font-semibold text-slate-900">Add New Trade-In</DialogTitle>
+              <DialogDescription className="mt-0.5 text-[10px] text-slate-500">
+                Add the trade-in vehicle and appraisal information. External valuation services are not connected.
+              </DialogDescription>
+            </div>
+            <div className="flex flex-wrap gap-2">
+              <Button type="button" variant="outline" size="sm" className="h-8 text-xs" onClick={onSaveAndAddAnother}>
+                Save and Add Another
+              </Button>
+              <Button type="button" size="sm" className="h-8 text-xs" onClick={onSave}>
+                Save and Close
+              </Button>
+            </div>
+          </div>
+        </DialogHeader>
+
+        <div className="flex min-h-0 flex-1 flex-col lg:grid lg:grid-cols-[300px_minmax(0,1fr)]">
+          <aside className="overflow-y-auto border-b border-slate-300 bg-white lg:border-b-0 lg:border-r">
+            <ModalSectionTitle title="Vehicle Info" />
+            <div className="grid gap-2 p-3 sm:grid-cols-2 lg:grid-cols-1">
+              <ModalChoice
+                label="Status"
+                value={value.status}
+                options={["Trade In", "Appraisal", "Purchased"]}
+                onChange={(next) => set("status", next)}
+              />
+              <ModalInput
+                label="Custom Status"
+                value={value.customStatus}
+                onChange={(next) => set("customStatus", next)}
+              />
+              <ModalChoice
+                label="New / Used"
+                value={value.newUsed}
+                options={["New", "Used", "Manufacturer Search"]}
+                onChange={(next) => set("newUsed", next)}
+              />
+              <ModalChoice
+                label="Vehicle Type"
+                value={value.vehicleType}
+                options={VEHICLE_TYPES}
+                onChange={(next) => set("vehicleType", next)}
+              />
+              <ModalInput
+                label="VIN"
+                value={value.vin}
+                maxLength={17}
+                onChange={(next) =>
+                  set(
+                    "vin",
+                    next
+                      .toUpperCase()
+                      .replace(/[^A-HJ-NPR-Z0-9]/g, "")
+                      .slice(0, 17),
+                  )
+                }
+              />
+              <ModalInput
+                label="Odometer"
+                value={value.odometer}
+                inputMode="numeric"
+                onChange={(next) => set("odometer", digitsOnly(next))}
+              />
+              <ModalInput
+                label="Year"
+                value={value.year}
+                inputMode="numeric"
+                maxLength={4}
+                onChange={(next) => set("year", digitsOnly(next, 4))}
+              />
+              <ModalInput label="Make" value={value.make} onChange={(next) => set("make", next)} />
+              <ModalInput label="Model" value={value.model} onChange={(next) => set("model", next)} />
+              <ModalInput label="Trim" value={value.trim} onChange={(next) => set("trim", next)} />
+              <ModalInput label="Engine" value={value.engine} onChange={(next) => set("engine", next)} />
+              <ModalChoice
+                label="Transmission"
+                value={value.transmission}
+                options={TRANSMISSIONS}
+                allowEmpty
+                onChange={(next) => set("transmission", next)}
+              />
+              <ModalChoice
+                label="Drive Train"
+                value={value.drivetrain}
+                options={DRIVETRAINS}
+                allowEmpty
+                onChange={(next) => set("drivetrain", next)}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <ModalInput
+                  label="Door"
+                  value={value.doors}
+                  inputMode="numeric"
+                  onChange={(next) => set("doors", digitsOnly(next, 2))}
+                />
+                <ModalInput
+                  label="Cylinder"
+                  value={value.cylinders}
+                  inputMode="numeric"
+                  onChange={(next) => set("cylinders", digitsOnly(next, 2))}
+                />
+              </div>
+              <ModalChoice
+                label="Body Type"
+                value={value.bodyType}
+                options={BODY_TYPES}
+                allowEmpty
+                onChange={(next) => set("bodyType", next)}
+              />
+              <ModalChoice
+                label="Fuel Type"
+                value={value.fuelType}
+                options={FUEL_TYPES}
+                allowEmpty
+                onChange={(next) => set("fuelType", next)}
+              />
+              <ModalInput
+                label="Horse Power"
+                value={value.horsepower}
+                inputMode="numeric"
+                onChange={(next) => set("horsepower", digitsOnly(next))}
+              />
+              <div className="grid grid-cols-2 gap-2">
+                <ModalInput
+                  label="Exterior Color"
+                  value={value.exteriorColor}
+                  onChange={(next) => set("exteriorColor", next)}
+                />
+                <ModalInput
+                  label="Interior Color"
+                  value={value.interiorColor}
+                  onChange={(next) => set("interiorColor", next)}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <ModalInput
+                  label="MPG City"
+                  value={value.mpgCity}
+                  inputMode="numeric"
+                  onChange={(next) => set("mpgCity", digitsOnly(next))}
+                />
+                <ModalInput
+                  label="MPG HWY"
+                  value={value.mpgHighway}
+                  inputMode="numeric"
+                  onChange={(next) => set("mpgHighway", digitsOnly(next))}
+                />
+              </div>
+              <div className="grid grid-cols-2 gap-2">
+                <ModalInput
+                  label="Vehicle Weight"
+                  value={value.vehicleWeight}
+                  inputMode="numeric"
+                  onChange={(next) => set("vehicleWeight", digitsOnly(next))}
+                />
+                <ModalInput
+                  label="GVW"
+                  value={value.gvw}
+                  inputMode="numeric"
+                  onChange={(next) => set("gvw", digitsOnly(next))}
+                />
+              </div>
+            </div>
+          </aside>
+
+          <div className="flex min-h-0 flex-col bg-slate-100">
+            <div className="flex border-b border-slate-300 bg-white px-2 pt-1">
+              <TabButton active={tab === "details"} onClick={() => onTabChange("details")}>
+                Details
+              </TabButton>
+              <TabButton active={tab === "books"} onClick={() => onTabChange("books")}>
+                Books
+              </TabButton>
+              <TabButton active={tab === "market"} onClick={() => onTabChange("market")}>
+                Market Data
+              </TabButton>
+            </div>
+
+            <div className="min-h-0 flex-1 overflow-y-auto p-3">
+              {tab === "details" && (
+                <div className="space-y-3">
+                  <div className="grid gap-3 xl:grid-cols-[minmax(280px,0.8fr)_minmax(500px,1.6fr)]">
+                    <ModalPanel title="General Info">
+                      <p className="mb-2 text-[10px] text-red-500">
+                        Stock Number will be generated automatically upon Save.
+                      </p>
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <ModalInput
+                          label="Stock No."
+                          value={value.stockNumber}
+                          placeholder="Auto-generated"
+                          onChange={(next) => set("stockNumber", next)}
+                        />
+                        <ModalInput
+                          label="Appraisal Date"
+                          type="date"
+                          value={value.appraisalDate}
+                          onChange={(next) => set("appraisalDate", next)}
+                        />
+                        <ModalInput
+                          label="Location"
+                          value={value.location}
+                          onChange={(next) => set("location", next)}
+                        />
+                        <ModalChoice
+                          label="Condition"
+                          value={value.condition}
+                          options={["Excellent", "Good", "Fair", "Poor", "Not Running"]}
+                          allowEmpty
+                          onChange={(next) => set("condition", next)}
+                        />
+                        <ModalInput
+                          label="Appraiser Name"
+                          value={value.appraiserName}
+                          onChange={(next) => set("appraiserName", next)}
+                        />
+                        <ModalInput
+                          label="Sales Rep"
+                          value={value.salesRep}
+                          onChange={(next) => set("salesRep", next)}
+                        />
+                      </div>
+                    </ModalPanel>
+
+                    <ModalPanel title="Summary">
+                      <div className="grid gap-3 lg:grid-cols-[1fr_1.1fr]">
+                        <ValuationPlaceholders />
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          <ModalMoney
+                            label="Target Selling Price"
+                            value={value.targetSellingPrice}
+                            onChange={(next) => set("targetSellingPrice", next)}
+                          />
+                          <ModalMoney
+                            label="Recondition"
+                            value={value.recondition}
+                            onChange={(next) => set("recondition", next)}
+                          />
+                          <ModalMoney label="Packs" value={value.packs} onChange={(next) => set("packs", next)} />
+                          <ModalMoney
+                            label="Additional"
+                            value={value.additional}
+                            onChange={(next) => set("additional", next)}
+                          />
+                          <ModalMoney
+                            label="Gross Profit"
+                            value={value.grossProfit}
+                            onChange={(next) => set("grossProfit", next)}
+                          />
+                          <ModalMoney
+                            label="Appraisal Value"
+                            value={value.appraisalValue}
+                            onChange={(next) => set("appraisalValue", next)}
+                          />
+                        </div>
+                      </div>
+                    </ModalPanel>
+                  </div>
+
+                  <div className="grid gap-3 xl:grid-cols-3">
+                    <ModalPanel title="Purchase Info">
+                      <div className="space-y-2">
+                        <ModalChoice
+                          label="Source"
+                          value={value.source}
+                          options={["Trade-In", "Customer Purchase", "Auction", "Other"]}
+                          onChange={(next) => set("source", next)}
+                        />
+                        <ModalInput
+                          label="Customer"
+                          value={value.customer}
+                          placeholder="Customer name"
+                          onChange={(next) => set("customer", next)}
+                        />
+                      </div>
+                    </ModalPanel>
+
+                    <ModalPanel title="Lienholder">
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <div className="sm:col-span-2">
+                          <ModalInput
+                            label="Lienholder"
+                            value={value.lienholder}
+                            onChange={(next) => set("lienholder", next)}
+                          />
+                        </div>
+                        <ModalInput
+                          label="Lien Account No."
+                          value={value.lienAccountNumber}
+                          onChange={(next) => set("lienAccountNumber", next)}
+                        />
+                        <ModalMoney
+                          label="Payoff Amount"
+                          value={value.payoffAmount}
+                          onChange={(next) => set("payoffAmount", next)}
+                        />
+                        <ModalInput
+                          label="Due Date"
+                          type="date"
+                          value={value.payoffDueDate}
+                          onChange={(next) => set("payoffDueDate", next)}
+                        />
+                        <ModalMoney label="Per Diem" value={value.perDiem} onChange={(next) => set("perDiem", next)} />
+                        <div className="sm:col-span-2">
+                          <Label className="text-[10px] text-slate-700">Memo</Label>
+                          <Textarea
+                            value={value.memo}
+                            maxLength={200}
+                            onChange={(event) => set("memo", event.target.value)}
+                            className="mt-1 min-h-16 rounded-sm border-slate-300 text-xs"
+                          />
+                          <p className="mt-0.5 text-right text-[9px] text-slate-400">
+                            {200 - value.memo.length} characters remaining
+                          </p>
+                        </div>
+                      </div>
+                    </ModalPanel>
+
+                    <ModalPanel title="Title Info">
+                      <div className="grid gap-2 sm:grid-cols-2">
+                        <ModalInput
+                          label="Title Owner"
+                          value={value.titleOwner}
+                          onChange={(next) => set("titleOwner", next)}
+                        />
+                        <ModalInput
+                          label="Title State"
+                          value={value.titleState}
+                          onChange={(next) => set("titleState", next.toUpperCase().slice(0, 2))}
+                        />
+                        <ModalInput
+                          label="Title Brand"
+                          value={value.titleBrand}
+                          onChange={(next) => set("titleBrand", next)}
+                        />
+                        <ModalInput
+                          label="License No."
+                          value={value.licenseNumber}
+                          onChange={(next) => set("licenseNumber", next)}
+                        />
+                        <ModalInput
+                          label="License State"
+                          value={value.licenseState}
+                          onChange={(next) => set("licenseState", next.toUpperCase().slice(0, 2))}
+                        />
+                        <ModalInput
+                          label="License Expiry Date"
+                          type="date"
+                          value={value.licenseExpiryDate}
+                          onChange={(next) => set("licenseExpiryDate", next)}
+                        />
+                      </div>
+                    </ModalPanel>
+                  </div>
+
+                  <div className="grid gap-3 xl:grid-cols-[1.3fr_0.7fr]">
+                    <ModalPanel title="Vehicle Photos">
+                      <label className="flex min-h-28 cursor-pointer flex-col items-center justify-center border border-dashed border-slate-300 bg-slate-50 p-4 text-center hover:border-cyan-600">
+                        <ImagePlus className="size-7 text-cyan-700" />
+                        <span className="mt-2 text-xs font-semibold text-slate-700">
+                          Drop your image here, or browse
+                        </span>
+                        <span className="mt-1 text-[10px] text-slate-500">Supports: JPG, JPEG, PNG</span>
+                        <input
+                          type="file"
+                          accept="image/jpeg,image/png"
+                          multiple
+                          className="sr-only"
+                          onChange={(event) =>
+                            onPhotoNamesChange(Array.from(event.target.files ?? []).map((file) => file.name))
+                          }
+                        />
+                      </label>
+                      {photoNames.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {photoNames.map((name) => (
+                            <span
+                              key={name}
+                              className="border border-slate-200 bg-white px-2 py-1 text-[9px] text-slate-600"
+                            >
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </ModalPanel>
+
+                    <ModalPanel title="Similar Vehicle">
+                      <div className="grid grid-cols-2 gap-3 text-center sm:grid-cols-4 xl:grid-cols-2">
+                        <Stat label="Unit" value="0" />
+                        <Stat label="Avg. Days on Lot" value="0" />
+                        <Stat label="Avg. Miles" value="0" />
+                        <Stat label="Avg. Price" value="$0" />
+                        <Stat label="Avg. Total Cost" value="$0" />
+                      </div>
+                    </ModalPanel>
+                  </div>
+
+                  <ModalPanel title="Notes">
+                    <Textarea
+                      value={value.notes}
+                      onChange={(event) => set("notes", event.target.value)}
+                      className="min-h-24 rounded-sm border-slate-300 text-xs"
+                    />
+                  </ModalPanel>
+                </div>
+              )}
+
+              {tab === "books" && (
+                <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+                  {[
+                    ["KBB", "Trade Book Good"],
+                    ["J.D. Power", "Trade Clean"],
+                    ["Black Book", "Valuation"],
+                    ["Manheim", "Adjusted"],
+                    ["Carfax", "Vehicle History"],
+                  ].map(([name, subtitle]) => (
+                    <div key={name} className="border border-slate-300 bg-white p-4">
+                      <h3 className="text-sm font-semibold text-slate-800">{name}</h3>
+                      <p className="mt-1 text-[10px] text-slate-500">{subtitle}</p>
+                      <p className="mt-4 border-t border-slate-200 pt-3 text-xs text-slate-500">
+                        No API connected. Enter verified values manually in Details when available.
+                      </p>
+                    </div>
+                  ))}
+                </div>
+              )}
+
+              {tab === "market" && (
+                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
+                  <MarketCard title="Similar Units" value="0" />
+                  <MarketCard title="Average Days on Lot" value="0" />
+                  <MarketCard title="Average Miles" value="0" />
+                  <MarketCard title="Average Price" value="$0" />
+                  <div className="border border-slate-300 bg-white p-4 sm:col-span-2 xl:col-span-4">
+                    <h3 className="text-xs font-semibold text-slate-800">Market Data</h3>
+                    <p className="mt-2 text-xs text-slate-500">
+                      No market-data API is connected. This tab is ready for a future provider integration.
+                    </p>
+                  </div>
+                </div>
+              )}
+            </div>
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
@@ -781,6 +1411,143 @@ function SelectedVehicleCard({ vehicle, onRemove }: { vehicle: VehicleWithPhotos
         </dl>
       </div>
     </article>
+  );
+}
+
+function ModalSectionTitle({ title }: { title: string }) {
+  return (
+    <div className="border-b border-cyan-200 bg-[#e8f7f7] px-3 py-2 text-[11px] font-semibold text-slate-800">
+      {title}
+    </div>
+  );
+}
+
+function ModalPanel({ title, children }: { title: string; children: ReactNode }) {
+  return (
+    <section className="border border-slate-300 bg-white">
+      <ModalSectionTitle title={title} />
+      <div className="p-3">{children}</div>
+    </section>
+  );
+}
+
+function ModalInput({
+  label,
+  value,
+  onChange,
+  type = "text",
+  placeholder,
+  inputMode,
+  maxLength,
+}: {
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  type?: string;
+  placeholder?: string;
+  inputMode?: "text" | "numeric" | "decimal";
+  maxLength?: number;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-[10px] font-medium text-slate-700">{label}</Label>
+      <Input
+        type={type}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        inputMode={inputMode}
+        maxLength={maxLength}
+        className={fieldClass}
+      />
+    </div>
+  );
+}
+
+function ModalChoice({
+  label,
+  value,
+  options,
+  onChange,
+  allowEmpty = false,
+}: {
+  label: string;
+  value: string;
+  options: readonly string[];
+  onChange: (value: string) => void;
+  allowEmpty?: boolean;
+}) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-[10px] font-medium text-slate-700">{label}</Label>
+      <Select value={value || undefined} onValueChange={onChange}>
+        <SelectTrigger className={selectClass}>
+          <SelectValue placeholder="Select" />
+        </SelectTrigger>
+        <SelectContent>
+          {allowEmpty && <SelectItem value="none">Select</SelectItem>}
+          {options.map((option) => (
+            <SelectItem key={option} value={option}>
+              {option}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
+function ModalMoney({ label, value, onChange }: { label: string; value: string; onChange: (value: string) => void }) {
+  return (
+    <div className="space-y-1">
+      <Label className="text-[10px] font-medium text-slate-700">{label}</Label>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-2 top-1/2 -translate-y-1/2 text-xs text-slate-400">$</span>
+        <Input
+          value={value}
+          inputMode="decimal"
+          onChange={(event) => onChange(event.target.value.replace(/[^\d.]/g, ""))}
+          className={`${fieldClass} pl-5 text-right`}
+        />
+      </div>
+    </div>
+  );
+}
+
+function ValuationPlaceholders() {
+  return (
+    <div className="space-y-2">
+      {[
+        ["KBB", "Trade Book Good"],
+        ["J.D. Power", "Trade Clean"],
+        ["Black Book", "Not connected"],
+        ["Manheim", "Not connected"],
+        ["Carfax", "Not connected"],
+      ].map(([name, status]) => (
+        <div key={name} className="grid grid-cols-[80px_1fr] gap-2 border-b border-slate-100 pb-2 text-[10px]">
+          <span className="font-semibold text-slate-800">{name}</span>
+          <span className="text-slate-500">{status}</span>
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Stat({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-[9px] text-slate-500">{label}</p>
+      <p className="mt-1 text-sm font-semibold text-slate-800">{value}</p>
+    </div>
+  );
+}
+
+function MarketCard({ title, value }: { title: string; value: string }) {
+  return (
+    <div className="border border-slate-300 bg-white p-4">
+      <p className="text-[10px] text-slate-500">{title}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-800">{value}</p>
+    </div>
   );
 }
 
