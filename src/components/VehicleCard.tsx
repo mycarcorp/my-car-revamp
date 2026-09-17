@@ -1,6 +1,8 @@
 import { useState } from "react";
 import { Link } from "@tanstack/react-router";
-import { Camera, TrendingDown } from "lucide-react";
+import { Camera, Play, TrendingDown } from "lucide-react";
+import { isVideoUrl } from "@/lib/vehicle-media";
+
 import { Badge } from "@/components/ui/badge";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 import type { VehicleWithPhotos, SiteSettings } from "@/lib/queries";
@@ -13,8 +15,10 @@ export function VehicleCard({
   settings?: SiteSettings | null | undefined;
 }) {
   const photos = [...(vehicle.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
-  const cover = photos[0];
+  const cover = photos.find((p) => !isVideoUrl(p.url)) ?? photos[0];
+  const hasVideo = photos.some((p) => isVideoUrl(p.url));
   const [coverFailed, setCoverFailed] = useState(false);
+
   const payment = settings
     ? monthlyPayment(Number(vehicle.price_cents), {
         apr: Number(settings.finance_apr),
