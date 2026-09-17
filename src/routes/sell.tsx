@@ -725,7 +725,6 @@ function SellPage() {
 
                   <Panel
                     title={`Vehicles You're Interested In (${selectedVehicles.length})`}
-                    description="Choose vehicles from MyCar's available inventory that you may want to purchase."
                     action={
                       <Button
                         type="button"
