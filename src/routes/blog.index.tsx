@@ -213,7 +213,7 @@ function BlogIndex() {
               <button
                 type="button"
                 onClick={() => setVisible((v) => v + PAGE)}
-                className="cursor-pointer rounded-md border border-border bg-card px-6 py-3 text-sm font-semibold transition hover:border-primary hover:text-primary"
+                className={`${ctaButtonClass} cursor-pointer`}
               >
                 Load more articles
               </button>
@@ -221,6 +221,7 @@ function BlogIndex() {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }
