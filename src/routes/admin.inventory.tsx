@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Plus, Search, SlidersHorizontal, Upload, X } from "lucide-react";
+import { Camera, Check, Plus, Search, SlidersHorizontal, Upload, X } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -18,6 +18,7 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/app-client";
 import { useAuth } from "@/hooks/useAuth";
@@ -68,6 +69,15 @@ function AdminInventory() {
   const [importOpen, setImportOpen] = useState(false);
   const [toDelete, setToDelete] = useState<Vehicle | null>(null);
   const [deleting, setDeleting] = useState(false);
+  const [viewing, setViewing] = useState<Row | null>(null);
+  const [activePhoto, setActivePhoto] = useState(0);
+  const [failedPhotoUrls, setFailedPhotoUrls] = useState<string[]>([]);
+
+  function openVehicleDetails(vehicle: Row) {
+    setViewing(vehicle);
+    setActivePhoto(0);
+    setFailedPhotoUrls([]);
+  }
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin", "vehicles"],
@@ -500,7 +510,17 @@ function AdminInventory() {
                   return (
                     <article
                       key={v.id}
-                      className="group overflow-hidden rounded-xl border border-border bg-background shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#F7941D]/60 hover:shadow-md"
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`View details for ${title}`}
+                      onClick={() => openVehicleDetails(v)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openVehicleDetails(v);
+                        }
+                      }}
+                      className="group cursor-pointer overflow-hidden rounded-xl border border-border bg-background shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#F7941D]/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] focus-visible:ring-offset-2"
                     >
                       <div className="relative aspect-[16/10] overflow-hidden bg-muted">
                         {photo ? (
@@ -553,10 +573,12 @@ function AdminInventory() {
                           <Button
                             size="sm"
                             className="rounded-md border border-[#F7941D] bg-[#F7941D] font-semibold text-slate-950 shadow-sm hover:border-[#ea8718] hover:bg-[#ea8718]"
-                            onClick={() => {
+                            onClick={(event) => {
+                              event.stopPropagation();
                               setEditing(v);
                               setFormOpen(true);
                             }}
+                            onKeyDown={(event) => event.stopPropagation()}
                           >
                             Edit vehicle
                           </Button>
@@ -583,6 +605,23 @@ function AdminInventory() {
                 </Button>
               </div>
             )}
+
+            <AdminVehicleDetailsDialog
+              vehicle={viewing}
+              activePhoto={activePhoto}
+              failedPhotoUrls={failedPhotoUrls}
+              onActivePhotoChange={setActivePhoto}
+              onPhotoError={(url) =>
+                setFailedPhotoUrls((current) => (current.includes(url) ? current : [...current, url]))
+              }
+              onOpenChange={(open) => {
+                if (!open) {
+                  setViewing(null);
+                  setActivePhoto(0);
+                  setFailedPhotoUrls([]);
+                }
+              }}
+            />
 
             <VehicleFormDialog
               open={formOpen}
@@ -635,6 +674,207 @@ function AdminInventory() {
         </div>
       </div>
     </div>
+  );
+}
+
+function AdminVehicleDetailsDialog({
+  vehicle,
+  activePhoto,
+  failedPhotoUrls,
+  onActivePhotoChange,
+  onPhotoError,
+  onOpenChange,
+}: {
+  vehicle: Row | null;
+  activePhoto: number;
+  failedPhotoUrls: string[];
+  onActivePhotoChange: (index: number) => void;
+  onPhotoError: (url: string) => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  if (!vehicle) {
+    return null;
+  }
+
+  const photos = [...(vehicle.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
+  const selectedPhoto = photos[activePhoto];
+  const features = vehicle.features ?? [];
+  const title = vehicleTitle(vehicle);
+
+  const specs: [string, string][] = [
+    ["VIN", vehicle.vin],
+    ["Stock number", vehicle.stock_number],
+    ["Mileage", formatMiles(vehicle.mileage)],
+    ["Body style", vehicle.body_style],
+    ["Exterior color", vehicle.exterior_color ?? "—"],
+    ["Interior color", vehicle.interior_color ?? "—"],
+    ["Transmission", vehicle.transmission ?? "—"],
+    ["Drivetrain", vehicle.drivetrain ?? "—"],
+    ["Fuel type", vehicle.fuel_type ?? "—"],
+    ["Engine", vehicle.engine ?? "—"],
+    [
+      "Combined MPG",
+      vehicle.mpg_combined === null || vehicle.mpg_combined === undefined ? "—" : String(vehicle.mpg_combined),
+    ],
+  ];
+
+  const statusClasses = {
+    available: "bg-emerald-100 text-emerald-700",
+    sold: "bg-slate-200 text-slate-700",
+    pending: "bg-amber-100 text-amber-700",
+    reserved: "bg-blue-100 text-blue-700",
+    draft: "bg-violet-100 text-violet-700",
+  } as const;
+
+  return (
+    <Dialog open={vehicle !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[92vh] max-w-6xl overflow-y-auto p-0">
+        <DialogHeader className="border-b border-border px-5 py-4 pr-12 sm:px-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <DialogTitle className="font-display text-2xl font-bold">{title}</DialogTitle>
+              <DialogDescription className="mt-1">
+                Admin inventory details · Stock #{vehicle.stock_number}
+              </DialogDescription>
+            </div>
+
+            <span
+              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                statusClasses[vehicle.status as keyof typeof statusClasses] ?? "bg-muted text-muted-foreground"
+              }`}
+            >
+              {vehicle.status}
+            </span>
+          </div>
+        </DialogHeader>
+
+        <div className="grid gap-8 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
+          <div className="min-w-0">
+            <div className="flex min-h-[300px] items-center justify-center overflow-hidden rounded-xl border border-border bg-muted sm:min-h-[420px]">
+              {selectedPhoto && !failedPhotoUrls.includes(selectedPhoto.url) ? (
+                <img
+                  src={selectedPhoto.url}
+                  alt={`${title} photo ${activePhoto + 1}`}
+                  onError={() => onPhotoError(selectedPhoto.url)}
+                  className="max-h-[520px] w-full object-contain"
+                />
+              ) : (
+                <div className="flex min-h-[300px] w-full flex-col items-center justify-center gap-2 text-muted-foreground sm:min-h-[420px]">
+                  <Camera className="size-9" />
+                  <span className="text-sm">No vehicle photo available</span>
+                </div>
+              )}
+            </div>
+
+            {photos.length > 1 && (
+              <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                {photos.map((photo, index) => (
+                  <button
+                    key={`${photo.url}-${index}`}
+                    type="button"
+                    onClick={() => onActivePhotoChange(index)}
+                    aria-label={`View photo ${index + 1} of ${photos.length}`}
+                    aria-pressed={index === activePhoto}
+                    className={`aspect-[4/3] overflow-hidden rounded-md border-2 bg-muted transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] ${
+                      index === activePhoto ? "border-[#F7941D]" : "border-transparent"
+                    }`}
+                  >
+                    {failedPhotoUrls.includes(photo.url) ? (
+                      <span className="flex size-full items-center justify-center">
+                        <Camera className="size-4 text-muted-foreground" />
+                      </span>
+                    ) : (
+                      <img
+                        src={photo.url}
+                        alt={`${title} thumbnail ${index + 1}`}
+                        onError={() => onPhotoError(photo.url)}
+                        loading="lazy"
+                        className="size-full object-cover"
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <section className="mt-8">
+              <h3 className="font-display text-lg font-bold text-foreground">Specifications</h3>
+              <dl className="mt-3 grid gap-x-8 sm:grid-cols-2">
+                {specs.map(([label, value]) => (
+                  <div key={label} className="flex min-w-0 justify-between gap-4 border-b border-border py-2.5 text-sm">
+                    <dt className="shrink-0 text-muted-foreground">{label}</dt>
+                    <dd className="min-w-0 break-words text-right font-medium text-foreground">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+
+            {features.length > 0 && (
+              <section className="mt-8">
+                <h3 className="font-display text-lg font-bold text-foreground">Equipment</h3>
+                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-sm text-foreground">
+                      <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {vehicle.description && (
+              <section className="mt-8">
+                <h3 className="font-display text-lg font-bold text-foreground">About this vehicle</h3>
+                <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                  {vehicle.description}
+                </p>
+              </section>
+            )}
+          </div>
+
+          <aside className="h-fit space-y-5 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-0">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vehicle</p>
+              <h2 className="mt-2 font-display text-2xl font-bold text-foreground">{title}</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {formatMiles(vehicle.mileage)} · Stock #{vehicle.stock_number}
+              </p>
+            </div>
+
+            <div className="border-t border-border pt-5">
+              <p className="text-xs font-medium text-muted-foreground">Price</p>
+              <p className="mt-1 font-display text-3xl font-extrabold text-foreground">
+                {formatUsd(Number(vehicle.price_cents))}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 border-t border-border pt-5 text-sm">
+              <div className="rounded-lg bg-muted/60 p-3">
+                <p className="text-xs text-muted-foreground">Year</p>
+                <p className="mt-1 font-semibold text-foreground">{vehicle.year}</p>
+              </div>
+              <div className="rounded-lg bg-muted/60 p-3">
+                <p className="text-xs text-muted-foreground">Body style</p>
+                <p className="mt-1 font-semibold text-foreground">{vehicle.body_style}</p>
+              </div>
+              <div className="rounded-lg bg-muted/60 p-3">
+                <p className="text-xs text-muted-foreground">Make</p>
+                <p className="mt-1 font-semibold text-foreground">{vehicle.make}</p>
+              </div>
+              <div className="rounded-lg bg-muted/60 p-3">
+                <p className="text-xs text-muted-foreground">Model</p>
+                <p className="mt-1 font-semibold text-foreground">{vehicle.model}</p>
+              </div>
+            </div>
+
+            <p className="border-t border-border pt-5 text-xs leading-relaxed text-muted-foreground">
+              Read-only admin preview. Close this window to return to inventory management.
+            </p>
+          </aside>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
