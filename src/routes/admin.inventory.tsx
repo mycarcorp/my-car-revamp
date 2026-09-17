@@ -561,7 +561,7 @@ function AdminInventory() {
                           </p>
                         </div>
 
-                        <div className="flex items-end justify-between gap-3 border-t border-border pt-3">
+                        <div className="border-t border-border pt-3">
                           <div>
                             <p className="text-xs text-muted-foreground">Price</p>
 
@@ -569,19 +569,6 @@ function AdminInventory() {
                               {formatUsd(Number(v.price_cents))}
                             </p>
                           </div>
-
-                          <Button
-                            size="sm"
-                            className="rounded-md border border-[#F7941D] bg-[#F7941D] font-semibold text-slate-950 shadow-sm hover:border-[#ea8718] hover:bg-[#ea8718]"
-                            onClick={(event) => {
-                              event.stopPropagation();
-                              setEditing(v);
-                              setFormOpen(true);
-                            }}
-                            onKeyDown={(event) => event.stopPropagation()}
-                          >
-                            Edit vehicle
-                          </Button>
                         </div>
                       </div>
                     </article>
@@ -614,6 +601,13 @@ function AdminInventory() {
               onPhotoError={(url) =>
                 setFailedPhotoUrls((current) => (current.includes(url) ? current : [...current, url]))
               }
+              onEdit={(vehicle) => {
+                setViewing(null);
+                setActivePhoto(0);
+                setFailedPhotoUrls([]);
+                setEditing(vehicle);
+                setFormOpen(true);
+              }}
               onOpenChange={(open) => {
                 if (!open) {
                   setViewing(null);
@@ -683,6 +677,7 @@ function AdminVehicleDetailsDialog({
   failedPhotoUrls,
   onActivePhotoChange,
   onPhotoError,
+  onEdit,
   onOpenChange,
 }: {
   vehicle: Row | null;
@@ -690,6 +685,7 @@ function AdminVehicleDetailsDialog({
   failedPhotoUrls: string[];
   onActivePhotoChange: (index: number) => void;
   onPhotoError: (url: string) => void;
+  onEdit: (vehicle: Row) => void;
   onOpenChange: (open: boolean) => void;
 }) {
   if (!vehicle) {
@@ -868,8 +864,16 @@ function AdminVehicleDetailsDialog({
               </div>
             </div>
 
+            <Button
+              type="button"
+              className="w-full rounded-md border border-[#F7941D] bg-[#F7941D] font-semibold text-slate-950 shadow-sm hover:border-[#ea8718] hover:bg-[#ea8718]"
+              onClick={() => onEdit(vehicle)}
+            >
+              Edit vehicle
+            </Button>
+
             <p className="border-t border-border pt-5 text-xs leading-relaxed text-muted-foreground">
-              Read-only admin preview. Close this window to return to inventory management.
+              Review the vehicle details here, or select Edit vehicle to make changes.
             </p>
           </aside>
         </div>
