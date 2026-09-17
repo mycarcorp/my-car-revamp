@@ -7,6 +7,7 @@ import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LeadForm } from "@/components/LeadForm";
+import { PageHero } from "@/components/PageHero";
 import { siteSettingsQuery } from "@/lib/queries";
 import { useAuth } from "@/hooks/useAuth";
 
@@ -511,15 +512,14 @@ function FinancePage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f4f7f7] px-3 py-5 sm:px-5">
-      <div className="mx-auto w-full max-w-[1200px]">
-        <h1 className="text-xl font-semibold text-slate-800">Financing Application</h1>
-        <p className="mt-1 max-w-3xl text-xs text-slate-500">
-          Complete the information below so our finance team can review your request and contact you about available
-          next steps.
-        </p>
-
-        <div className="mt-4 grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
+    <div className="min-h-screen bg-surface">
+      <PageHero
+        eyebrow="Financing"
+        title="Get pre-qualified in minutes."
+        subtitle="Share a few details and our finance team lines up options for your situation. No credit pull to start."
+      />
+      <div className="mx-auto w-full max-w-[1200px] px-3 py-8 sm:px-5">
+        <div className="grid items-start gap-4 xl:grid-cols-[minmax(0,1fr)_300px]">
           <div className="border border-slate-300 bg-white p-2 shadow-sm sm:p-3">
             <div ref={leadFormScopeRef}>
               <LeadForm

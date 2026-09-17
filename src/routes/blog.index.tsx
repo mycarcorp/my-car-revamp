@@ -1,5 +1,8 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
+import { Button } from "@/components/ui/button";
+import { PageHero } from "@/components/PageHero";
+import { ctaButtonClass } from "@/lib/ui";
 import { formatDate } from "@/lib/format";
 import { publicBlogList } from "@/lib/legacy-blog.functions";
 import { publicAutoseoList } from "@/lib/autoseo-blog.functions";
@@ -103,21 +106,18 @@ function BlogIndex() {
   const topics = Array.from(new Set(cards.map((c) => c.category).filter(Boolean))) as string[];
 
   return (
-    <div className="mx-auto max-w-6xl px-4 py-12 sm:px-8 lg:px-12">
-      <div className="flex flex-wrap items-end justify-between gap-5 pb-8">
-        <div>
-          <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">The MyCar journal</p>
-          <h1 className="mt-3 font-display text-4xl font-bold tracking-tight sm:text-5xl">
-            Straight answers for the road ahead.
-          </h1>
-          <p className="mt-3 max-w-2xl text-muted-foreground">
-            Practical buying, financing and trade-in advice from the MyCar team in Fredericksburg, Virginia.
-          </p>
-        </div>
-        <Link to="/search" className="text-sm font-semibold text-primary hover:underline">
-          Shop inventory →
-        </Link>
-      </div>
+    <div>
+      <PageHero
+        eyebrow="The MyCar journal"
+        title="Straight answers for the road ahead."
+        subtitle="Practical buying, financing and trade-in advice from our team in Fredericksburg, Virginia."
+      >
+        <Button asChild className={ctaButtonClass}>
+          <Link to="/search">Shop inventory</Link>
+        </Button>
+      </PageHero>
+      <div className="mx-auto max-w-6xl px-4 py-10 sm:px-8 lg:px-12">
+
 
       {topics.length > 0 && (
         <nav className="flex gap-5 overflow-x-auto py-4 text-sm font-semibold text-muted-foreground">
@@ -213,7 +213,7 @@ function BlogIndex() {
               <button
                 type="button"
                 onClick={() => setVisible((v) => v + PAGE)}
-                className="cursor-pointer rounded-md border border-border bg-card px-6 py-3 text-sm font-semibold transition hover:border-primary hover:text-primary"
+                className={`${ctaButtonClass} cursor-pointer`}
               >
                 Load more articles
               </button>
@@ -221,6 +221,7 @@ function BlogIndex() {
           )}
         </div>
       )}
+      </div>
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { supabase } from "@/integrations/supabase/app-client";
+import { ctaButtonClass } from "@/lib/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { mirrorLeadToLegacy } from "@/lib/legacy-mirror.functions";
 import { sendLeadToGhl } from "@/lib/ghl-webhook.functions";
@@ -146,7 +147,7 @@ export function LeadForm({
           <Textarea id="message" name="message" rows={4} />
         </div>
       )}
-      <Button type="submit" size="lg" disabled={submitting} className="w-full sm:w-auto">
+      <Button type="submit" size="lg" disabled={submitting} className={`${ctaButtonClass} w-full sm:w-auto`}>
         {submitting ? "Sending…" : submitLabel}
       </Button>
       <p className="text-xs text-muted-foreground">

@@ -15,6 +15,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { VehicleCard } from "@/components/VehicleCard";
 import { useAuth } from "@/hooks/useAuth";
+import { ctaButtonClass } from "@/lib/ui";
 import {
   collectionsQuery,
   facetsQuery,
@@ -88,8 +89,6 @@ function Home() {
     String(user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "").trim().split(/\s+/)[0] ||
     user?.email?.split("@")[0] ||
     "there";
-  const ctaButtonClass =
-    "h-11 rounded-md border border-[#F7941D] bg-[#F7941D] px-5 text-sm font-semibold text-slate-950 shadow-[0_10px_22px_rgba(247,148,29,0.25)] transition-colors hover:bg-[#ea8718] hover:border-[#ea8718] hover:text-slate-950 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] focus-visible:ring-offset-2 focus-visible:ring-offset-background";
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
