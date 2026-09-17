@@ -2,7 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Camera, Check, Play, Plus, Search, SlidersHorizontal, Upload, X } from "lucide-react";
+import { Camera, Check, Play, Plus, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
 import { isVideoUrl } from "@/lib/vehicle-media";
 
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -501,7 +501,6 @@ function AdminInventory() {
                   const sortedMedia = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
                   const photo = sortedMedia.find((m) => !isVideoUrl(m.url)) ?? sortedMedia[0];
 
-
                   const title = vehicleTitle(v);
 
                   const statusClasses = {
@@ -612,6 +611,12 @@ function AdminInventory() {
                 setEditing(vehicle);
                 setFormOpen(true);
               }}
+              onDelete={(vehicle) => {
+                setViewing(null);
+                setActivePhoto(0);
+                setFailedPhotoUrls([]);
+                setToDelete(vehicle);
+              }}
               onOpenChange={(open) => {
                 if (!open) {
                   setViewing(null);
@@ -621,19 +626,7 @@ function AdminInventory() {
               }}
             />
 
-            <VehicleFormDialog
-              open={formOpen}
-              onOpenChange={setFormOpen}
-              vehicle={editing}
-              onSaved={refresh}
-              onDelete={() => {
-                if (editing) {
-                  setToDelete(editing);
-                }
-
-                setFormOpen(false);
-              }}
-            />
+            <VehicleFormDialog open={formOpen} onOpenChange={setFormOpen} vehicle={editing} onSaved={refresh} />
 
             <CsvImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={refresh} />
 
@@ -682,6 +675,7 @@ function AdminVehicleDetailsDialog({
   onActivePhotoChange,
   onPhotoError,
   onEdit,
+  onDelete,
   onOpenChange,
 }: {
   vehicle: Row | null;
@@ -690,6 +684,7 @@ function AdminVehicleDetailsDialog({
   onActivePhotoChange: (index: number) => void;
   onPhotoError: (url: string) => void;
   onEdit: (vehicle: Row) => void;
+  onDelete: (vehicle: Row) => void;
   onOpenChange: (open: boolean) => void;
 }) {
   if (!vehicle) {
@@ -772,7 +767,6 @@ function AdminVehicleDetailsDialog({
                   />
                 )
               ) : (
-
                 <div className="flex min-h-[300px] w-full flex-col items-center justify-center gap-2 text-muted-foreground sm:min-h-[420px]">
                   <Camera className="size-9" />
                   <span className="text-sm">No vehicle photo available</span>
@@ -799,7 +793,13 @@ function AdminVehicleDetailsDialog({
                       </span>
                     ) : isVideoUrl(photo.url) ? (
                       <>
-                        <video src={photo.url} muted playsInline preload="metadata" className="size-full bg-black object-cover" />
+                        <video
+                          src={photo.url}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="size-full bg-black object-cover"
+                        />
                         <span className="absolute inset-0 flex items-center justify-center bg-black/30">
                           <Play className="size-4 text-white" />
                         </span>
@@ -813,7 +813,6 @@ function AdminVehicleDetailsDialog({
                         className="size-full object-cover"
                       />
                     )}
-
                   </button>
                 ))}
               </div>
@@ -890,16 +889,28 @@ function AdminVehicleDetailsDialog({
               </div>
             </div>
 
-            <Button
-              type="button"
-              className="w-full rounded-md border border-[#F7941D] bg-[#F7941D] font-semibold text-slate-950 shadow-sm hover:border-[#ea8718] hover:bg-[#ea8718]"
-              onClick={() => onEdit(vehicle)}
-            >
-              Edit vehicle
-            </Button>
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-destructive/40 font-semibold text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => onDelete(vehicle)}
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </Button>
+
+              <Button
+                type="button"
+                className="rounded-md border border-[#F7941D] bg-[#F7941D] font-semibold text-slate-950 shadow-sm hover:border-[#ea8718] hover:bg-[#ea8718]"
+                onClick={() => onEdit(vehicle)}
+              >
+                Edit vehicle
+              </Button>
+            </div>
 
             <p className="border-t border-border pt-5 text-xs leading-relaxed text-muted-foreground">
-              Review the vehicle details here, or select Edit vehicle to make changes.
+              Review the vehicle details here, edit the listing, or delete it from inventory.
             </p>
           </aside>
         </div>
