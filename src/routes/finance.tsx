@@ -524,7 +524,6 @@ function FinancePage() {
     <div className="min-h-screen bg-slate-50/70">
       <div className="mx-auto w-full max-w-[1180px] px-4 py-8 sm:px-6 lg:py-10">
         <div className="mb-6 max-w-2xl">
-          <p className="text-sm font-semibold text-primary">Financing</p>
           <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
             Finance application
           </h1>
