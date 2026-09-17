@@ -1,18 +1,16 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, Banknote, Handshake, Search, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Slider } from "@/components/ui/slider";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VehicleCard } from "@/components/VehicleCard";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/app-client";
+import { formatUsd } from "@/lib/format";
 import { PAGE_SIZE, facetsQuery, siteSettingsQuery, vehicleSearchQuery, type SearchFilters } from "@/lib/queries";
 
 type SearchParams = {
@@ -94,18 +92,57 @@ function SearchPage() {
   const { data: facets } = useQuery(facetsQuery());
   const { data: settings } = useQuery(siteSettingsQuery());
   const { data, isLoading } = useQuery(vehicleSearchQuery(params as SearchFilters));
+  const { data: inventoryPrices = [] } = useQuery({
+    queryKey: ["search", "price-bounds"],
+    queryFn: async () => {
+      const { data: rows, error } = await supabase.from("vehicles").select("price_cents").eq("status", "available");
+
+      if (error) throw error;
+      return rows ?? [];
+    },
+  });
+
+  const priceBounds = useMemo(() => {
+    const prices = inventoryPrices
+      .map((vehicle) => Number(vehicle.price_cents) / 100)
+      .filter((price) => Number.isFinite(price) && price > 0);
+
+    if (prices.length === 0) return { min: 0, max: 0 };
+
+    return {
+      min: Math.floor(Math.min(...prices) / 1000) * 1000,
+      max: Math.ceil(Math.max(...prices) / 1000) * 1000,
+    };
+  }, [inventoryPrices]);
+
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 0]);
+
+  useEffect(() => {
+    if (priceBounds.max <= 0) return;
+
+    const minimum = Math.max(priceBounds.min, Math.min(params.priceMin ?? priceBounds.min, priceBounds.max));
+    const maximum = Math.max(minimum, Math.min(params.priceMax ?? priceBounds.max, priceBounds.max));
+    setPriceRange([minimum, maximum]);
+  }, [params.priceMax, params.priceMin, priceBounds.max, priceBounds.min]);
 
   const set = (patch: Partial<SearchParams>) =>
     navigate({ search: (prev) => ({ ...prev, ...patch, page: undefined }) });
 
-  const activeCount = Object.entries(params).filter(
-    ([k, v]) => v !== undefined && k !== "sort" && k !== "page",
-  ).length;
+  const commitPriceRange = (range: [number, number]) => {
+    set({
+      priceMin: range[0] === priceBounds.min ? undefined : range[0],
+      priceMax: range[1] === priceBounds.max ? undefined : range[1],
+    });
+  };
+
+  const activeCount = Object.entries(params).filter(([k, v]) => v !== undefined && k !== "sort" && k !== "page").length;
 
   const totalPages = data ? Math.max(1, Math.ceil(data.count / PAGE_SIZE)) : 1;
   const page = params.page ?? 1;
   const displayName =
-    String(user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "").trim().split(/\s+/)[0] ||
+    String(user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "")
+      .trim()
+      .split(/\s+/)[0] ||
     user?.email?.split("@")[0] ||
     "there";
 
@@ -235,24 +272,81 @@ function SearchPage() {
             />
           </div>
 
-          <div className="grid grid-cols-2 gap-3">
-            <div className="space-y-2">
-              <Label htmlFor="priceMin">Min price</Label>
-              <Input
-                id="priceMin"
-                type="number"
-                defaultValue={params.priceMin ?? ""}
-                onBlur={(e) => set({ priceMin: Number(e.target.value) || undefined })}
-              />
+          <div className="space-y-3 border-y border-border py-4">
+            <div className="flex items-center justify-between gap-3">
+              <Label htmlFor="price-range">Price</Label>
+              <span className="text-xs font-medium text-muted-foreground">
+                {formatUsd(priceRange[0] * 100)} - {formatUsd(priceRange[1] * 100)}
+              </span>
             </div>
-            <div className="space-y-2">
-              <Label htmlFor="priceMax">Max price</Label>
-              <Input
-                id="priceMax"
-                type="number"
-                defaultValue={params.priceMax ?? ""}
-                onBlur={(e) => set({ priceMax: Number(e.target.value) || undefined })}
-              />
+
+            <Slider
+              id="price-range"
+              min={priceBounds.min}
+              max={priceBounds.max || 1}
+              step={1000}
+              value={priceRange}
+              onValueChange={(value) => {
+                const next = value as [number, number];
+                setPriceRange(next[0] <= next[1] ? next : [next[1], next[1]]);
+              }}
+              onValueCommit={(value) => {
+                const next = value as [number, number];
+                commitPriceRange(next[0] <= next[1] ? next : [next[1], next[1]]);
+              }}
+              disabled={priceBounds.max <= priceBounds.min}
+              aria-label="Filter by price range"
+              className="py-2 [&_[data-orientation=horizontal]]:bg-[#F7941D]/20 [&_[data-orientation=horizontal]_span]:bg-[#F7941D] [&_[role=slider]]:border-[#F7941D] [&_[role=slider]]:focus-visible:ring-[#F7941D]"
+            />
+
+            <div className="grid grid-cols-2 gap-2">
+              <div className="space-y-1.5">
+                <Label htmlFor="priceMin" className="text-xs text-muted-foreground">
+                  Minimum
+                </Label>
+                <Input
+                  id="priceMin"
+                  aria-label="Minimum price"
+                  type="number"
+                  min={priceBounds.min}
+                  max={priceRange[1]}
+                  step={1000}
+                  value={priceRange[0]}
+                  onChange={(event) => {
+                    const minimum = Math.min(
+                      Math.max(Number(event.target.value) || priceBounds.min, priceBounds.min),
+                      priceRange[1],
+                    );
+                    setPriceRange([minimum, priceRange[1]]);
+                  }}
+                  onBlur={() => commitPriceRange(priceRange)}
+                  className="h-9 rounded-lg text-xs"
+                />
+              </div>
+
+              <div className="space-y-1.5">
+                <Label htmlFor="priceMax" className="text-xs text-muted-foreground">
+                  Maximum
+                </Label>
+                <Input
+                  id="priceMax"
+                  aria-label="Maximum price"
+                  type="number"
+                  min={priceRange[0]}
+                  max={priceBounds.max}
+                  step={1000}
+                  value={priceRange[1]}
+                  onChange={(event) => {
+                    const maximum = Math.max(
+                      Math.min(Number(event.target.value) || priceBounds.max, priceBounds.max),
+                      priceRange[0],
+                    );
+                    setPriceRange([priceRange[0], maximum]);
+                  }}
+                  onBlur={() => commitPriceRange(priceRange)}
+                  className="h-9 rounded-lg text-xs"
+                />
+              </div>
             </div>
           </div>
 
@@ -336,10 +430,7 @@ function SearchPage() {
 
           <div className="space-y-2">
             <Label>Deals</Label>
-            <Select
-              value={params.deal ?? "any"}
-              onValueChange={(v) => set({ deal: v === "any" ? undefined : v })}
-            >
+            <Select value={params.deal ?? "any"} onValueChange={(v) => set({ deal: v === "any" ? undefined : v })}>
               <SelectTrigger>
                 <SelectValue placeholder="Any" />
               </SelectTrigger>
@@ -362,8 +453,8 @@ function SearchPage() {
             <div className="rounded-xl border border-dashed border-border p-12 text-center">
               <h2 className="font-display text-xl font-semibold">No matches</h2>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                Nothing in stock fits every filter right now. Try widening the price or mileage
-                range, or tell us what you're after and we'll source it.
+                Nothing in stock fits every filter right now. Try widening the price or mileage range, or tell us what
+                you're after and we'll source it.
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-3">
                 <Button variant="outline" onClick={() => navigate({ search: {} })}>
