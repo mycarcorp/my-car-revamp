@@ -485,7 +485,7 @@ function FinancePage() {
 
   return (
     <div className="min-h-screen bg-[#f4f7f7] px-3 py-5 sm:px-5">
-      <div className="mx-auto w-full max-w-[1100px]">
+      <div className="mx-auto w-full max-w-[1150px]">
         <h1 className="text-xl font-semibold text-slate-800">Financing Application</h1>
         <p className="mt-1 max-w-3xl text-xs text-slate-500">
           Complete the information below so our finance team can review your request and contact you about available
