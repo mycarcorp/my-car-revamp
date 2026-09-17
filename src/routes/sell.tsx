@@ -439,7 +439,7 @@ function SellPage() {
 
   return (
     <div className="min-h-screen bg-[#f4f7f7] px-3 py-5 sm:px-5">
-      <div className="mx-auto w-full max-w-[1180px]">
+      <div className="mx-auto w-full max-w-[12000px]">
         <div className="mb-4">
           <h1 className="text-xl font-semibold text-slate-800">Sell or Trade Your Car</h1>
           <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">
