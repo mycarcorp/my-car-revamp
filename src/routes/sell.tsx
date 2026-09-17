@@ -386,6 +386,12 @@ function SellPage() {
       const wrapper = labelElement.parentElement;
       if (wrapper) wrapper.style.display = "none";
     });
+
+    const submitButton = scope.querySelector<HTMLButtonElement>('button[type="submit"]');
+    if (submitButton) {
+      submitButton.style.display = "flex";
+      submitButton.style.marginLeft = "auto";
+    }
   }, [customerEmail, customerName, customerPhone]);
 
   function updateWishList<K extends keyof WishListState>(field: K, value: WishListState[K]) {
@@ -541,14 +547,13 @@ function SellPage() {
 
               <main className="min-w-0 space-y-5">
                 <div
-                  className="grid gap-1 rounded-xl bg-slate-100 p-1 sm:grid-cols-3"
+                  className="grid gap-1 rounded-xl bg-slate-100 p-1 sm:grid-cols-2"
                   role="radiogroup"
                   aria-label="Choose whether to sell or trade your vehicle"
                 >
                   {[
                     ["sell", "Sell My Vehicle"],
                     ["trade", "Trade My Vehicle"],
-                    ["undecided", "I'm Not Sure"],
                   ].map(([value = "", heading]) => (
                     <label
                       key={value}
