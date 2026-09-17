@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useState, type Dispatch, type SetStateAction } from "react";
-import { Plus, Trash2 } from "lucide-react";
+import { CalendarDays, MoreHorizontal, Plus, Trash2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
@@ -38,7 +38,10 @@ type AddressState = {
   county: string;
   addressType: string;
   rentMortgage: string;
-  lengthAtAddress: string;
+  lengthMode: "duration" | "date";
+  lengthYears: string;
+  lengthMonths: string;
+  moveInDate: string;
 };
 
 type EmployerState = {
@@ -48,7 +51,10 @@ type EmployerState = {
   employmentStatus: string;
   incomeType: string;
   monthlyIncome: string;
-  lengthAtJob: string;
+  lengthMode: "duration" | "date";
+  lengthYears: string;
+  lengthMonths: string;
+  startDate: string;
   street: string;
   unit: string;
   city: string;
@@ -63,6 +69,13 @@ type ReferenceState = {
   phone: string;
   relationship: string;
   address: string;
+  street: string;
+  street2: string;
+  city: string;
+  state: string;
+  zip: string;
+  county: string;
+  countyCode: string;
 };
 
 const emptyAddress: AddressState = {
@@ -74,7 +87,10 @@ const emptyAddress: AddressState = {
   county: "",
   addressType: "",
   rentMortgage: "",
-  lengthAtAddress: "",
+  lengthMode: "duration",
+  lengthYears: "",
+  lengthMonths: "0 months",
+  moveInDate: "",
 };
 
 const emptyEmployer: EmployerState = {
@@ -84,7 +100,10 @@ const emptyEmployer: EmployerState = {
   employmentStatus: "",
   incomeType: "",
   monthlyIncome: "",
-  lengthAtJob: "",
+  lengthMode: "duration",
+  lengthYears: "",
+  lengthMonths: "0 months",
+  startDate: "",
   street: "",
   unit: "",
   city: "",
@@ -93,10 +112,207 @@ const emptyEmployer: EmployerState = {
   county: "",
 };
 
+const US_STATES = [
+  ["AL", "Alabama"],
+  ["AK", "Alaska"],
+  ["AZ", "Arizona"],
+  ["AR", "Arkansas"],
+  ["CA", "California"],
+  ["CO", "Colorado"],
+  ["CT", "Connecticut"],
+  ["DC", "District of Columbia"],
+  ["DE", "Delaware"],
+  ["FL", "Florida"],
+  ["GA", "Georgia"],
+  ["HI", "Hawaii"],
+  ["ID", "Idaho"],
+  ["IL", "Illinois"],
+  ["IN", "Indiana"],
+  ["IA", "Iowa"],
+  ["KS", "Kansas"],
+  ["KY", "Kentucky"],
+  ["LA", "Louisiana"],
+  ["ME", "Maine"],
+  ["MD", "Maryland"],
+  ["MA", "Massachusetts"],
+  ["MI", "Michigan"],
+  ["MN", "Minnesota"],
+  ["MS", "Mississippi"],
+  ["MO", "Missouri"],
+  ["MT", "Montana"],
+  ["NE", "Nebraska"],
+  ["NV", "Nevada"],
+  ["NH", "New Hampshire"],
+  ["NJ", "New Jersey"],
+  ["NM", "New Mexico"],
+  ["NY", "New York"],
+  ["NC", "North Carolina"],
+  ["ND", "North Dakota"],
+  ["OH", "Ohio"],
+  ["OK", "Oklahoma"],
+  ["OR", "Oregon"],
+  ["PA", "Pennsylvania"],
+  ["RI", "Rhode Island"],
+  ["SC", "South Carolina"],
+  ["SD", "South Dakota"],
+  ["TN", "Tennessee"],
+  ["TX", "Texas"],
+  ["UT", "Utah"],
+  ["VT", "Vermont"],
+  ["VA", "Virginia"],
+  ["WA", "Washington"],
+  ["WV", "West Virginia"],
+  ["WI", "Wisconsin"],
+  ["WY", "Wyoming"],
+] as const;
+
+const OCCUPATIONS = [
+  "Child Support",
+  "Clerk",
+  "Collector",
+  "Construction",
+  "Customer Service",
+  "Data Entry",
+  "Daycare",
+  "Disability",
+  "Dispatcher",
+  "Driver",
+  "Emergency Service",
+  "Entertainer",
+  "Food Service",
+  "Foreman",
+  "General Job",
+  "Hairstylist / Barber",
+  "Housekeeper",
+  "Installer",
+  "Instructor",
+  "Janitor",
+  "Laborer",
+  "Lifeguard",
+  "Machine Operator",
+  "Management",
+  "Mechanic",
+  "Medical",
+  "Military",
+  "Non-Listed",
+  "Office",
+  "MGR",
+  "Other",
+  "Plumber",
+  "Professional",
+  "Public Service",
+  "Receptionist",
+  "Retirees",
+  "Ride Share",
+  "Sales",
+  "Security",
+  "Self-Employed",
+  "Semi-Professional",
+  "Social Security",
+  "Student",
+  "Supervisor",
+  "Teacher",
+  "Unemployed",
+  "Union",
+  "Waiter / Waitress",
+];
+
+const EMPLOYMENT_STATUSES = [
+  "Employed Full-Time",
+  "Employed Part-Time",
+  "Employed - Full-Time",
+  "Employed - Part-Time",
+  "Temporary / Seasonal",
+  "Active Military",
+  "SSI / Retired",
+  "Self-Employed",
+  "Unemployed",
+  "Other",
+];
+
+const INCOME_TYPES = [
+  "W-2",
+  "Self-Employed",
+  "TurboPass",
+  "Fixed Income",
+  "Cash Income",
+  "Military",
+  "Self-Employed Business",
+];
+
+const RELATIONSHIPS = [
+  "Other",
+  "Aunt",
+  "Brother",
+  "Brother-in-Law",
+  "Co-Buyer",
+  "Cousin",
+  "Daughter",
+  "Daughter-in-Law",
+  "Father",
+  "Father-in-Law",
+  "Fiancé",
+  "Friend",
+  "Grandparent",
+  "Mother",
+  "Mother-in-Law",
+  "Neighbor",
+  "Nephew",
+  "Niece",
+  "Roommate",
+  "Sister",
+  "Son",
+  "Spouse",
+];
+
+const MONTH_OPTIONS = Array.from({ length: 12 }, (_, month) => `${month} ${month === 1 ? "month" : "months"}`);
+
+function digitsOnly(value: string, maxLength: number) {
+  return value.replace(/\D/g, "").slice(0, maxLength);
+}
+
+function formatSsn(value: string) {
+  const digits = digitsOnly(value, 9);
+  if (digits.length <= 3) return digits;
+  if (digits.length <= 5) return `${digits.slice(0, 3)}-${digits.slice(3)}`;
+  return `${digits.slice(0, 3)}-${digits.slice(3, 5)}-${digits.slice(5)}`;
+}
+
+function formatPhone(value: string) {
+  const digits = digitsOnly(value, 10);
+  if (digits.length <= 3) return digits.length ? `(${digits}` : "";
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
+}
+
+function formatZip(value: string) {
+  const digits = digitsOnly(value, 9);
+  return digits.length > 5 ? `${digits.slice(0, 5)}-${digits.slice(5)}` : digits;
+}
+
+function normalizeMoney(value: string) {
+  const cleaned = value.replace(/[^\d.]/g, "");
+  const [whole = "", ...decimalParts] = cleaned.split(".");
+  return decimalParts.length ? `${whole}.${decimalParts.join("").slice(0, 2)}` : whole;
+}
+
+function moneyOnBlur(value: string) {
+  if (!value) return "";
+  const amount = Number(value);
+  return Number.isFinite(amount) ? amount.toFixed(2) : "";
+}
+
 function FinancePage() {
   const { data: settings } = useQuery(siteSettingsQuery());
 
-  const [buyerType, setBuyerType] = useState("primary-buyer");
+  const [buyerName, setBuyerName] = useState("");
+  const [showBuyerNameDetails, setShowBuyerNameDetails] = useState(false);
+  const [salutation, setSalutation] = useState("");
+  const [firstName, setFirstName] = useState("");
+  const [middleName, setMiddleName] = useState("");
+  const [lastName, setLastName] = useState("");
+  const [suffix, setSuffix] = useState("");
+  const [nickName, setNickName] = useState("");
   const [gender, setGender] = useState("");
   const [cashDown, setCashDown] = useState("");
   const [ssn, setSsn] = useState("");
@@ -126,8 +342,22 @@ function FinancePage() {
   const [otherIncomeAmount, setOtherIncomeAmount] = useState("");
   const [otherIncomeSource, setOtherIncomeSource] = useState("");
   const [references, setReferences] = useState<ReferenceState[]>([
-    { id: 1, name: "", phone: "", relationship: "", address: "" },
+    {
+      id: 1,
+      name: "",
+      phone: "",
+      relationship: "",
+      address: "",
+      street: "",
+      street2: "",
+      city: "",
+      state: "",
+      zip: "",
+      county: "",
+      countyCode: "",
+    },
   ]);
+  const [expandedReferenceAddresses, setExpandedReferenceAddresses] = useState<number[]>([]);
 
   const [desired, setDesired] = useState("");
   const [interest, setInterest] = useState("");
@@ -151,6 +381,13 @@ function FinancePage() {
         phone: "",
         relationship: "",
         address: "",
+        street: "",
+        street2: "",
+        city: "",
+        state: "",
+        zip: "",
+        county: "",
+        countyCode: "",
       },
     ]);
   }
@@ -163,6 +400,30 @@ function FinancePage() {
 
   function removeReference(id: number) {
     setReferences((current) => current.filter((reference) => reference.id !== id));
+    setExpandedReferenceAddresses((current) => current.filter((referenceId) => referenceId !== id));
+  }
+
+  function updateBuyerNameParts(parts: {
+    salutation?: string;
+    firstName?: string;
+    middleName?: string;
+    lastName?: string;
+    suffix?: string;
+    nickName?: string;
+  }) {
+    const nextSalutation = parts.salutation ?? salutation;
+    const nextFirstName = parts.firstName ?? firstName;
+    const nextMiddleName = parts.middleName ?? middleName;
+    const nextLastName = parts.lastName ?? lastName;
+    const nextSuffix = parts.suffix ?? suffix;
+    const nextNickName = parts.nickName ?? nickName;
+
+    const legalName = [nextSalutation, nextFirstName, nextMiddleName, nextLastName, nextSuffix]
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .join(" ");
+
+    setBuyerName(nextNickName.trim() ? `${legalName}${legalName ? " " : ""}(${nextNickName.trim()})` : legalName);
   }
 
   return (
@@ -182,7 +443,13 @@ function FinancePage() {
             successBody="Our finance manager will review your information and contact you about the next steps."
             messageLabel="Anything else we should know?"
             collectDetails={() => ({
-              buyer: buyerType,
+              buyer: buyerName,
+              salutation,
+              first_name: firstName,
+              middle_name: middleName,
+              last_name: lastName,
+              suffix,
+              nick_name: nickName,
               gender,
               cash_down: cashDown,
               ssn,
@@ -217,15 +484,88 @@ function FinancePage() {
             <div className="space-y-8">
               <FormSection title="Buyer Info" description="Personal and identification information for the applicant.">
                 <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-                  <SelectField
-                    label="Buyer"
-                    value={buyerType}
-                    onChange={setBuyerType}
-                    options={[
-                      ["primary-buyer", "Primary buyer"],
-                      ["co-buyer", "Co-buyer"],
-                    ]}
-                  />
+                  <div className="sm:col-span-2 lg:col-span-3">
+                    <Label htmlFor="buyer-name">Buyer</Label>
+                    <div className="mt-2 flex gap-2">
+                      <Input
+                        id="buyer-name"
+                        value={buyerName}
+                        onChange={(event) => setBuyerName(event.target.value)}
+                        autoComplete="name"
+                        placeholder="Enter buyer's full name"
+                      />
+                      <Button
+                        type="button"
+                        variant="outline"
+                        aria-label="Open detailed buyer name fields"
+                        aria-expanded={showBuyerNameDetails}
+                        className="h-10 w-14 shrink-0 text-lg font-bold tracking-widest"
+                        onClick={() => setShowBuyerNameDetails((current) => !current)}
+                      >
+                        •••
+                      </Button>
+                    </div>
+                    {showBuyerNameDetails && (
+                      <div className="mt-3 grid gap-4 rounded-lg border border-border bg-muted/30 p-4 sm:grid-cols-2 lg:grid-cols-3">
+                        <ComboField
+                          id="salutation"
+                          label="Salutation"
+                          value={salutation}
+                          options={["Mr.", "Mrs.", "Ms.", "Miss", "Dr."]}
+                          onChange={(value) => {
+                            setSalutation(value);
+                            updateBuyerNameParts({ salutation: value });
+                          }}
+                        />
+                        <TextField
+                          id="first-name"
+                          label="First Name"
+                          value={firstName}
+                          onChange={(value) => {
+                            setFirstName(value);
+                            updateBuyerNameParts({ firstName: value });
+                          }}
+                        />
+                        <TextField
+                          id="middle-name"
+                          label="Middle Name"
+                          value={middleName}
+                          onChange={(value) => {
+                            setMiddleName(value);
+                            updateBuyerNameParts({ middleName: value });
+                          }}
+                        />
+                        <TextField
+                          id="last-name"
+                          label="Last Name"
+                          value={lastName}
+                          onChange={(value) => {
+                            setLastName(value);
+                            updateBuyerNameParts({ lastName: value });
+                          }}
+                        />
+                        <ComboField
+                          id="suffix"
+                          label="Suffix"
+                          value={suffix}
+                          options={["Jr.", "Sr.", "II", "III", "IV", "V"]}
+                          onChange={(value) => {
+                            setSuffix(value);
+                            updateBuyerNameParts({ suffix: value });
+                          }}
+                        />
+                        <TextField
+                          id="nick-name"
+                          label="Nick Name"
+                          value={nickName}
+                          onChange={(value) => {
+                            setNickName(value);
+                            updateBuyerNameParts({ nickName: value });
+                          }}
+                        />
+                      </div>
+                    )}
+                  </div>
                   <SelectField
                     label="Gender"
                     value={gender}
@@ -238,12 +578,9 @@ function FinancePage() {
                       ["prefer-not-to-say", "Prefer not to say"],
                     ]}
                   />
-                  <TextField
+                  <CurrencyField
                     id="cash-down"
                     label="Cash Down"
-                    type="number"
-                    min="0"
-                    step="0.01"
                     value={cashDown}
                     onChange={setCashDown}
                     placeholder="$2,000"
@@ -251,13 +588,12 @@ function FinancePage() {
                   <TextField
                     id="ssn"
                     label="SSN"
-                    type="password"
                     inputMode="numeric"
                     autoComplete="off"
                     maxLength={11}
-                    value={ssn}
-                    onChange={setSsn}
-                    placeholder="XXX-XX-XXXX"
+                    value={formatSsn(ssn)}
+                    onChange={(value) => setSsn(digitsOnly(value, 9))}
+                    placeholder="000-00-0000"
                   />
                   <TextField
                     id="date-of-birth"
@@ -271,11 +607,26 @@ function FinancePage() {
                     label="Cell Phone"
                     type="tel"
                     autoComplete="tel"
-                    value={cellPhone}
-                    onChange={setCellPhone}
+                    maxLength={14}
+                    value={formatPhone(cellPhone)}
+                    onChange={(value) => setCellPhone(digitsOnly(value, 10))}
                   />
-                  <TextField id="home-phone" label="Home Phone" type="tel" value={homePhone} onChange={setHomePhone} />
-                  <TextField id="work-phone" label="Work Phone" type="tel" value={workPhone} onChange={setWorkPhone} />
+                  <TextField
+                    id="home-phone"
+                    label="Home Phone"
+                    type="tel"
+                    maxLength={14}
+                    value={formatPhone(homePhone)}
+                    onChange={(value) => setHomePhone(digitsOnly(value, 10))}
+                  />
+                  <TextField
+                    id="work-phone"
+                    label="Work Phone"
+                    type="tel"
+                    maxLength={14}
+                    value={formatPhone(workPhone)}
+                    onChange={(value) => setWorkPhone(digitsOnly(value, 10))}
+                  />
                   <TextField
                     id="buyer-email"
                     label="Email"
@@ -290,20 +641,18 @@ function FinancePage() {
                     onChange={setIdType}
                     placeholder="Select ID type"
                     options={[
-                      ["drivers-license", "Driver's license"],
-                      ["state-id", "State ID"],
-                      ["passport", "Passport"],
-                      ["military-id", "Military ID"],
-                      ["other", "Other"],
+                      ["us-drivers-license", "US Driver's Licence"],
+                      ["us-passport", "US Passport"],
+                      ["us-id-card", "US ID Card"],
+                      ["foreign-id", "Foreign DL/ID/Passport"],
                     ]}
                   />
-                  <TextField
-                    id="id-state"
+                  <SelectField
                     label="ID State"
                     value={idState}
                     onChange={setIdState}
-                    maxLength={2}
-                    placeholder="VA"
+                    placeholder="Select state"
+                    options={US_STATES.map(([abbreviation]) => [abbreviation, abbreviation])}
                   />
                   <TextField id="id-number" label="ID No." value={idNumber} onChange={setIdNumber} />
                   <TextField
@@ -469,12 +818,9 @@ function FinancePage() {
 
               <FormSection title="Other Income">
                 <div className="grid gap-4 sm:grid-cols-2">
-                  <TextField
+                  <CurrencyField
                     id="other-income-amount"
                     label="Income Amount"
-                    type="number"
-                    min="0"
-                    step="0.01"
                     value={otherIncomeAmount}
                     onChange={setOtherIncomeAmount}
                   />
@@ -519,21 +865,97 @@ function FinancePage() {
                           id={`reference-${reference.id}-phone`}
                           label="Phone"
                           type="tel"
-                          value={reference.phone}
-                          onChange={(value) => updateReference(reference.id, "phone", value)}
+                          inputMode="numeric"
+                          maxLength={14}
+                          value={formatPhone(reference.phone)}
+                          onChange={(value) => updateReference(reference.id, "phone", digitsOnly(value, 10))}
                         />
-                        <TextField
+                        <ComboField
                           id={`reference-${reference.id}-relationship`}
                           label="Relationship"
                           value={reference.relationship}
                           onChange={(value) => updateReference(reference.id, "relationship", value)}
+                          options={RELATIONSHIPS}
                         />
-                        <TextField
-                          id={`reference-${reference.id}-address`}
-                          label="Address"
-                          value={reference.address}
-                          onChange={(value) => updateReference(reference.id, "address", value)}
-                        />
+                        <div className="sm:col-span-2">
+                          <Label htmlFor={`reference-${reference.id}-address`}>Address</Label>
+                          <div className="mt-2 flex gap-2">
+                            <Input
+                              id={`reference-${reference.id}-address`}
+                              value={reference.address}
+                              onChange={(event) => updateReference(reference.id, "address", event.target.value)}
+                              placeholder="Type the full address"
+                            />
+                            <Button
+                              type="button"
+                              variant="outline"
+                              size="icon"
+                              aria-label="Open detailed reference address fields"
+                              aria-expanded={expandedReferenceAddresses.includes(reference.id)}
+                              onClick={() =>
+                                setExpandedReferenceAddresses((current) =>
+                                  current.includes(reference.id)
+                                    ? current.filter((id) => id !== reference.id)
+                                    : [...current, reference.id],
+                                )
+                              }
+                            >
+                              <MoreHorizontal className="size-4" />
+                            </Button>
+                          </div>
+                        </div>
+
+                        {expandedReferenceAddresses.includes(reference.id) && (
+                          <div className="grid gap-4 rounded-lg border border-border bg-muted/30 p-4 sm:col-span-2 sm:grid-cols-2 lg:grid-cols-3">
+                            <div className="sm:col-span-2">
+                              <TextField
+                                id={`reference-${reference.id}-street`}
+                                label="Street"
+                                value={reference.street}
+                                onChange={(value) => updateReference(reference.id, "street", value)}
+                              />
+                            </div>
+                            <TextField
+                              id={`reference-${reference.id}-street-2`}
+                              label="Street 2 (Apt, Unit, Suite, Bldg.)"
+                              value={reference.street2}
+                              onChange={(value) => updateReference(reference.id, "street2", value)}
+                            />
+                            <TextField
+                              id={`reference-${reference.id}-city`}
+                              label="City"
+                              value={reference.city}
+                              onChange={(value) => updateReference(reference.id, "city", value)}
+                            />
+                            <SelectField
+                              label="State"
+                              value={reference.state}
+                              onChange={(value) => updateReference(reference.id, "state", value)}
+                              placeholder="Select state"
+                              options={US_STATES.map(([abbreviation, name]) => [abbreviation, name])}
+                            />
+                            <TextField
+                              id={`reference-${reference.id}-zip`}
+                              label="Zip"
+                              inputMode="numeric"
+                              maxLength={10}
+                              value={formatZip(reference.zip)}
+                              onChange={(value) => updateReference(reference.id, "zip", digitsOnly(value, 9))}
+                            />
+                            <TextField
+                              id={`reference-${reference.id}-county`}
+                              label="County"
+                              value={reference.county}
+                              onChange={(value) => updateReference(reference.id, "county", value)}
+                            />
+                            <TextField
+                              id={`reference-${reference.id}-county-code`}
+                              label="County Code"
+                              value={reference.countyCode}
+                              onChange={(value) => updateReference(reference.id, "countyCode", value)}
+                            />
+                          </div>
+                        )}
                       </div>
                     </Subsection>
                   ))}
@@ -675,6 +1097,157 @@ function TextField({
   );
 }
 
+function ComboField({
+  id,
+  label,
+  value,
+  onChange,
+  options,
+  placeholder = "Type or select",
+  disabled = false,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  options: readonly string[];
+  placeholder?: string;
+  disabled?: boolean;
+}) {
+  const listId = `${id}-options`;
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <Input
+        id={id}
+        list={listId}
+        value={value}
+        onChange={(event) => onChange(event.target.value)}
+        placeholder={placeholder}
+        autoComplete="off"
+        disabled={disabled}
+      />
+      <datalist id={listId}>
+        {options.map((option) => (
+          <option key={option} value={option} />
+        ))}
+      </datalist>
+    </div>
+  );
+}
+
+function CurrencyField({
+  id,
+  label,
+  value,
+  onChange,
+  placeholder,
+}: {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  placeholder?: string;
+}) {
+  return (
+    <div className="space-y-2">
+      <Label htmlFor={id}>{label}</Label>
+      <div className="relative">
+        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-sm text-muted-foreground">
+          $
+        </span>
+        <Input
+          id={id}
+          inputMode="decimal"
+          value={value}
+          onChange={(event) => onChange(normalizeMoney(event.target.value))}
+          onBlur={() => onChange(moneyOnBlur(value))}
+          placeholder={placeholder}
+          className="pl-7"
+        />
+      </div>
+    </div>
+  );
+}
+
+function DurationField({
+  idPrefix,
+  label,
+  mode,
+  years,
+  months,
+  date,
+  onModeChange,
+  onYearsChange,
+  onMonthsChange,
+  onDateChange,
+  disabled = false,
+}: {
+  idPrefix: string;
+  label: string;
+  mode: "duration" | "date";
+  years: string;
+  months: string;
+  date: string;
+  onModeChange: (mode: "duration" | "date") => void;
+  onYearsChange: (value: string) => void;
+  onMonthsChange: (value: string) => void;
+  onDateChange: (value: string) => void;
+  disabled?: boolean;
+}) {
+  return (
+    <div className="space-y-2 lg:col-span-2">
+      <div className="flex items-center justify-between gap-2">
+        <Label>{label}</Label>
+        <Button
+          type="button"
+          variant="ghost"
+          size="sm"
+          disabled={disabled}
+          onClick={() => onModeChange(mode === "duration" ? "date" : "duration")}
+        >
+          <CalendarDays className="size-4" />
+          {mode === "duration" ? "Use start month" : "Use duration"}
+        </Button>
+      </div>
+      {mode === "date" ? (
+        <Input
+          id={`${idPrefix}-date`}
+          type="month"
+          value={date}
+          onChange={(event) => onDateChange(event.target.value)}
+          disabled={disabled}
+        />
+      ) : (
+        <div className="grid grid-cols-2 gap-3">
+          <div className="space-y-1.5">
+            <Label htmlFor={`${idPrefix}-years`} className="text-xs text-muted-foreground">
+              Years
+            </Label>
+            <Input
+              id={`${idPrefix}-years`}
+              type="number"
+              min="0"
+              value={years}
+              onChange={(event) => onYearsChange(event.target.value)}
+              placeholder="0"
+              disabled={disabled}
+            />
+          </div>
+          <ComboField
+            id={`${idPrefix}-months`}
+            label="Months"
+            value={months}
+            onChange={onMonthsChange}
+            options={MONTH_OPTIONS}
+            disabled={disabled}
+          />
+        </div>
+      )}
+    </div>
+  );
+}
+
 function SelectField({
   label,
   value,
@@ -722,7 +1295,7 @@ function AddressFields({
   showHousingDetails?: boolean;
   disabled?: boolean;
 }) {
-  const setField = (field: keyof AddressState, nextValue: string) =>
+  const setField = <K extends keyof AddressState>(field: K, nextValue: AddressState[K]) =>
     onChange((current) => ({ ...current, [field]: nextValue }));
 
   return (
@@ -751,21 +1324,21 @@ function AddressFields({
         onChange={(next) => setField("city", next)}
         disabled={disabled}
       />
-      <TextField
-        id={`${idPrefix}-state`}
+      <SelectField
         label="State"
         value={value.state}
         onChange={(next) => setField("state", next)}
-        maxLength={2}
-        placeholder="VA"
+        placeholder="Select state"
+        options={US_STATES.map(([abbreviation, name]) => [abbreviation, name])}
         disabled={disabled}
       />
       <TextField
         id={`${idPrefix}-zip`}
         label="Zip"
         inputMode="numeric"
-        value={value.zip}
-        onChange={(next) => setField("zip", next)}
+        maxLength={10}
+        value={formatZip(value.zip)}
+        onChange={(next) => setField("zip", digitsOnly(next, 9))}
         disabled={disabled}
       />
       <TextField
@@ -784,10 +1357,12 @@ function AddressFields({
             onChange={(next) => setField("addressType", next)}
             disabled={disabled}
             options={[
-              ["own", "Own"],
               ["rent", "Rent"],
-              ["family", "Living with family"],
+              ["own", "Own"],
               ["other", "Other"],
+              ["mortgage", "Mortgage"],
+              ["family", "Family"],
+              ["military", "Military"],
             ]}
           />
           <TextField
@@ -800,12 +1375,17 @@ function AddressFields({
             onChange={(next) => setField("rentMortgage", next)}
             disabled={disabled}
           />
-          <TextField
-            id={`${idPrefix}-length`}
+          <DurationField
+            idPrefix={`${idPrefix}-length`}
             label="Length at Address"
-            value={value.lengthAtAddress}
-            onChange={(next) => setField("lengthAtAddress", next)}
-            placeholder="2 years, 3 months"
+            mode={value.lengthMode}
+            years={value.lengthYears}
+            months={value.lengthMonths}
+            date={value.moveInDate}
+            onModeChange={(next) => setField("lengthMode", next)}
+            onYearsChange={(next) => setField("lengthYears", next)}
+            onMonthsChange={(next) => setField("lengthMonths", next)}
+            onDateChange={(next) => setField("moveInDate", next)}
             disabled={disabled}
           />
         </>
@@ -825,7 +1405,7 @@ function EmployerFields({
   onChange: Dispatch<SetStateAction<EmployerState>>;
   employerNameLabel: string;
 }) {
-  const setField = (field: keyof EmployerState, nextValue: string) =>
+  const setField = <K extends keyof EmployerState>(field: K, nextValue: EmployerState[K]) =>
     onChange((current) => ({ ...current, [field]: nextValue }));
 
   return (
@@ -836,61 +1416,53 @@ function EmployerFields({
         value={value.name}
         onChange={(next) => setField("name", next)}
       />
-      <TextField
+      <ComboField
         id={`${idPrefix}-occupation`}
         label="Occupation"
         value={value.occupation}
         onChange={(next) => setField("occupation", next)}
+        options={OCCUPATIONS}
       />
       <TextField
         id={`${idPrefix}-phone`}
         label="Phone"
         type="tel"
-        value={value.phone}
-        onChange={(next) => setField("phone", next)}
+        inputMode="numeric"
+        maxLength={14}
+        value={formatPhone(value.phone)}
+        onChange={(next) => setField("phone", digitsOnly(next, 10))}
       />
-      <SelectField
+      <ComboField
+        id={`${idPrefix}-employment-status`}
         label="Employment Status"
         value={value.employmentStatus}
         onChange={(next) => setField("employmentStatus", next)}
-        options={[
-          ["full-time", "Full-time"],
-          ["part-time", "Part-time"],
-          ["self-employed", "Self-employed"],
-          ["retired", "Retired"],
-          ["military", "Active military"],
-          ["seasonal", "Seasonal"],
-          ["other", "Other"],
-        ]}
+        options={EMPLOYMENT_STATUSES}
       />
-      <SelectField
+      <ComboField
+        id={`${idPrefix}-income-type`}
         label="Income Type"
         value={value.incomeType}
         onChange={(next) => setField("incomeType", next)}
-        options={[
-          ["salary", "Salary"],
-          ["hourly", "Hourly"],
-          ["commission", "Commission"],
-          ["self-employment", "Self-employment"],
-          ["retirement", "Retirement"],
-          ["other", "Other"],
-        ]}
+        options={INCOME_TYPES}
       />
-      <TextField
+      <CurrencyField
         id={`${idPrefix}-monthly-income`}
         label="Monthly Income"
-        type="number"
-        min="0"
-        step="0.01"
         value={value.monthlyIncome}
         onChange={(next) => setField("monthlyIncome", next)}
       />
-      <TextField
-        id={`${idPrefix}-length`}
+      <DurationField
+        idPrefix={`${idPrefix}-length`}
         label="Length at Job"
-        value={value.lengthAtJob}
-        onChange={(next) => setField("lengthAtJob", next)}
-        placeholder="2 years, 3 months"
+        mode={value.lengthMode}
+        years={value.lengthYears}
+        months={value.lengthMonths}
+        date={value.startDate}
+        onModeChange={(next) => setField("lengthMode", next)}
+        onYearsChange={(next) => setField("lengthYears", next)}
+        onMonthsChange={(next) => setField("lengthMonths", next)}
+        onDateChange={(next) => setField("startDate", next)}
       />
       <div className="sm:col-span-2">
         <TextField
@@ -907,20 +1479,20 @@ function EmployerFields({
         onChange={(next) => setField("unit", next)}
       />
       <TextField id={`${idPrefix}-city`} label="City" value={value.city} onChange={(next) => setField("city", next)} />
-      <TextField
-        id={`${idPrefix}-state`}
+      <SelectField
         label="State"
         value={value.state}
         onChange={(next) => setField("state", next)}
-        maxLength={2}
-        placeholder="VA"
+        placeholder="Select state"
+        options={US_STATES.map(([abbreviation, name]) => [abbreviation, name])}
       />
       <TextField
         id={`${idPrefix}-zip`}
         label="Zip"
         inputMode="numeric"
-        value={value.zip}
-        onChange={(next) => setField("zip", next)}
+        maxLength={10}
+        value={formatZip(value.zip)}
+        onChange={(next) => setField("zip", digitsOnly(next, 9))}
       />
       <TextField
         id={`${idPrefix}-county`}
