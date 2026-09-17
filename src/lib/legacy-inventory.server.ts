@@ -38,9 +38,12 @@ async function rest(
   const method = init.method ?? "GET";
   const headers: Record<string, string> = {
     apikey: c.key,
-    Authorization: `Bearer ${c.key}`,
     "Content-Type": "application/json",
   };
+  // New-format keys (sb_secret_/sb_publishable_) are opaque, not JWTs. Sending
+  // them as a bearer token makes PostgREST try to decode them as a JWT, which
+  // can fail with PGRST303 ("JWT issued at future") on clock skew.
+  if (c.key.split(".").length === 3) headers["Authorization"] = `Bearer ${c.key}`;
   if (init.profile) headers[method === "GET" ? "Accept-Profile" : "Content-Profile"] = init.profile;
   if (init.prefer) headers["Prefer"] = init.prefer;
   const requestInit: RequestInit = {
@@ -48,8 +51,14 @@ async function rest(
     headers,
   };
   if (init.body !== undefined) requestInit.body = JSON.stringify(init.body);
-  const response = await fetch(`${c.url}/rest/v1/${path}`, requestInit);
-  const text = await response.text();
+  let response = await fetch(`${c.url}/rest/v1/${path}`, requestInit);
+  let text = await response.text();
+  if (response.status === 401 && text.includes("PGRST303")) {
+    // Transient clock-skew rejection: retry once without the bearer header.
+    const { Authorization: _drop, ...rest } = headers;
+    response = await fetch(`${c.url}/rest/v1/${path}`, { ...requestInit, headers: rest });
+    text = await response.text();
+  }
   if (!response.ok) throw new Error(`Legacy inventory request failed (${response.status}): ${text.slice(0, 300)}`);
   return text ? JSON.parse(text) : null;
 }
