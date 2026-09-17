@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LeadForm } from "@/components/LeadForm";
-import { PageHero } from "@/components/PageHero";
 import { supabase } from "@/integrations/supabase/app-client";
 import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
 import type { VehicleWithPhotos } from "@/lib/queries";
@@ -441,13 +440,8 @@ function SellPage() {
   }
 
   return (
-    <div className="min-h-screen bg-surface">
-      <PageHero
-        eyebrow="Sell or trade"
-        title="Know what your car is worth."
-        subtitle="Send the VIN or plate with mileage and condition. We reply with a real number, usually the same day."
-      />
-      <div className="mx-auto w-full max-w-[1200px] px-3 py-8 sm:px-5">
+    <div className="min-h-screen bg-slate-50/70">
+      <div className="mx-auto w-full max-w-[1280px] px-4 py-8 sm:px-6 lg:py-10">
         <div
           ref={leadFormScopeRef}
           className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 [&_button]:rounded-lg [&_input]:h-9 [&_input]:rounded-lg [&_label]:text-xs [&_textarea]:rounded-lg [&_textarea]:border-slate-300 [&_textarea]:text-sm"
@@ -489,9 +483,9 @@ function SellPage() {
               trade_in_records: JSON.stringify(tradeIns),
             })}
           >
-            <div className="space-y-5">
-              <div className="space-y-4">
-                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 [&_input]:!h-10 [&_label]:!text-xs">
+            <div className="grid items-start gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+              <aside className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 lg:sticky lg:top-6">
+                <div className="grid gap-4 [&_input]:!h-10 [&_label]:!text-xs">
                   <CompactField label="Full Name" htmlFor="customer-full-name">
                     <Input
                       id="customer-full-name"
@@ -543,7 +537,9 @@ function SellPage() {
                     />
                   </CompactField>
                 </div>
+              </aside>
 
+              <main className="min-w-0 space-y-5">
                 <div
                   className="grid gap-1 rounded-xl bg-slate-100 p-1 sm:grid-cols-3"
                   role="radiogroup"
@@ -575,326 +571,326 @@ function SellPage() {
                     </label>
                   ))}
                 </div>
-              </div>
 
-              {intent === "trade" && (
-                <>
-                  <Panel
-                    title="What Are You Looking For?"
-                    action={
-                      <Button
-                        type="button"
-                        size="sm"
-                        className="h-7 rounded-sm px-3 text-[10px]"
-                        onClick={() => openPicker("matching")}
-                      >
-                        <Search className="size-3" />
-                        Find Matching Vehicles
-                      </Button>
-                    }
-                  >
-                    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
-                      <CompactSelect label="New / Used">
-                        <Select value={wishList.newUsed} onValueChange={(value) => updateWishList("newUsed", value)}>
-                          <SelectTrigger className={selectClass}>
-                            <SelectValue />
-                          </SelectTrigger>
-                          <SelectContent>
-                            <SelectItem value="new">New</SelectItem>
-                            <SelectItem value="used">Used</SelectItem>
-                            <SelectItem value="manufacturer-search">Manufacturer Search</SelectItem>
-                          </SelectContent>
-                        </Select>
-                      </CompactSelect>
-
-                      <CompactSelect label="Vehicle Type">
-                        <Select
-                          value={wishList.vehicleType}
-                          onValueChange={(value) => updateWishList("vehicleType", value)}
+                {intent === "trade" && (
+                  <>
+                    <Panel
+                      title="What Are You Looking For?"
+                      action={
+                        <Button
+                          type="button"
+                          size="sm"
+                          className="h-7 rounded-sm px-3 text-[10px]"
+                          onClick={() => openPicker("matching")}
                         >
-                          <SelectTrigger className={selectClass}>
-                            <SelectValue placeholder="All types" />
-                          </SelectTrigger>
-                          <SelectContent>
-                            {VEHICLE_TYPES.map((option) => (
-                              <SelectItem key={option} value={option.toLowerCase()}>
-                                {option}
-                              </SelectItem>
-                            ))}
-                          </SelectContent>
-                        </Select>
-                      </CompactSelect>
-
-                      <DatalistField
-                        id="wish-make-model"
-                        label="Make and Model"
-                        value={wishList.makeModel}
-                        options={MAKE_MODELS}
-                        onChange={(value) => updateWishList("makeModel", value)}
-                        placeholder="Type or select a make and model"
-                      />
-
-                      <OptionSelect
-                        label="Body Type"
-                        value={wishList.bodyType}
-                        options={BODY_TYPES}
-                        onChange={(value) => updateWishList("bodyType", value)}
-                      />
-
-                      <CompactField label="Min. Year" htmlFor="wish-min-year">
-                        <Input
-                          id="wish-min-year"
-                          value={wishList.minYear}
-                          onChange={(event) => updateWishList("minYear", digitsOnly(event.target.value, 4))}
-                          inputMode="numeric"
-                          placeholder="2018"
-                          className={fieldClass}
-                        />
-                      </CompactField>
-
-                      <DatalistField
-                        id="wish-max-price"
-                        label="Max Price"
-                        value={wishList.maxPrice}
-                        options={MAX_PRICES}
-                        onChange={(value) => updateWishList("maxPrice", value)}
-                        placeholder="Type or select a price"
-                        inputMode="decimal"
-                      />
-
-                      <DatalistField
-                        id="wish-max-mileage"
-                        label="Max Mileage"
-                        value={wishList.maxMileage}
-                        options={MAX_MILEAGES}
-                        onChange={(value) => updateWishList("maxMileage", value)}
-                        placeholder="Any Mileage"
-                        inputMode="numeric"
-                      />
-
-                      <DatalistField
-                        id="wish-transmission"
-                        label="Transmission"
-                        value={wishList.transmission === "all" ? "" : wishList.transmission}
-                        options={TRANSMISSIONS}
-                        onChange={(value) => updateWishList("transmission", value || "all")}
-                      />
-                      <DatalistField
-                        id="wish-drivetrain"
-                        label="Drive Train"
-                        value={wishList.drivetrain === "all" ? "" : wishList.drivetrain}
-                        options={DRIVETRAINS}
-                        onChange={(value) => updateWishList("drivetrain", value || "all")}
-                      />
-                      <DatalistField
-                        id="wish-fuel-type"
-                        label="Fuel Type"
-                        value={wishList.fuelType === "all" ? "" : wishList.fuelType}
-                        options={FUEL_TYPES}
-                        onChange={(value) => updateWishList("fuelType", value || "all")}
-                      />
-
-                      <DatalistField
-                        id="wish-exterior-color"
-                        label="Exterior Color"
-                        value={wishList.exteriorColor}
-                        options={COLORS}
-                        onChange={(value) => updateWishList("exteriorColor", value === "Any Color" ? "" : value)}
-                        placeholder="Any Color"
-                      />
-
-                      <DatalistField
-                        id="wish-interior-color"
-                        label="Interior Color"
-                        value={wishList.interiorColor}
-                        options={COLORS}
-                        onChange={(value) => updateWishList("interiorColor", value === "Any Color" ? "" : value)}
-                        placeholder="Any Color"
-                      />
-                    </div>
-
-                    <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-4">
-                      {WISH_FEATURES.map((feature) => (
-                        <label
-                          key={feature}
-                          className="flex cursor-pointer items-center gap-2 text-[11px] text-slate-700"
-                        >
-                          <input
-                            type="checkbox"
-                            checked={wishList.features.includes(feature)}
-                            onChange={() => toggleFeature(feature)}
-                            className="size-3.5 rounded-sm border-slate-300 accent-cyan-700"
-                          />
-                          {feature}
-                        </label>
-                      ))}
-                    </div>
-                  </Panel>
-
-                  <Panel
-                    title={`Vehicles You're Interested In (${selectedVehicles.length})`}
-                    action={
-                      <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        className="h-7 rounded-sm px-3 text-[10px]"
-                        onClick={() => openPicker("all")}
-                      >
-                        <Plus className="size-3" />
-                        Choose From Our Inventory
-                      </Button>
-                    }
-                  >
-                    {selectedVehicles.length === 0 ? (
-                      <button
-                        type="button"
-                        onClick={() => openPicker("all")}
-                        className="flex w-full items-center justify-center gap-2 border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-xs text-slate-500 hover:border-cyan-600 hover:text-cyan-800"
-                      >
-                        <CarFront className="size-5" />
-                        No vehicles selected. Click to browse available inventory.
-                      </button>
-                    ) : (
-                      <div className="grid gap-3 lg:grid-cols-2">
-                        {selectedVehicles.map((vehicle) => (
-                          <SelectedVehicleCard
-                            key={vehicle.id}
-                            vehicle={vehicle}
-                            onRemove={() => toggleSelectedVehicle(vehicle.id)}
-                          />
-                        ))}
-                      </div>
-                    )}
-                  </Panel>
-                </>
-              )}
-
-              {intent && (
-                <Panel title="Your Vehicle">
-                  <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
-                    <CompactField label="VIN" htmlFor="vin">
-                      <Input
-                        id="vin"
-                        value={vin}
-                        onChange={(event) => setVin(event.target.value.toUpperCase().slice(0, 17))}
-                        placeholder="17 characters"
-                        maxLength={17}
-                        className={fieldClass}
-                      />
-                    </CompactField>
-                    <CompactField label="Or License Plate" htmlFor="plate">
-                      <Input
-                        id="plate"
-                        value={plate}
-                        onChange={(event) => setPlate(event.target.value.toUpperCase())}
-                        placeholder="VA plate"
-                        className={fieldClass}
-                      />
-                    </CompactField>
-                    <div className="sm:col-span-2">
-                      <CompactField label="Or Year, Make, Model and Trim" htmlFor="ymm">
-                        <Input
-                          id="ymm"
-                          value={ymm}
-                          onChange={(event) => setYmm(event.target.value)}
-                          placeholder="2019 Toyota RAV4 XLE"
-                          className={fieldClass}
-                        />
-                      </CompactField>
-                    </div>
-                    <CompactField label="Mileage" htmlFor="mileage">
-                      <Input
-                        id="mileage"
-                        value={mileage}
-                        onChange={(event) => setMileage(digitsOnly(event.target.value))}
-                        inputMode="numeric"
-                        required
-                        className={fieldClass}
-                      />
-                    </CompactField>
-                    <CompactField label="ZIP Code" htmlFor="zip">
-                      <Input
-                        id="zip"
-                        value={zip}
-                        onChange={(event) => setZip(digitsOnly(event.target.value, 5))}
-                        inputMode="numeric"
-                        maxLength={5}
-                        required
-                        className={fieldClass}
-                      />
-                    </CompactField>
-                    <TradeSelect
-                      label="Condition"
-                      value={condition}
-                      onChange={setCondition}
-                      options={[
-                        ["excellent", "Excellent"],
-                        ["good", "Good"],
-                        ["fair", "Fair"],
-                        ["rough", "Rough / Not Running"],
-                      ]}
-                    />
-                    <TradeSelect
-                      label="Title Status"
-                      value={title}
-                      onChange={setTitle}
-                      options={[
-                        ["clean", "Clean, in Hand"],
-                        ["lien", "Clean, Lien Payoff"],
-                        ["salvage", "Salvage or Rebuilt"],
-                        ["lost", "Lost Title"],
-                      ]}
-                    />
-                  </div>
-
-                  <div className="mt-3 border-t border-slate-200 pt-3">
-                    <Label htmlFor="customer-vehicle-photos" className="text-[10px] font-medium text-slate-700">
-                      Vehicle Photos
-                    </Label>
-                    <label
-                      htmlFor="customer-vehicle-photos"
-                      className="mt-1 flex cursor-pointer flex-col items-center justify-center border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center transition-colors hover:border-cyan-600 hover:bg-cyan-50/40"
-                      onDragOver={(event) => event.preventDefault()}
-                      onDrop={(event) => {
-                        event.preventDefault();
-                        const images = Array.from(event.dataTransfer.files).filter((file) =>
-                          ["image/jpeg", "image/png"].includes(file.type),
-                        );
-                        setTradeInPhotoNames(images.map((file) => file.name));
-                      }}
+                          <Search className="size-3" />
+                          Find Matching Vehicles
+                        </Button>
+                      }
                     >
-                      <ImagePlus className="size-6 text-cyan-700" />
-                      <span className="mt-2 text-xs font-semibold text-slate-700">
-                        Drop your images here, or browse
-                      </span>
-                      <span className="mt-1 text-[10px] text-slate-500">Supports JPG, JPEG and PNG</span>
-                      <Input
-                        id="customer-vehicle-photos"
-                        type="file"
-                        accept="image/jpeg,image/png"
-                        multiple
-                        className="sr-only"
-                        onChange={(event) =>
-                          setTradeInPhotoNames(Array.from(event.target.files ?? []).map((file) => file.name))
-                        }
-                      />
-                    </label>
-                    {tradeInPhotoNames.length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
-                        {tradeInPhotoNames.map((name) => (
-                          <span
-                            key={name}
-                            className="border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-600"
+                      <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <CompactSelect label="New / Used">
+                          <Select value={wishList.newUsed} onValueChange={(value) => updateWishList("newUsed", value)}>
+                            <SelectTrigger className={selectClass}>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                              <SelectItem value="new">New</SelectItem>
+                              <SelectItem value="used">Used</SelectItem>
+                              <SelectItem value="manufacturer-search">Manufacturer Search</SelectItem>
+                            </SelectContent>
+                          </Select>
+                        </CompactSelect>
+
+                        <CompactSelect label="Vehicle Type">
+                          <Select
+                            value={wishList.vehicleType}
+                            onValueChange={(value) => updateWishList("vehicleType", value)}
                           >
-                            {name}
-                          </span>
+                            <SelectTrigger className={selectClass}>
+                              <SelectValue placeholder="All types" />
+                            </SelectTrigger>
+                            <SelectContent>
+                              {VEHICLE_TYPES.map((option) => (
+                                <SelectItem key={option} value={option.toLowerCase()}>
+                                  {option}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </CompactSelect>
+
+                        <DatalistField
+                          id="wish-make-model"
+                          label="Make and Model"
+                          value={wishList.makeModel}
+                          options={MAKE_MODELS}
+                          onChange={(value) => updateWishList("makeModel", value)}
+                          placeholder="Type or select a make and model"
+                        />
+
+                        <OptionSelect
+                          label="Body Type"
+                          value={wishList.bodyType}
+                          options={BODY_TYPES}
+                          onChange={(value) => updateWishList("bodyType", value)}
+                        />
+
+                        <CompactField label="Min. Year" htmlFor="wish-min-year">
+                          <Input
+                            id="wish-min-year"
+                            value={wishList.minYear}
+                            onChange={(event) => updateWishList("minYear", digitsOnly(event.target.value, 4))}
+                            inputMode="numeric"
+                            placeholder="2018"
+                            className={fieldClass}
+                          />
+                        </CompactField>
+
+                        <DatalistField
+                          id="wish-max-price"
+                          label="Max Price"
+                          value={wishList.maxPrice}
+                          options={MAX_PRICES}
+                          onChange={(value) => updateWishList("maxPrice", value)}
+                          placeholder="Type or select a price"
+                          inputMode="decimal"
+                        />
+
+                        <DatalistField
+                          id="wish-max-mileage"
+                          label="Max Mileage"
+                          value={wishList.maxMileage}
+                          options={MAX_MILEAGES}
+                          onChange={(value) => updateWishList("maxMileage", value)}
+                          placeholder="Any Mileage"
+                          inputMode="numeric"
+                        />
+
+                        <DatalistField
+                          id="wish-transmission"
+                          label="Transmission"
+                          value={wishList.transmission === "all" ? "" : wishList.transmission}
+                          options={TRANSMISSIONS}
+                          onChange={(value) => updateWishList("transmission", value || "all")}
+                        />
+                        <DatalistField
+                          id="wish-drivetrain"
+                          label="Drive Train"
+                          value={wishList.drivetrain === "all" ? "" : wishList.drivetrain}
+                          options={DRIVETRAINS}
+                          onChange={(value) => updateWishList("drivetrain", value || "all")}
+                        />
+                        <DatalistField
+                          id="wish-fuel-type"
+                          label="Fuel Type"
+                          value={wishList.fuelType === "all" ? "" : wishList.fuelType}
+                          options={FUEL_TYPES}
+                          onChange={(value) => updateWishList("fuelType", value || "all")}
+                        />
+
+                        <DatalistField
+                          id="wish-exterior-color"
+                          label="Exterior Color"
+                          value={wishList.exteriorColor}
+                          options={COLORS}
+                          onChange={(value) => updateWishList("exteriorColor", value === "Any Color" ? "" : value)}
+                          placeholder="Any Color"
+                        />
+
+                        <DatalistField
+                          id="wish-interior-color"
+                          label="Interior Color"
+                          value={wishList.interiorColor}
+                          options={COLORS}
+                          onChange={(value) => updateWishList("interiorColor", value === "Any Color" ? "" : value)}
+                          placeholder="Any Color"
+                        />
+                      </div>
+
+                      <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+                        {WISH_FEATURES.map((feature) => (
+                          <label
+                            key={feature}
+                            className="flex cursor-pointer items-center gap-2 text-[11px] text-slate-700"
+                          >
+                            <input
+                              type="checkbox"
+                              checked={wishList.features.includes(feature)}
+                              onChange={() => toggleFeature(feature)}
+                              className="size-3.5 rounded-sm border-slate-300 accent-cyan-700"
+                            />
+                            {feature}
+                          </label>
                         ))}
                       </div>
-                    )}
-                  </div>
-                </Panel>
-              )}
+                    </Panel>
+
+                    <Panel
+                      title={`Vehicles You're Interested In (${selectedVehicles.length})`}
+                      action={
+                        <Button
+                          type="button"
+                          variant="outline"
+                          size="sm"
+                          className="h-7 rounded-sm px-3 text-[10px]"
+                          onClick={() => openPicker("all")}
+                        >
+                          <Plus className="size-3" />
+                          Choose From Our Inventory
+                        </Button>
+                      }
+                    >
+                      {selectedVehicles.length === 0 ? (
+                        <button
+                          type="button"
+                          onClick={() => openPicker("all")}
+                          className="flex w-full items-center justify-center gap-2 border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-xs text-slate-500 hover:border-cyan-600 hover:text-cyan-800"
+                        >
+                          <CarFront className="size-5" />
+                          No vehicles selected. Click to browse available inventory.
+                        </button>
+                      ) : (
+                        <div className="grid gap-3 lg:grid-cols-2">
+                          {selectedVehicles.map((vehicle) => (
+                            <SelectedVehicleCard
+                              key={vehicle.id}
+                              vehicle={vehicle}
+                              onRemove={() => toggleSelectedVehicle(vehicle.id)}
+                            />
+                          ))}
+                        </div>
+                      )}
+                    </Panel>
+                  </>
+                )}
+
+                {intent && (
+                  <Panel title="Your Vehicle">
+                    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
+                      <CompactField label="VIN" htmlFor="vin">
+                        <Input
+                          id="vin"
+                          value={vin}
+                          onChange={(event) => setVin(event.target.value.toUpperCase().slice(0, 17))}
+                          placeholder="17 characters"
+                          maxLength={17}
+                          className={fieldClass}
+                        />
+                      </CompactField>
+                      <CompactField label="Or License Plate" htmlFor="plate">
+                        <Input
+                          id="plate"
+                          value={plate}
+                          onChange={(event) => setPlate(event.target.value.toUpperCase())}
+                          placeholder="VA plate"
+                          className={fieldClass}
+                        />
+                      </CompactField>
+                      <div className="sm:col-span-2">
+                        <CompactField label="Or Year, Make, Model and Trim" htmlFor="ymm">
+                          <Input
+                            id="ymm"
+                            value={ymm}
+                            onChange={(event) => setYmm(event.target.value)}
+                            placeholder="2019 Toyota RAV4 XLE"
+                            className={fieldClass}
+                          />
+                        </CompactField>
+                      </div>
+                      <CompactField label="Mileage" htmlFor="mileage">
+                        <Input
+                          id="mileage"
+                          value={mileage}
+                          onChange={(event) => setMileage(digitsOnly(event.target.value))}
+                          inputMode="numeric"
+                          required
+                          className={fieldClass}
+                        />
+                      </CompactField>
+                      <CompactField label="ZIP Code" htmlFor="zip">
+                        <Input
+                          id="zip"
+                          value={zip}
+                          onChange={(event) => setZip(digitsOnly(event.target.value, 5))}
+                          inputMode="numeric"
+                          maxLength={5}
+                          required
+                          className={fieldClass}
+                        />
+                      </CompactField>
+                      <TradeSelect
+                        label="Condition"
+                        value={condition}
+                        onChange={setCondition}
+                        options={[
+                          ["excellent", "Excellent"],
+                          ["good", "Good"],
+                          ["fair", "Fair"],
+                          ["rough", "Rough / Not Running"],
+                        ]}
+                      />
+                      <TradeSelect
+                        label="Title Status"
+                        value={title}
+                        onChange={setTitle}
+                        options={[
+                          ["clean", "Clean, in Hand"],
+                          ["lien", "Clean, Lien Payoff"],
+                          ["salvage", "Salvage or Rebuilt"],
+                          ["lost", "Lost Title"],
+                        ]}
+                      />
+                    </div>
+
+                    <div className="mt-3 border-t border-slate-200 pt-3">
+                      <Label htmlFor="customer-vehicle-photos" className="text-[10px] font-medium text-slate-700">
+                        Vehicle Photos
+                      </Label>
+                      <label
+                        htmlFor="customer-vehicle-photos"
+                        className="mt-1 flex cursor-pointer flex-col items-center justify-center border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center transition-colors hover:border-cyan-600 hover:bg-cyan-50/40"
+                        onDragOver={(event) => event.preventDefault()}
+                        onDrop={(event) => {
+                          event.preventDefault();
+                          const images = Array.from(event.dataTransfer.files).filter((file) =>
+                            ["image/jpeg", "image/png"].includes(file.type),
+                          );
+                          setTradeInPhotoNames(images.map((file) => file.name));
+                        }}
+                      >
+                        <ImagePlus className="size-6 text-cyan-700" />
+                        <span className="mt-2 text-xs font-semibold text-slate-700">
+                          Drop your images here, or browse
+                        </span>
+                        <span className="mt-1 text-[10px] text-slate-500">Supports JPG, JPEG and PNG</span>
+                        <Input
+                          id="customer-vehicle-photos"
+                          type="file"
+                          accept="image/jpeg,image/png"
+                          multiple
+                          className="sr-only"
+                          onChange={(event) =>
+                            setTradeInPhotoNames(Array.from(event.target.files ?? []).map((file) => file.name))
+                          }
+                        />
+                      </label>
+                      {tradeInPhotoNames.length > 0 && (
+                        <div className="mt-2 flex flex-wrap gap-1.5">
+                          {tradeInPhotoNames.map((name) => (
+                            <span
+                              key={name}
+                              className="border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-600"
+                            >
+                              {name}
+                            </span>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  </Panel>
+                )}
+              </main>
             </div>
           </LeadForm>
         </div>
