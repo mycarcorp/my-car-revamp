@@ -81,11 +81,14 @@ function imageUrls(car: LegacyCar): string[] {
     .filter(Boolean)
     .map((path) => {
       if (/^https?:\/\//i.test(path)) return path;
+      const video = path.match(/video-(\d+)\.(mp4|webm|mov|m4v)$/i);
+      if (video) return `/api/public/vehicle-photos/${vin}/video-${video[1]}.${video[2]!.toLowerCase()}`;
       const photo = path.match(/photo-(\d+)\.(?:jpg|jpeg|png|webp)$/i);
       if (photo) return `/api/public/vehicle-photos/${vin}/photo-${photo[1]}.jpg`;
       return path;
     });
 }
+
 
 function publicVehicle(car: LegacyCar, existingId?: string, overrides: Record<string, unknown> = {}) {
   const vin = (car.source_id ?? `legacy-${car.id}`).trim().toUpperCase();

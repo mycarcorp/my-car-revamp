@@ -1,8 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 
 export type PhotoOrderInput =
-  | { kind: "keep"; url: string }
-  | { kind: "new"; index: number };
+  | { kind: "keep"; url: string; media?: "photo" | "video" }
+  | { kind: "new"; index: number; media?: "photo" | "video" };
 
 export const saveVehiclePhotosFn = createServerFn({ method: "POST" })
   .inputValidator(
@@ -14,7 +14,7 @@ export const saveVehiclePhotosFn = createServerFn({ method: "POST" })
       newPhotos: Array<{ dataUrl: string; contentType?: string }>;
     }) => {
       if (!input?.accessToken) throw new Error("Not signed in.");
-      if (!input?.vin) throw new Error("A VIN is required to store photos.");
+      if (!input?.vin) throw new Error("A VIN is required to store media.");
       return input;
     },
   )
