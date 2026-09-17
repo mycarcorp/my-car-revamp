@@ -10,7 +10,9 @@ import { siteSettingsQuery } from "@/lib/queries";
 export const Route = createFileRoute("/schedule")({
   head: () => ({
     meta: [
-      { title: "Book a Test Drive or Appraisal — MyCar Fredericksburg, VA" },
+      {
+        title: "Book a Test Drive or Appraisal — MyCar Fredericksburg, VA",
+      },
       {
         name: "description",
         content:
@@ -41,9 +43,23 @@ function SchedulePage() {
   const [vehicle, setVehicle] = useState("");
 
   return (
-    <div className="bg-surface">
-      <div className="mx-auto grid max-w-6xl gap-8 px-4 py-12 lg:grid-cols-[1.4fr_1fr] lg:px-12">
-        <div className="rounded-xl border border-border bg-card p-6">
+    <div className="min-h-screen bg-surface">
+      <div className="mx-auto grid max-w-6xl items-start gap-8 px-4 py-12 lg:grid-cols-[1fr_1.4fr] lg:px-12">
+        <aside className="order-2 rounded-xl border border-border bg-surface p-6 text-sm lg:order-1">
+          <h2 className="font-display text-lg font-bold">Showroom hours</h2>
+
+          <ul className="mt-3 space-y-1 text-muted-foreground">
+            <li>Mon–Fri: {hours["mon_fri"] ?? "—"}</li>
+            <li>Saturday: {hours["sat"] ?? "—"}</li>
+            <li>Sunday: {hours["sun"] ?? "—"}</li>
+          </ul>
+
+          <p className="mt-4 text-muted-foreground">{settings?.address_line}</p>
+
+          <p className="mt-1 font-semibold text-foreground">{settings?.phone}</p>
+        </aside>
+
+        <div className="order-1 rounded-xl border border-border bg-card p-6 shadow-sm lg:order-2 [&_button[type=submit]]:ml-auto [&_button[type=submit]]:flex">
           <LeadForm
             leadType="appointment"
             submitLabel="Request appointment"
@@ -68,8 +84,11 @@ function SchedulePage() {
 
                   <SelectContent>
                     <SelectItem value="test_drive">Test drive</SelectItem>
+
                     <SelectItem value="trade_appraisal">Trade appraisal</SelectItem>
+
                     <SelectItem value="financing">Financing consultation</SelectItem>
+
                     <SelectItem value="general">General visit</SelectItem>
                   </SelectContent>
                 </Select>
@@ -112,20 +131,6 @@ function SchedulePage() {
             </div>
           </LeadForm>
         </div>
-
-        <aside className="rounded-xl border border-border bg-surface p-6 text-sm">
-          <h2 className="font-display text-lg font-bold">Showroom hours</h2>
-
-          <ul className="mt-3 space-y-1 text-muted-foreground">
-            <li>Mon–Fri: {hours["mon_fri"] ?? "—"}</li>
-            <li>Saturday: {hours["sat"] ?? "—"}</li>
-            <li>Sunday: {hours["sun"] ?? "—"}</li>
-          </ul>
-
-          <p className="mt-4 text-muted-foreground">{settings?.address_line}</p>
-
-          <p className="mt-1 font-semibold text-foreground">{settings?.phone}</p>
-        </aside>
       </div>
     </div>
   );
