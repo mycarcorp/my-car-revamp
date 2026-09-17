@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Banknote, Handshake, Search, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -91,7 +91,10 @@ function SearchPage() {
   const { user } = useAuth();
   const { data: facets } = useQuery(facetsQuery());
   const { data: settings } = useQuery(siteSettingsQuery());
-  const { data, isLoading } = useQuery(vehicleSearchQuery(params as SearchFilters));
+  const { data, isLoading } = useQuery({
+    ...vehicleSearchQuery(params as SearchFilters),
+    placeholderData: keepPreviousData,
+  });
   const { data: inventoryPrices = [] } = useQuery({
     queryKey: ["search", "price-bounds"],
     queryFn: async () => {
@@ -116,6 +119,7 @@ function SearchPage() {
   }, [inventoryPrices]);
 
   const [priceRange, setPriceRange] = useState<[number, number]>([0, 0]);
+  const priceFilterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     if (priceBounds.max <= 0) return;
@@ -134,6 +138,22 @@ function SearchPage() {
       priceMax: range[1] === priceBounds.max ? undefined : range[1],
     });
   };
+
+  const schedulePriceRangeFilter = (range: [number, number]) => {
+    if (priceFilterTimerRef.current) clearTimeout(priceFilterTimerRef.current);
+
+    priceFilterTimerRef.current = setTimeout(() => {
+      commitPriceRange(range);
+      priceFilterTimerRef.current = null;
+    }, 120);
+  };
+
+  useEffect(
+    () => () => {
+      if (priceFilterTimerRef.current) clearTimeout(priceFilterTimerRef.current);
+    },
+    [],
+  );
 
   const activeCount = Object.entries(params).filter(([k, v]) => v !== undefined && k !== "sort" && k !== "page").length;
 
@@ -288,11 +308,16 @@ function SearchPage() {
               value={priceRange}
               onValueChange={(value) => {
                 const next = value as [number, number];
-                setPriceRange(next[0] <= next[1] ? next : [next[1], next[1]]);
+                const ordered = next[0] <= next[1] ? next : ([next[1], next[1]] as [number, number]);
+                setPriceRange(ordered);
+                schedulePriceRangeFilter(ordered);
               }}
               onValueCommit={(value) => {
                 const next = value as [number, number];
-                commitPriceRange(next[0] <= next[1] ? next : [next[1], next[1]]);
+                const ordered = next[0] <= next[1] ? next : ([next[1], next[1]] as [number, number]);
+                if (priceFilterTimerRef.current) clearTimeout(priceFilterTimerRef.current);
+                priceFilterTimerRef.current = null;
+                commitPriceRange(ordered);
               }}
               disabled={priceBounds.max <= priceBounds.min}
               aria-label="Filter by price range"
