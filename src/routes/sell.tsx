@@ -438,19 +438,11 @@ function SellPage() {
   }
 
   return (
-    <div className="min-h-screen bg-[#f4f7f7] px-3 py-5 sm:px-5">
+    <div className="min-h-screen bg-[#f4f7f7] px-3 py-6 sm:px-5">
       <div className="mx-auto w-full max-w-[1200px]">
-        <div className="mb-4">
-          <h1 className="text-xl font-semibold text-slate-800">Sell or Trade Your Car</h1>
-          <p className="mt-1 max-w-3xl text-xs leading-5 text-slate-500">
-            Tell us about your current vehicle and, if you are trading, select the vehicles you are interested in from
-            our available inventory.
-          </p>
-        </div>
-
         <div
           ref={leadFormScopeRef}
-          className="border border-slate-300 bg-white p-2 shadow-sm sm:p-3 [&_button]:rounded-sm [&_input]:h-8 [&_input]:rounded-sm [&_label]:text-[10px] [&_textarea]:rounded-sm [&_textarea]:border-slate-300 [&_textarea]:text-xs"
+          className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 [&_button]:rounded-lg [&_input]:h-9 [&_input]:rounded-lg [&_label]:text-xs [&_textarea]:rounded-lg [&_textarea]:border-slate-300 [&_textarea]:text-sm"
         >
           <LeadForm
             leadType="trade"
@@ -489,12 +481,9 @@ function SellPage() {
               trade_in_records: JSON.stringify(tradeIns),
             })}
           >
-            <div className="space-y-3">
-              <Panel
-                title="Customer Information"
-                description="Tell us how to contact you about your vehicle appraisal."
-              >
-                <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
+            <div className="space-y-5">
+              <div className="space-y-4">
+                <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-4 [&_input]:!h-10 [&_label]:!text-xs">
                   <CompactField label="Full Name" htmlFor="customer-full-name">
                     <Input
                       id="customer-full-name"
@@ -502,7 +491,7 @@ function SellPage() {
                       onChange={(event) => setCustomerName(event.target.value)}
                       placeholder="First and last name"
                       autoComplete="name"
-                      className={fieldClass}
+                      className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
                       required
                     />
                   </CompactField>
@@ -515,7 +504,7 @@ function SellPage() {
                       onChange={(event) => setCustomerEmail(event.target.value)}
                       placeholder="name@example.com"
                       autoComplete="email"
-                      className={fieldClass}
+                      className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
                       required
                     />
                   </CompactField>
@@ -530,7 +519,7 @@ function SellPage() {
                       onChange={(event) => setCustomerPhone(digitsOnly(event.target.value, 10))}
                       placeholder="(000) 000-0000"
                       autoComplete="tel"
-                      className={fieldClass}
+                      className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
                       required
                     />
                   </CompactField>
@@ -542,28 +531,27 @@ function SellPage() {
                       onChange={(event) => setCustomerAddress(event.target.value)}
                       placeholder="Street, city, state and ZIP"
                       autoComplete="street-address"
-                      className={fieldClass}
+                      className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
                     />
                   </CompactField>
                 </div>
-              </Panel>
 
-              <Panel
-                title="What Would You Like to Do?"
-                description="Choose one option so we can show only the information relevant to your request."
-              >
-                <div className="grid gap-2 sm:grid-cols-3">
+                <div
+                  className="grid gap-1 rounded-xl bg-slate-100 p-1 sm:grid-cols-3"
+                  role="radiogroup"
+                  aria-label="Choose whether to sell or trade your vehicle"
+                >
                   {[
-                    ["sell", "Sell My Vehicle", "Receive an offer to sell your vehicle directly to MyCar."],
-                    ["trade", "Trade My Vehicle", "Use your current vehicle toward one from our inventory."],
-                    ["undecided", "I'm Not Sure", "Share your vehicle details and our team will explain your options."],
-                  ].map(([value, heading, description]) => (
+                    ["sell", "Sell My Vehicle"],
+                    ["trade", "Trade My Vehicle"],
+                    ["undecided", "I'm Not Sure"],
+                  ].map(([value, heading]) => (
                     <label
                       key={value}
-                      className={`flex cursor-pointer items-start gap-3 border p-3 transition-colors ${
+                      className={`flex min-h-11 cursor-pointer items-center justify-center rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition-all ${
                         intent === value
-                          ? "border-cyan-700 bg-cyan-50 ring-1 ring-cyan-700"
-                          : "border-slate-300 bg-white hover:border-cyan-500 hover:bg-cyan-50/40"
+                          ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200"
+                          : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
                       }`}
                     >
                       <input
@@ -573,16 +561,13 @@ function SellPage() {
                         checked={intent === value}
                         onChange={() => setIntent(value)}
                         required
-                        className="mt-0.5 size-4 accent-cyan-700"
+                        className="sr-only"
                       />
-                      <span>
-                        <span className="block text-xs font-semibold text-slate-800">{heading}</span>
-                        <span className="mt-1 block text-[10px] leading-4 text-slate-500">{description}</span>
-                      </span>
+                      {heading}
                     </label>
                   ))}
                 </div>
-              </Panel>
+              </div>
 
               {intent === "trade" && (
                 <>
