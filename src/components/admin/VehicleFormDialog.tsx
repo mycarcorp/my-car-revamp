@@ -657,11 +657,23 @@ export function VehicleFormDialog({
                     draggedPhotoIndex === i ? "scale-[0.98] border-[#F7941D] opacity-60" : "border-border"
                   }`}
                 >
-                  <img
-                    src={p.kind === "existing" ? p.url : p.previewUrl}
-                    alt={`Photo ${i + 1}`}
-                    className="h-24 w-full object-cover"
-                  />
+                  {isVideoDraft(p) ? (
+                    <video
+                      src={p.kind === "existing" ? p.url : p.previewUrl}
+                      className="h-24 w-full bg-black object-cover"
+                      muted
+                      playsInline
+                      preload="metadata"
+                      controls
+                    />
+                  ) : (
+                    <img
+                      src={p.kind === "existing" ? p.url : p.previewUrl}
+                      alt={`Photo ${i + 1}`}
+                      className="h-24 w-full object-cover"
+                    />
+                  )}
+
                   <div className="flex items-center justify-between gap-1 p-1">
                     <span className="flex items-center gap-1 pl-1 text-xs text-muted-foreground">
                       <GripVertical className="size-3" />#{i + 1}
