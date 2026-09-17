@@ -449,7 +449,7 @@ export function VehicleFormDialog({
         <Field label="Description">
           <Textarea rows={4} value={form.description} onChange={(e) => set("description", e.target.value)} />
         </Field>
-        <Field label="Features (one per line)">
+        <Field label="Equipment (one per line)">
           <Textarea rows={3} value={form.features} onChange={(e) => set("features", e.target.value)} />
         </Field>
 
