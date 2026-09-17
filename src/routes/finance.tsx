@@ -1268,7 +1268,7 @@ function StepActions({ onBack, onNext }: { onBack?: () => void; onNext: () => vo
           Back
         </Button>
       )}
-      <Button type="button" onClick={onNext} className="bg-blue-600 font-semibold text-white hover:bg-blue-700">
+      <Button type="button" onClick={onNext} className="bg-[#071b33] font-semibold text-white hover:bg-[#0b2a4d]">
         Continue
       </Button>
     </div>
