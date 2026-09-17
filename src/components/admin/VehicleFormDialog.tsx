@@ -426,13 +426,15 @@ export function VehicleFormDialog({
       const newPhotos: Array<{ dataUrl: string; contentType?: string }> = [];
       const order: PhotoOrderInput[] = [];
       for (const p of photos) {
+        const media = isVideoDraft(p) ? ("video" as const) : ("photo" as const);
         if (p.kind === "existing") {
-          order.push({ kind: "keep", url: p.url });
+          order.push({ kind: "keep", url: p.url, media });
         } else {
-          order.push({ kind: "new", index: newPhotos.length });
+          order.push({ kind: "new", index: newPhotos.length, media });
           newPhotos.push({ dataUrl: await fileToDataUrl(p.file), contentType: p.file.type });
         }
       }
+
       await saveVehiclePhotosFn({
         data: {
           accessToken: session.access_token,
