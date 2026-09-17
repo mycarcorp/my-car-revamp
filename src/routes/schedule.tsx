@@ -44,22 +44,44 @@ function SchedulePage() {
 
   return (
     <div className="min-h-screen bg-surface">
-      <div className="mx-auto grid max-w-6xl items-start gap-8 px-4 py-12 lg:grid-cols-[1fr_1.4fr] lg:px-12">
-        <aside className="order-2 rounded-xl border border-border bg-surface p-6 text-sm lg:order-1">
+      <div className="mx-auto grid max-w-6xl items-start gap-8 px-4 py-12 lg:grid-cols-[0.75fr_1.4fr] lg:px-12">
+        {/* Showroom information — left side */}
+        <aside className="order-2 rounded-xl border border-border bg-card p-6 text-sm shadow-sm lg:order-1">
           <h2 className="font-display text-lg font-bold">Showroom hours</h2>
 
-          <ul className="mt-3 space-y-1 text-muted-foreground">
-            <li>Mon–Fri: {hours["mon_fri"] ?? "—"}</li>
-            <li>Saturday: {hours["sat"] ?? "—"}</li>
-            <li>Sunday: {hours["sun"] ?? "—"}</li>
+          <ul className="mt-4 space-y-2 text-muted-foreground">
+            <li className="flex items-center justify-between gap-4">
+              <span>Mon–Fri</span>
+              <span className="font-medium text-foreground">{hours["mon_fri"] ?? "—"}</span>
+            </li>
+
+            <li className="flex items-center justify-between gap-4">
+              <span>Saturday</span>
+              <span className="font-medium text-foreground">{hours["sat"] ?? "—"}</span>
+            </li>
+
+            <li className="flex items-center justify-between gap-4">
+              <span>Sunday</span>
+              <span className="font-medium text-foreground">{hours["sun"] ?? "—"}</span>
+            </li>
           </ul>
 
-          <p className="mt-4 text-muted-foreground">{settings?.address_line}</p>
+          <div className="mt-6 border-t border-border pt-5">
+            <p className="text-muted-foreground">{settings?.address_line}</p>
 
-          <p className="mt-1 font-semibold text-foreground">{settings?.phone}</p>
+            <p className="mt-2 font-semibold text-foreground">{settings?.phone}</p>
+          </div>
         </aside>
 
-        <div className="order-1 rounded-xl border border-border bg-card p-6 shadow-sm lg:order-2 [&_button[type=submit]]:ml-auto [&_button[type=submit]]:flex">
+        {/* Appointment form — right side */}
+        <div
+          className="
+            order-1 rounded-xl border border-border bg-card p-6 shadow-sm
+            lg:order-2 lg:p-8
+            [&_button[type='submit']]:ml-auto
+            [&_button[type='submit']]:flex
+          "
+        >
           <LeadForm
             leadType="appointment"
             submitLabel="Request appointment"
@@ -73,12 +95,12 @@ function SchedulePage() {
               vehicle,
             })}
           >
-            <div className="grid gap-4 sm:grid-cols-2">
+            <div className="grid gap-5 sm:grid-cols-2">
               <div className="space-y-2">
-                <Label>Appointment type</Label>
+                <Label htmlFor="appointment-type">Appointment type</Label>
 
                 <Select value={type} onValueChange={setType}>
-                  <SelectTrigger>
+                  <SelectTrigger id="appointment-type">
                     <SelectValue />
                   </SelectTrigger>
 
@@ -95,7 +117,9 @@ function SchedulePage() {
               </div>
 
               <div className="space-y-2">
-                <Label htmlFor="vehicle">Vehicle (optional)</Label>
+                <Label htmlFor="vehicle">
+                  Vehicle <span className="font-normal text-muted-foreground">(optional)</span>
+                </Label>
 
                 <Input
                   id="vehicle"
@@ -112,10 +136,10 @@ function SchedulePage() {
               </div>
 
               <div className="space-y-2">
-                <Label>Preferred time</Label>
+                <Label htmlFor="preferred-time">Preferred time</Label>
 
-                <Select value={time ?? ""} onValueChange={setTime}>
-                  <SelectTrigger>
+                <Select value={time} onValueChange={setTime}>
+                  <SelectTrigger id="preferred-time">
                     <SelectValue />
                   </SelectTrigger>
 
