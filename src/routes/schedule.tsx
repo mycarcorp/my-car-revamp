@@ -11,6 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { LeadForm } from "@/components/LeadForm";
+import { PageHero } from "@/components/PageHero";
 import { siteSettingsQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/schedule")({
@@ -43,13 +44,13 @@ function SchedulePage() {
   const [vehicle, setVehicle] = useState("");
 
   return (
-    <div className="mx-auto max-w-5xl px-4 py-12">
-      <h1 className="font-display text-4xl font-bold">Book a visit</h1>
-      <p className="mt-3 max-w-2xl text-muted-foreground">
-        Pick a time and we'll have the vehicle pulled up front and ready when you arrive.
-      </p>
-
-      <div className="mt-10 grid gap-8 lg:grid-cols-[1fr_300px]">
+    <div className="bg-surface">
+      <PageHero
+        eyebrow="Book a visit"
+        title="Pick a time that works."
+        subtitle="We'll have the vehicle pulled up front and ready when you arrive."
+      />
+      <div className="mx-auto grid max-w-5xl gap-8 px-4 py-10 lg:grid-cols-[1fr_300px]">
         <div className="rounded-xl border border-border bg-card p-6">
           <LeadForm
             leadType="appointment"

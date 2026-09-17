@@ -9,6 +9,7 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LeadForm } from "@/components/LeadForm";
+import { PageHero } from "@/components/PageHero";
 import { supabase } from "@/integrations/supabase/app-client";
 import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
 import type { VehicleWithPhotos } from "@/lib/queries";
