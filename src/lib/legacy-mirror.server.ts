@@ -350,3 +350,94 @@ export async function mirrorSavedCar(
   }
   return { mirrored: true };
 }
+
+/** Mirror a sell / trade appraisal request into mycarco_db.mc_trade_ins. */
+export async function mirrorTradeRow(input: MirrorLeadInput): Promise<void> {
+  const d = input.details ?? {};
+  const records = ((): Array<{ data?: Json; photoNames?: unknown }> => {
+    const raw = d["trade_in_records"];
+    if (Array.isArray(raw)) return raw as Array<{ data?: Json }>;
+    try {
+      const parsed = JSON.parse(String(raw ?? "[]"));
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  })();
+  const w = (records[0]?.data ?? {}) as Json;
+
+  const legacyUserId = await resolveLegacyUserId({
+    userId: input.userId ?? null,
+    email: input.email,
+    fullName: input.fullName,
+    phone: input.phone ?? null,
+  }).catch(() => null);
+
+  const body: Json = {
+    user_id: legacyUserId,
+    full_name: nz(d["customer_name"] ?? input.fullName, 255) ?? "Website visitor",
+    email: nz(d["customer_email"] ?? input.email, 255),
+    phone: nz(d["customer_phone"] ?? input.phone, 40),
+    address: nz(d["customer_address"], 1000),
+    zip: nz(d["zip"], 20),
+    intent: nz(d["intent"], 40),
+    vin: nz(d["vin"] ?? w["vin"], 40),
+    license_plate: nz(d["plate"], 40),
+    year_make_model: nz(d["year_make_model"], 255),
+    odometer: num(d["mileage"] ?? w["odometer"]),
+    condition: nz(d["condition"] ?? w["condition"], 40),
+    title_status: nz(d["title_status"], 40),
+    message: input.message ?? null,
+    wish_list: jsonField(d["customer_wish_list"]),
+    selected_vehicle_ids: nz(d["selected_vehicle_ids"], 4000),
+    selected_vehicles: jsonField(d["selected_vehicles"]),
+    vehicle_year: nz(w["year"], 10),
+    make: nz(w["make"], 120),
+    model: nz(w["model"], 120),
+    trim: nz(w["trim"], 120),
+    engine: nz(w["engine"], 120),
+    transmission: nz(w["transmission"], 60),
+    drivetrain: nz(w["drivetrain"], 40),
+    doors: nz(w["doors"], 10),
+    cylinders: nz(w["cylinders"], 10),
+    body_type: nz(w["bodyType"], 60),
+    fuel_type: nz(w["fuelType"], 60),
+    horsepower: nz(w["horsepower"], 20),
+    exterior_color: nz(w["exteriorColor"], 60),
+    interior_color: nz(w["interiorColor"], 60),
+    mpg_city: nz(w["mpgCity"], 10),
+    mpg_highway: nz(w["mpgHighway"], 10),
+    vehicle_weight: nz(w["vehicleWeight"], 20),
+    gvw: nz(w["gvw"], 20),
+    stock_number: nz(w["stockNumber"], 60),
+    appraisal_date: dateField(w["appraisalDate"]),
+    location: nz(w["location"], 120),
+    appraiser_name: nz(w["appraiserName"], 120),
+    sales_rep: nz(w["salesRep"], 120),
+    target_selling_price: num(w["targetSellingPrice"]),
+    recondition: num(w["recondition"]),
+    packs: num(w["packs"]),
+    additional: num(w["additional"]),
+    gross_profit: num(w["grossProfit"]),
+    appraisal_value: num(w["appraisalValue"]),
+    source: nz(w["source"], 60),
+    lienholder: nz(w["lienholder"], 160),
+    lien_account_number: nz(w["lienAccountNumber"], 80),
+    payoff_amount: num(w["payoffAmount"]),
+    payoff_due_date: dateField(w["payoffDueDate"]),
+    per_diem: num(w["perDiem"]),
+    memo: nz(w["memo"], 4000),
+    title_owner: nz(w["titleOwner"], 160),
+    title_state: nz(w["titleState"], 20),
+    title_brand: nz(w["titleBrand"], 80),
+    license_number: nz(w["licenseNumber"], 60),
+    license_state: nz(w["licenseState"], 20),
+    license_expiry_date: dateField(w["licenseExpiryDate"]),
+    notes: nz(w["notes"], 4000),
+    photo_names: nz(d["vehicle_photo_names"], 4000),
+    trade_ins: records.length ? (records as unknown as Json) : null,
+    submission: d as Json,
+  };
+
+  await rest("mc_trade_ins", { method: "POST", profile: "mycarco_db", body });
+}

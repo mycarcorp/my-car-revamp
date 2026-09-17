@@ -52,11 +52,11 @@ type WishListState = {
 
 type TradeInRecord = {
   id: string;
-  data: Record<string, string>;
+  data: TradeInDraft;
   photoNames: string[];
 };
 
-const emptyTradeIn: Record<string, string> = {
+const emptyTradeIn = {
   status: "Trade-In",
   customStatus: "",
   newUsed: "Used",
@@ -111,6 +111,8 @@ const emptyTradeIn: Record<string, string> = {
   licenseExpiryDate: "",
   notes: "",
 };
+
+type TradeInDraft = typeof emptyTradeIn;
 
 const emptyWishList: WishListState = {
   newUsed: "used",
@@ -306,7 +308,7 @@ function SellPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [tradeInOpen, setTradeInOpen] = useState(false);
   const [tradeInTab, setTradeInTab] = useState<"details" | "books" | "market">("details");
-  const [tradeInDraft, setTradeInDraft] = useState<Record<string, string>>({ ...emptyTradeIn });
+  const [tradeInDraft, setTradeInDraft] = useState<TradeInDraft>({ ...emptyTradeIn });
   const [tradeInPhotoNames, setTradeInPhotoNames] = useState<string[]>([]);
   const [tradeIns, setTradeIns] = useState<TradeInRecord[]>([]);
   const leadFormScopeRef = useRef<HTMLDivElement>(null);
@@ -545,7 +547,7 @@ function SellPage() {
                     ["sell", "Sell My Vehicle"],
                     ["trade", "Trade My Vehicle"],
                     ["undecided", "I'm Not Sure"],
-                  ].map(([value, heading]) => (
+                  ].map(([value = "", heading]) => (
                     <label
                       key={value}
                       className={`flex min-h-11 cursor-pointer items-center justify-center rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition-all ${
@@ -939,14 +941,14 @@ function TradeInDialog({
   onOpenChange: (open: boolean) => void;
   tab: "details" | "books" | "market";
   onTabChange: (tab: "details" | "books" | "market") => void;
-  value: Record<string, string>;
-  onChange: (value: Record<string, string>) => void;
+  value: TradeInDraft;
+  onChange: (value: TradeInDraft) => void;
   photoNames: string[];
   onPhotoNamesChange: (names: string[]) => void;
   onSave: () => void;
   onSaveAndAddAnother: () => void;
 }) {
-  const set = (field: string, nextValue: string) => onChange({ ...value, [field]: nextValue });
+  const set = (field: keyof TradeInDraft, nextValue: string) => onChange({ ...value, [field]: nextValue });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -1705,7 +1707,7 @@ function ModalChoice({
   return (
     <div className="space-y-1">
       <Label className="text-[10px] font-medium text-slate-700">{label}</Label>
-      <Select value={value || undefined} onValueChange={onChange}>
+      <Select {...(value ? { value } : {})} onValueChange={onChange}>
         <SelectTrigger className={selectClass}>
           <SelectValue placeholder="Select" />
         </SelectTrigger>
@@ -1908,7 +1910,7 @@ function TradeSelect({
           <SelectValue />
         </SelectTrigger>
         <SelectContent>
-          {options.map(([optionValue, optionLabel]) => (
+          {options.map(([optionValue = "", optionLabel]) => (
             <SelectItem key={optionValue} value={optionValue}>
               {optionLabel}
             </SelectItem>
@@ -1931,7 +1933,7 @@ function TabButton({ active, onClick, children }: { active: boolean; onClick: ()
   );
 }
 
-function VehicleImage({ vehicle, url, className }: { vehicle: VehicleWithPhotos; url?: string; className: string }) {
+function VehicleImage({ vehicle, url, className }: { vehicle: VehicleWithPhotos; url?: string | undefined; className: string }) {
   return url ? (
     <img
       src={url}
