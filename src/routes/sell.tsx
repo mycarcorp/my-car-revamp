@@ -1,6 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
 import { Camera, CarFront, Check, Copy, ImagePlus, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -287,6 +287,10 @@ const fieldClass =
 const selectClass = "h-8 rounded-sm border-slate-300 bg-white px-2 text-xs focus:ring-1 focus:ring-cyan-700";
 
 function SellPage() {
+  const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
   const [vin, setVin] = useState("");
   const [plate, setPlate] = useState("");
   const [ymm, setYmm] = useState("");
@@ -305,6 +309,7 @@ function SellPage() {
   const [tradeInDraft, setTradeInDraft] = useState<Record<string, string>>({ ...emptyTradeIn });
   const [tradeInPhotoNames, setTradeInPhotoNames] = useState<string[]>([]);
   const [tradeIns, setTradeIns] = useState<TradeInRecord[]>([]);
+  const leadFormScopeRef = useRef<HTMLDivElement>(null);
 
   const { data: inventory = [], isLoading: inventoryLoading } = useQuery({
     queryKey: ["sell", "available-inventory"],
@@ -344,6 +349,42 @@ function SellPage() {
       selectedIds.map((id) => inventory.find((vehicle) => vehicle.id === id)).filter(Boolean) as VehicleWithPhotos[],
     [inventory, selectedIds],
   );
+
+  useEffect(() => {
+    const scope = leadFormScopeRef.current;
+    if (!scope) return;
+
+    const fields = [
+      { label: "Full name", value: customerName },
+      { label: "Email", value: customerEmail },
+      { label: "Phone", value: formatPhone(customerPhone) },
+    ];
+
+    fields.forEach(({ label, value }) => {
+      const labelElement = Array.from(scope.querySelectorAll("label"))
+        .filter((element) => element.textContent?.trim().toLowerCase() === label.toLowerCase())
+        .at(-1);
+
+      if (!labelElement) return;
+
+      const fieldId = labelElement.getAttribute("for");
+      const field = fieldId
+        ? scope.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${fieldId}`)
+        : labelElement.parentElement?.querySelector<HTMLInputElement | HTMLTextAreaElement>("input, textarea");
+
+      if (field && field.value !== value) {
+        const prototype =
+          field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+        const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
+        setter?.call(field, value);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+
+      const wrapper = labelElement.parentElement;
+      if (wrapper) wrapper.style.display = "none";
+    });
+  }, [customerEmail, customerName, customerPhone]);
 
   function updateWishList<K extends keyof WishListState>(field: K, value: WishListState[K]) {
     setWishList((current) => ({ ...current, [field]: value }));
@@ -407,7 +448,10 @@ function SellPage() {
           </p>
         </div>
 
-        <div className="border border-slate-300 bg-white p-2 shadow-sm sm:p-3 [&_button]:rounded-sm [&_input]:h-8 [&_input]:rounded-sm [&_label]:text-[10px] [&_textarea]:rounded-sm [&_textarea]:border-slate-300 [&_textarea]:text-xs">
+        <div
+          ref={leadFormScopeRef}
+          className="border border-slate-300 bg-white p-2 shadow-sm sm:p-3 [&_button]:rounded-sm [&_input]:h-8 [&_input]:rounded-sm [&_label]:text-[10px] [&_textarea]:rounded-sm [&_textarea]:border-slate-300 [&_textarea]:text-xs"
+        >
           <LeadForm
             leadType="trade"
             submitLabel="Request My Offer"
@@ -415,6 +459,10 @@ function SellPage() {
             successBody="Our buyer will review your vehicle and respond with a number, usually within one business day."
             messageLabel="Damage, service history, or anything else we should know"
             collectDetails={() => ({
+              customer_name: customerName,
+              customer_email: customerEmail,
+              customer_phone: customerPhone,
+              customer_address: customerAddress,
               vin,
               plate,
               year_make_model: ymm,
@@ -438,6 +486,64 @@ function SellPage() {
             })}
           >
             <div className="space-y-3">
+              <Panel
+                title="Customer Information"
+                description="Tell us how to contact you about your appraisal and selected vehicles."
+              >
+                <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
+                  <CompactField label="Full Name" htmlFor="customer-full-name">
+                    <Input
+                      id="customer-full-name"
+                      value={customerName}
+                      onChange={(event) => setCustomerName(event.target.value)}
+                      placeholder="First and last name"
+                      autoComplete="name"
+                      className={fieldClass}
+                      required
+                    />
+                  </CompactField>
+
+                  <CompactField label="Email" htmlFor="customer-email">
+                    <Input
+                      id="customer-email"
+                      type="email"
+                      value={customerEmail}
+                      onChange={(event) => setCustomerEmail(event.target.value)}
+                      placeholder="name@example.com"
+                      autoComplete="email"
+                      className={fieldClass}
+                      required
+                    />
+                  </CompactField>
+
+                  <CompactField label="Phone" htmlFor="customer-phone">
+                    <Input
+                      id="customer-phone"
+                      type="tel"
+                      inputMode="numeric"
+                      maxLength={14}
+                      value={formatPhone(customerPhone)}
+                      onChange={(event) => setCustomerPhone(digitsOnly(event.target.value, 10))}
+                      placeholder="(000) 000-0000"
+                      autoComplete="tel"
+                      className={fieldClass}
+                      required
+                    />
+                  </CompactField>
+
+                  <CompactField label="Address" htmlFor="customer-address">
+                    <Input
+                      id="customer-address"
+                      value={customerAddress}
+                      onChange={(event) => setCustomerAddress(event.target.value)}
+                      placeholder="Street, city, state and ZIP"
+                      autoComplete="street-address"
+                      className={fieldClass}
+                    />
+                  </CompactField>
+                </div>
+              </Panel>
+
               <Panel
                 title="Customer Wish List"
                 description="Optional preferences help us identify the best vehicles for your trade."
@@ -1839,6 +1945,14 @@ function primaryPhoto(vehicle: VehicleWithPhotos) {
 function digitsOnly(value: string, maxLength?: number) {
   const digits = value.replace(/\D/g, "");
   return typeof maxLength === "number" ? digits.slice(0, maxLength) : digits;
+}
+
+function formatPhone(value: string) {
+  const digits = digitsOnly(value, 10);
+  if (!digits) return "";
+  if (digits.length <= 3) return `(${digits}`;
+  if (digits.length <= 6) return `(${digits.slice(0, 3)}) ${digits.slice(3)}`;
+  return `(${digits.slice(0, 3)}) ${digits.slice(3, 6)}-${digits.slice(6)}`;
 }
 
 function includesText(value: string | null | undefined, expected: string) {
