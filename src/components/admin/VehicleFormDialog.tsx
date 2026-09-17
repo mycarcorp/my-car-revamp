@@ -263,22 +263,46 @@ export function VehicleFormDialog({
 
   function addFiles(list: FileList | File[] | null) {
     if (!list) return;
-    const room = MAX_PHOTOS - photos.length;
-    const files = Array.from(list)
-      .filter((f) => ["image/jpeg", "image/png", "image/webp"].includes(f.type) && f.size <= MAX_PHOTO_BYTES)
-      .slice(0, Math.max(0, room));
-    if (files.length < list.length) {
-      toast.warning(`Use JPG, PNG, or WebP files under 10 MB. Up to ${MAX_PHOTOS} photos per vehicle.`);
+    const incoming = Array.from(list);
+    let photoRoom = MAX_PHOTOS - photos.filter((p) => !isVideoDraft(p)).length;
+    let videoRoom = MAX_VIDEOS - photos.filter((p) => isVideoDraft(p)).length;
+    const accepted: File[] = [];
+    let rejected = 0;
+
+    for (const file of incoming) {
+      const isVideo = file.type.startsWith("video/");
+      if (isVideo) {
+        if (!ALLOWED_VIDEO_TYPES.includes(file.type) || file.size > MAX_VIDEO_BYTES || videoRoom <= 0) {
+          rejected++;
+          continue;
+        }
+        videoRoom--;
+      } else {
+        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > MAX_PHOTO_BYTES || photoRoom <= 0) {
+          rejected++;
+          continue;
+        }
+        photoRoom--;
+      }
+      accepted.push(file);
     }
+
+    if (rejected > 0) {
+      toast.warning(
+        `Photos: JPG, PNG or WebP under 10 MB (up to ${MAX_PHOTOS}). Videos: MP4, WebM or MOV under 25 MB (up to ${MAX_VIDEOS}).`,
+      );
+    }
+
     setPhotos((p) => [
       ...p,
-      ...files.map((file) => ({
+      ...accepted.map((file) => ({
         kind: "new" as const,
         file,
         previewUrl: URL.createObjectURL(file),
       })),
     ]);
   }
+
 
   function removePhoto(index: number) {
     setPhotos((current) => {
