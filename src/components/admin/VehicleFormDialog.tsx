@@ -19,20 +19,11 @@ import { supabase } from "@/integrations/supabase/app-client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, type PhotoDraft, type Vehicle, type VehiclePhoto } from "@/lib/admin-inventory";
-import {
-  ALLOWED_VIDEO_TYPES,
-  MAX_VIDEOS,
-  MAX_VIDEO_BYTES,
-  isVideoUrl,
-} from "@/lib/vehicle-media";
+import { ALLOWED_VIDEO_TYPES, MAX_VIDEOS, MAX_VIDEO_BYTES, isVideoUrl } from "@/lib/vehicle-media";
 
 import { VIN_RE, vehicleSlug } from "@/lib/inventory-csv";
 import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
-import {
-  createMediaUploadFn,
-  saveVehiclePhotosFn,
-  type PhotoOrderInput,
-} from "@/lib/vehicle-photos.functions";
+import { createMediaUploadFn, saveVehiclePhotosFn, type PhotoOrderInput } from "@/lib/vehicle-photos.functions";
 import { decodeVin, type VinDecodedVehicle } from "@/lib/vin-decoder.functions";
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -135,18 +126,20 @@ function matchBodyStyle(text: string | undefined, doors: string | undefined): Bo
 
 function applyDecodedVehicle(form: FormState, decoded: VinDecodedVehicle): FormState {
   const body = matchBodyStyle(decoded.bodyStyle ?? decoded.vehicleType, decoded.doors);
-  const fuelText = `${decoded.electrification ?? ""} ${decoded.fuelType ?? ""} ${decoded.fuelTypeSecondary ?? ""}`.toLowerCase();
-  const fuel = fuelText.includes("plug-in") || fuelText.includes("plug in")
-    ? "Plug-in Hybrid"
-    : fuelText.includes("hybrid")
-      ? "Hybrid"
-      : fuelText.includes("electric") && !fuelText.includes("gas")
-        ? "Electric"
-        : fuelText.includes("diesel")
-          ? "Diesel"
-          : fuelText.includes("gasoline") || fuelText.includes("petrol") || fuelText.includes("flexible")
-            ? "Gas"
-            : FUEL_TYPES.find((option) => fuelText.includes(option.toLowerCase()));
+  const fuelText =
+    `${decoded.electrification ?? ""} ${decoded.fuelType ?? ""} ${decoded.fuelTypeSecondary ?? ""}`.toLowerCase();
+  const fuel =
+    fuelText.includes("plug-in") || fuelText.includes("plug in")
+      ? "Plug-in Hybrid"
+      : fuelText.includes("hybrid")
+        ? "Hybrid"
+        : fuelText.includes("electric") && !fuelText.includes("gas")
+          ? "Electric"
+          : fuelText.includes("diesel")
+            ? "Diesel"
+            : fuelText.includes("gasoline") || fuelText.includes("petrol") || fuelText.includes("flexible")
+              ? "Gas"
+              : FUEL_TYPES.find((option) => fuelText.includes(option.toLowerCase()));
   const dt = decoded.drivetrain?.toLowerCase() ?? "";
   const drivetrain =
     dt.includes("all") || dt.includes("4wd") || dt.includes("4x4")
@@ -193,7 +186,6 @@ function applyDecodedVehicle(form: FormState, decoded: VinDecodedVehicle): FormS
     slug: form.slug.trim() || vehicleSlug({ year: Number(year), make, model, trim, vin: decoded.vin }),
   };
 }
-
 
 function fromVehicle(v: Vehicle): FormState {
   return {
@@ -288,7 +280,11 @@ export function VehicleFormDialog({
         }
         videoRoom--;
       } else {
-        if (!["image/jpeg", "image/png", "image/webp"].includes(file.type) || file.size > MAX_PHOTO_BYTES || photoRoom <= 0) {
+        if (
+          !["image/jpeg", "image/png", "image/webp"].includes(file.type) ||
+          file.size > MAX_PHOTO_BYTES ||
+          photoRoom <= 0
+        ) {
           rejected++;
           continue;
         }
@@ -312,7 +308,6 @@ export function VehicleFormDialog({
       })),
     ]);
   }
-
 
   function removePhoto(index: number) {
     setPhotos((current) => {
@@ -482,9 +477,6 @@ export function VehicleFormDialog({
       <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{vehicle ? "Edit vehicle" : "Add vehicle"}</DialogTitle>
-          <DialogDescription>
-            New vehicles start as drafts. Details appear on public inventory only when published as available.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="grid gap-4 sm:grid-cols-2">
@@ -581,7 +573,6 @@ export function VehicleFormDialog({
                 type="file"
                 accept="image/jpeg,image/png,image/webp,video/mp4,video/webm,video/quicktime"
                 multiple
-
                 className="hidden"
                 onChange={(e) => {
                   addFiles(e.target.files);
@@ -653,7 +644,6 @@ export function VehicleFormDialog({
                 event.target.value = "";
               }}
             />
-
           </div>
 
           {photos.length === 0 ? (
