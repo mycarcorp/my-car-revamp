@@ -748,13 +748,27 @@ function AdminVehicleDetailsDialog({
           <div className="min-w-0">
             <div className="flex min-h-[300px] items-center justify-center overflow-hidden rounded-xl border border-border bg-muted sm:min-h-[420px]">
               {selectedPhoto && !failedPhotoUrls.includes(selectedPhoto.url) ? (
-                <img
-                  src={selectedPhoto.url}
-                  alt={`${title} photo ${activePhoto + 1}`}
-                  onError={() => onPhotoError(selectedPhoto.url)}
-                  className="max-h-[520px] w-full object-contain"
-                />
+                isVideoUrl(selectedPhoto.url) ? (
+                  <video
+                    key={selectedPhoto.url}
+                    src={selectedPhoto.url}
+                    controls
+                    autoPlay
+                    playsInline
+                    preload="metadata"
+                    onError={() => onPhotoError(selectedPhoto.url)}
+                    className="max-h-[520px] w-full bg-black object-contain"
+                  />
+                ) : (
+                  <img
+                    src={selectedPhoto.url}
+                    alt={`${title} photo ${activePhoto + 1}`}
+                    onError={() => onPhotoError(selectedPhoto.url)}
+                    className="max-h-[520px] w-full object-contain"
+                  />
+                )
               ) : (
+
                 <div className="flex min-h-[300px] w-full flex-col items-center justify-center gap-2 text-muted-foreground sm:min-h-[420px]">
                   <Camera className="size-9" />
                   <span className="text-sm">No vehicle photo available</span>
