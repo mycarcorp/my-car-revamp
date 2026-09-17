@@ -567,67 +567,67 @@ function FinancePage() {
                           >
                             <MoreVertical className="size-3.5" />
                           </button>
+                          {showBuyerNameDetails && (
+                            <div className="absolute left-0 top-full z-50 mt-1 grid w-[620px] max-w-[calc(100vw-3rem)] gap-x-3 gap-y-2 border border-slate-300 bg-white p-3 shadow-xl sm:grid-cols-2 lg:grid-cols-3">
+                              <ComboField
+                                id="salutation"
+                                label="Salutation"
+                                value={salutation}
+                                options={["Mr.", "Mrs.", "Ms.", "Miss", "Dr."]}
+                                onChange={(value) => {
+                                  setSalutation(value);
+                                  updateBuyerNameParts({ salutation: value });
+                                }}
+                              />
+                              <TextField
+                                id="first-name"
+                                label="First Name"
+                                value={firstName}
+                                onChange={(value) => {
+                                  setFirstName(value);
+                                  updateBuyerNameParts({ firstName: value });
+                                }}
+                              />
+                              <TextField
+                                id="middle-name"
+                                label="Middle Name"
+                                value={middleName}
+                                onChange={(value) => {
+                                  setMiddleName(value);
+                                  updateBuyerNameParts({ middleName: value });
+                                }}
+                              />
+                              <TextField
+                                id="last-name"
+                                label="Last Name"
+                                value={lastName}
+                                onChange={(value) => {
+                                  setLastName(value);
+                                  updateBuyerNameParts({ lastName: value });
+                                }}
+                              />
+                              <ComboField
+                                id="suffix"
+                                label="Suffix"
+                                value={suffix}
+                                options={["Jr.", "Sr.", "II", "III", "IV", "V"]}
+                                onChange={(value) => {
+                                  setSuffix(value);
+                                  updateBuyerNameParts({ suffix: value });
+                                }}
+                              />
+                              <TextField
+                                id="nick-name"
+                                label="Nick Name"
+                                value={nickName}
+                                onChange={(value) => {
+                                  setNickName(value);
+                                  updateBuyerNameParts({ nickName: value });
+                                }}
+                              />
+                            </div>
+                          )}
                         </div>
-                        {showBuyerNameDetails && (
-                          <div className="mt-2 grid gap-x-3 gap-y-2 border border-slate-300 bg-slate-50 p-3 sm:grid-cols-2 lg:grid-cols-3">
-                            <ComboField
-                              id="salutation"
-                              label="Salutation"
-                              value={salutation}
-                              options={["Mr.", "Mrs.", "Ms.", "Miss", "Dr."]}
-                              onChange={(value) => {
-                                setSalutation(value);
-                                updateBuyerNameParts({ salutation: value });
-                              }}
-                            />
-                            <TextField
-                              id="first-name"
-                              label="First Name"
-                              value={firstName}
-                              onChange={(value) => {
-                                setFirstName(value);
-                                updateBuyerNameParts({ firstName: value });
-                              }}
-                            />
-                            <TextField
-                              id="middle-name"
-                              label="Middle Name"
-                              value={middleName}
-                              onChange={(value) => {
-                                setMiddleName(value);
-                                updateBuyerNameParts({ middleName: value });
-                              }}
-                            />
-                            <TextField
-                              id="last-name"
-                              label="Last Name"
-                              value={lastName}
-                              onChange={(value) => {
-                                setLastName(value);
-                                updateBuyerNameParts({ lastName: value });
-                              }}
-                            />
-                            <ComboField
-                              id="suffix"
-                              label="Suffix"
-                              value={suffix}
-                              options={["Jr.", "Sr.", "II", "III", "IV", "V"]}
-                              onChange={(value) => {
-                                setSuffix(value);
-                                updateBuyerNameParts({ suffix: value });
-                              }}
-                            />
-                            <TextField
-                              id="nick-name"
-                              label="Nick Name"
-                              value={nickName}
-                              onChange={(value) => {
-                                setNickName(value);
-                                updateBuyerNameParts({ nickName: value });
-                              }}
-                            />
-                          </div>
-                        )}
                       </div>
                       <SelectField
                         label="Gender"
@@ -1138,7 +1138,7 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="overflow-hidden border border-slate-300 bg-white">
+    <section className="relative overflow-visible border border-slate-300 bg-white">
       <div className="border-b border-cyan-200 bg-[#e8f7f7] px-3 py-1.5">
         <h2 className="text-xs font-semibold text-slate-800">{title}</h2>
         {description && <p className="mt-0.5 text-[10px] text-slate-500">{description}</p>}
