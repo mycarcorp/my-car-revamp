@@ -4,7 +4,16 @@ import {
   APP_SUPABASE_URL,
 } from "@/integrations/supabase/runtime-config";
 
-const ALLOWED = /^[a-z0-9-]+\/photo-\d+\.jpg$/i;
+const ALLOWED = /^[a-z0-9-]+\/(photo-\d+\.jpg|video-\d+\.(?:mp4|webm|mov|m4v))$/i;
+
+function fallbackContentType(path: string): string {
+  const ext = (path.split(".").pop() ?? "").toLowerCase();
+  if (ext === "mp4") return "video/mp4";
+  if (ext === "webm") return "video/webm";
+  if (ext === "mov" || ext === "m4v") return "video/quicktime";
+  return "image/jpeg";
+}
+
 
 export const Route = createFileRoute("/api/public/vehicle-photos/$")({
   server: {
