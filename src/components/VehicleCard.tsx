@@ -57,12 +57,17 @@ export function VehicleCard({
             />
           )
         ) : (
-
           <div className="flex size-full flex-col items-center justify-center gap-2 text-muted-foreground">
             <Camera className="size-6" />
             <span className="text-xs">Photos coming soon</span>
           </div>
         )}
+        {hasVideo && (
+          <Badge variant="secondary" className="absolute bottom-3 left-3 gap-1">
+            <Play className="size-3" /> Video
+          </Badge>
+        )}
+
         {priceDrop && (
           <Badge className="absolute left-3 top-3 gap-1 bg-success text-success-foreground">
             <TrendingDown className="size-3" /> Price drop
