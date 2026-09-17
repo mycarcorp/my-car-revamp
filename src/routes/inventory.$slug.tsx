@@ -1,7 +1,9 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Camera, Check, Heart, Phone } from "lucide-react";
+import { Camera, Check, Heart, Phone, Play } from "lucide-react";
+import { isVideoUrl } from "@/lib/vehicle-media";
+
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
