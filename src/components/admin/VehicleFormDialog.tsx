@@ -19,6 +19,13 @@ import { supabase } from "@/integrations/supabase/app-client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, type PhotoDraft, type Vehicle, type VehiclePhoto } from "@/lib/admin-inventory";
+import {
+  ALLOWED_VIDEO_TYPES,
+  MAX_VIDEOS,
+  MAX_VIDEO_BYTES,
+  isVideoUrl,
+} from "@/lib/vehicle-media";
+
 import { VIN_RE, vehicleSlug } from "@/lib/inventory-csv";
 import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
 import { saveVehiclePhotosFn, type PhotoOrderInput } from "@/lib/vehicle-photos.functions";
