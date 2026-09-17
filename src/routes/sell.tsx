@@ -941,14 +941,14 @@ function TradeInDialog({
   onOpenChange: (open: boolean) => void;
   tab: "details" | "books" | "market";
   onTabChange: (tab: "details" | "books" | "market") => void;
-  value: Record<string, string>;
-  onChange: (value: Record<string, string>) => void;
+  value: TradeInDraft;
+  onChange: (value: TradeInDraft) => void;
   photoNames: string[];
   onPhotoNamesChange: (names: string[]) => void;
   onSave: () => void;
   onSaveAndAddAnother: () => void;
 }) {
-  const set = (field: string, nextValue: string) => onChange({ ...value, [field]: nextValue });
+  const set = (field: keyof TradeInDraft, nextValue: string) => onChange({ ...value, [field]: nextValue });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
