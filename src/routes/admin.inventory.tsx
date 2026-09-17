@@ -496,7 +496,9 @@ function AdminInventory() {
             ) : (
               <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
                 {visible.map((v) => {
-                  const photo = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position)[0];
+                  const sortedMedia = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
+                  const photo = sortedMedia.find((m) => !isVideoUrl(m.url)) ?? sortedMedia[0];
+
 
                   const title = vehicleTitle(v);
 
