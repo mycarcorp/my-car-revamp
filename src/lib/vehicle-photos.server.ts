@@ -8,12 +8,17 @@ import { videoExtension } from "./vehicle-media";
  * The legacy `mycarco_db.mc_cars.image_url` column stores the comma separated
  * `uploads/cars/<vin>/...` paths, which the public media proxy and the
  * inventory reader both understand.
+ *
+ * Photos are small enough to travel as base64 through the server function.
+ * Videos can be hundreds of megabytes, so the browser uploads them straight to
+ * storage with a short-lived signed URL and only sends the resulting key here;
+ * nothing large ever passes through the server function body.
  */
 
 export type IncomingPhoto = { dataUrl: string; contentType?: string };
 export type PhotoOrderItem =
   | { kind: "keep"; url: string; media?: "photo" | "video" }
-  | { kind: "new"; index: number; media?: "photo" | "video" };
+  | { kind: "new"; index: number; media?: "photo" | "video"; uploadedKey?: string };
 
 type Creds = { url: string; key: string };
 
@@ -96,6 +101,28 @@ async function uploadObject(key: string, bytes: Uint8Array, contentType: string)
   }
 }
 
+/** Server-side copy: never streams the file through this worker. */
+async function copyObject(sourceKey: string, destinationKey: string): Promise<boolean> {
+  const c = storageCreds();
+  const res = await fetch(`${c.url}/storage/v1/object/copy`, {
+    method: "POST",
+    headers: {
+      apikey: c.key,
+      Authorization: `Bearer ${c.key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      bucketId: "vehicle-photos",
+      sourceKey,
+      destinationKey,
+      bucket: "vehicle-photos",
+      from: sourceKey,
+      to: destinationKey,
+    }),
+  });
+  return res.ok;
+}
+
 async function removeObjects(keys: string[]) {
   if (keys.length === 0) return;
   const c = storageCreds();
@@ -111,8 +138,43 @@ async function removeObjects(keys: string[]) {
 }
 
 /**
- * Stores the ordered media set for a vehicle: uploads new files, drops removed
- * ones, writes `mc_cars.image_url`, and mirrors `public.vehicle_photos`.
+ * Signed, single-use upload URL so the browser can push a large video straight
+ * into storage. The key lands in a staging folder; `saveVehiclePhotos` moves it
+ * into its final slot.
+ */
+export async function createMediaUpload(input: {
+  accessToken: string;
+  vin: string;
+  contentType: string;
+}): Promise<{ uploadUrl: string; key: string }> {
+  await requireStaff(input.accessToken);
+  const vin = input.vin.trim().toLowerCase();
+  if (!vin) throw new Error("A VIN is required to store media.");
+  const ext = input.contentType.startsWith("video/") ? videoExtension(input.contentType) : "bin";
+  const key = `${vin}/staging/${crypto.randomUUID()}.${ext}`;
+  const c = storageCreds();
+  const res = await fetch(`${c.url}/storage/v1/object/upload/sign/vehicle-photos/${key}`, {
+    method: "POST",
+    headers: {
+      apikey: c.key,
+      Authorization: `Bearer ${c.key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ expiresIn: 60 * 60 }),
+  });
+  const text = await res.text();
+  if (!res.ok) throw new Error(`Could not start the upload (${res.status}): ${text.slice(0, 200)}`);
+  const signed = JSON.parse(text) as { url?: string };
+  if (!signed.url) throw new Error("Could not start the upload.");
+  return { uploadUrl: `${c.url}/storage/v1${signed.url}`, key };
+}
+
+type Source = { isVideo: boolean; ext: string; storageKey?: string; bytes?: Uint8Array; contentType?: string };
+
+/**
+ * Stores the ordered media set for a vehicle: moves newly uploaded files into
+ * their slots, drops removed ones, writes `mc_cars.image_url`, and mirrors
+ * `public.vehicle_photos`.
  */
 export async function saveVehiclePhotos(input: {
   accessToken: string;
@@ -140,59 +202,76 @@ export async function saveVehiclePhotos(input: {
       .filter((k): k is string => Boolean(k)),
   );
 
-  const keptKeys = new Set(
-    input.order
-      .filter((o): o is { kind: "keep"; url: string; media?: "photo" | "video" } => o.kind === "keep")
-      .map((o) => storageKeyFromUrl(o.url, vin))
-      .filter((k): k is string => Boolean(k)),
-  );
-
-  // Resolve every item's bytes BEFORE writing anything: slots are reused, so
-  // uploading in place would overwrite a kept file before it has been read.
-  const resolved: Array<{ bytes: Uint8Array; contentType: string; isVideo: boolean }> = [];
+  // Describe every slot's source without moving bytes yet.
+  const sources: Source[] = [];
   for (const item of input.order) {
     if (item.kind === "new") {
+      if (item.uploadedKey) {
+        const ext = item.uploadedKey.split(".").pop()?.toLowerCase() ?? "mp4";
+        sources.push({ isVideo: item.media === "video" || ext !== "bin", ext, storageKey: item.uploadedKey });
+        continue;
+      }
       const media = input.newPhotos[item.index];
       if (!media) continue;
       const decoded = decodeDataUrl(media.dataUrl);
       const contentType = media.contentType || decoded.contentType;
-      resolved.push({
+      const isVideo = item.media === "video" || contentType.startsWith("video/");
+      sources.push({
+        isVideo,
+        ext: isVideo ? videoExtension(contentType) : "jpg",
         bytes: decoded.bytes,
         contentType,
-        isVideo: item.media === "video" || contentType.startsWith("video/"),
       });
     } else {
       const sourceKey = storageKeyFromUrl(item.url, vin);
       if (!sourceKey) continue;
-      const c = storageCreds();
-      const res = await fetch(`${c.url}/storage/v1/object/vehicle-photos/${sourceKey}`, {
-        headers: { apikey: c.key, Authorization: `Bearer ${c.key}` },
-        cache: "no-store",
-      });
-      if (!res.ok) continue;
-      const contentType = res.headers.get("content-type") ?? "image/jpeg";
-      resolved.push({
-        bytes: new Uint8Array(await res.arrayBuffer()),
-        contentType,
-        isVideo: /video-\d+\./i.test(sourceKey) || contentType.startsWith("video/"),
+      const isVideo = /video-\d+\./i.test(sourceKey);
+      sources.push({
+        isVideo,
+        ext: sourceKey.split(".").pop()?.toLowerCase() ?? (isVideo ? "mp4" : "jpg"),
+        storageKey: sourceKey,
       });
     }
   }
 
-  // Assign sequential slots per media type so photo-1 is always the cover.
+  // Stage everything first: final slot names are reused, so writing straight to
+  // them would clobber a file that another slot still needs to read.
+  const stagePrefix = `${vin}/staging/${crypto.randomUUID()}`;
+  const staged: Array<{ key: string; isVideo: boolean; ext: string }> = [];
+  for (let i = 0; i < sources.length; i++) {
+    const s = sources[i]!;
+    const stageKey = `${stagePrefix}-${i}.${s.ext}`;
+    if (s.bytes) {
+      await uploadObject(stageKey, s.bytes, s.contentType ?? "image/jpeg");
+    } else if (s.storageKey) {
+      const ok = await copyObject(s.storageKey, stageKey);
+      if (!ok) continue;
+    } else {
+      continue;
+    }
+    staged.push({ key: stageKey, isVideo: s.isVideo, ext: s.ext });
+  }
+
+  // Free the slot names, then place each staged file in its final slot.
+  const uploadedKeys = input.order
+    .filter((o): o is { kind: "new"; index: number; media?: "photo" | "video"; uploadedKey: string } =>
+      o.kind === "new" && Boolean(o.uploadedKey),
+    )
+    .map((o) => o.uploadedKey);
+  await removeObjects([...new Set(previousKeys)]);
+
   const finalKeys: string[] = [];
   let photoSlot = 0;
   let videoSlot = 0;
-  for (const item of resolved) {
+  for (const item of staged) {
     const key = item.isVideo
-      ? `${vin}/video-${++videoSlot}.${videoExtension(item.contentType)}`
+      ? `${vin}/video-${++videoSlot}.${item.ext === "bin" ? "mp4" : item.ext}`
       : `${vin}/photo-${++photoSlot}.jpg`;
-    await uploadObject(key, item.bytes, item.contentType);
+    const ok = await copyObject(item.key, key);
+    if (!ok) continue;
     finalKeys.push(key);
   }
-
-  const stale = [...previousKeys, ...keptKeys].filter((k) => !finalKeys.includes(k));
-  await removeObjects([...new Set(stale)]);
+  await removeObjects([...staged.map((s) => s.key), ...uploadedKeys]);
 
   const storedPaths = finalKeys.map((k) => `uploads/cars/${k}`);
   // Slot names are reused, so a version stamp keeps browsers and the edge cache
