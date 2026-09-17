@@ -1,17 +1,19 @@
 import { requireStaff } from "./legacy-blog.server";
+import { videoExtension } from "./vehicle-media";
 
 /**
- * Photo binaries live in the storage account reachable with the server
- * credentials below (bucket `vehicle-photos`, key `<vin>/photo-N.jpg`).
+ * Media binaries live in the storage account reachable with the server
+ * credentials below (bucket `vehicle-photos`, keys `<vin>/photo-N.jpg` for
+ * images and `<vin>/video-N.<ext>` for videos).
  * The legacy `mycarco_db.mc_cars.image_url` column stores the comma separated
- * `uploads/cars/<vin>/photo-N.jpg` paths, which the public photo proxy and the
+ * `uploads/cars/<vin>/...` paths, which the public media proxy and the
  * inventory reader both understand.
  */
 
 export type IncomingPhoto = { dataUrl: string; contentType?: string };
 export type PhotoOrderItem =
-  | { kind: "keep"; url: string }
-  | { kind: "new"; index: number };
+  | { kind: "keep"; url: string; media?: "photo" | "video" }
+  | { kind: "new"; index: number; media?: "photo" | "video" };
 
 type Creds = { url: string; key: string };
 
@@ -55,7 +57,7 @@ async function rest(
 
 function decodeDataUrl(dataUrl: string): { bytes: Uint8Array; contentType: string } {
   const match = dataUrl.match(/^data:([^;,]+);base64,(.*)$/s);
-  if (!match) throw new Error("Unsupported image data.");
+  if (!match) throw new Error("Unsupported media data.");
   const contentType = match[1] ?? "image/jpeg";
   const binary = atob(match[2] ?? "");
   const bytes = new Uint8Array(binary.length);
@@ -63,11 +65,17 @@ function decodeDataUrl(dataUrl: string): { bytes: Uint8Array; contentType: strin
   return { bytes, contentType };
 }
 
-/** `uploads/cars/<vin>/photo-3.jpg` or `/api/public/vehicle-photos/<vin>/photo-3.jpg` -> storage key */
+/**
+ * `uploads/cars/<vin>/photo-3.jpg`, `/api/public/vehicle-photos/<vin>/video-1.mp4`
+ * -> storage key
+ */
 function storageKeyFromUrl(url: string, vin: string): string | null {
-  const m = (url.split("?")[0] ?? "").match(/photo-(\d+)\.(?:jpe?g|png|webp)$/i);
-  if (!m) return null;
-  return `${vin}/photo-${m[1]}.jpg`;
+  const path = url.split("?")[0] ?? "";
+  const video = path.match(/video-(\d+)\.(mp4|webm|mov|m4v)$/i);
+  if (video) return `${vin}/video-${video[1]}.${video[2]!.toLowerCase()}`;
+  const photo = path.match(/photo-(\d+)\.(?:jpe?g|png|webp)$/i);
+  if (photo) return `${vin}/photo-${photo[1]}.jpg`;
+  return null;
 }
 
 async function uploadObject(key: string, bytes: Uint8Array, contentType: string) {
@@ -84,7 +92,7 @@ async function uploadObject(key: string, bytes: Uint8Array, contentType: string)
   });
   if (!res.ok) {
     const text = await res.text();
-    throw new Error(`Photo upload failed (${res.status}): ${text.slice(0, 200)}`);
+    throw new Error(`Media upload failed (${res.status}): ${text.slice(0, 200)}`);
   }
 }
 
@@ -103,7 +111,7 @@ async function removeObjects(keys: string[]) {
 }
 
 /**
- * Stores the ordered photo set for a vehicle: uploads new files, drops removed
+ * Stores the ordered media set for a vehicle: uploads new files, drops removed
  * ones, writes `mc_cars.image_url`, and mirrors `public.vehicle_photos`.
  */
 export async function saveVehiclePhotos(input: {
@@ -115,7 +123,7 @@ export async function saveVehiclePhotos(input: {
 }): Promise<{ urls: string[] }> {
   await requireStaff(input.accessToken);
   const vin = input.vin.trim().toLowerCase();
-  if (!vin) throw new Error("A VIN is required to store photos.");
+  if (!vin) throw new Error("A VIN is required to store media.");
 
   const legacyRows = (await rest(
     `mc_cars?select=id,image_url&source_id=eq.${encodeURIComponent(vin)}&limit=1`,
@@ -134,20 +142,25 @@ export async function saveVehiclePhotos(input: {
 
   const keptKeys = new Set(
     input.order
-      .filter((o): o is { kind: "keep"; url: string } => o.kind === "keep")
+      .filter((o): o is { kind: "keep"; url: string; media?: "photo" | "video" } => o.kind === "keep")
       .map((o) => storageKeyFromUrl(o.url, vin))
       .filter((k): k is string => Boolean(k)),
   );
 
-  // Resolve every photo's bytes BEFORE writing anything: slots are reused, so
-  // uploading in place would overwrite a kept photo before it has been read.
-  const resolved: Array<{ bytes: Uint8Array; contentType: string }> = [];
+  // Resolve every item's bytes BEFORE writing anything: slots are reused, so
+  // uploading in place would overwrite a kept file before it has been read.
+  const resolved: Array<{ bytes: Uint8Array; contentType: string; isVideo: boolean }> = [];
   for (const item of input.order) {
     if (item.kind === "new") {
-      const photo = input.newPhotos[item.index];
-      if (!photo) continue;
-      const decoded = decodeDataUrl(photo.dataUrl);
-      resolved.push({ bytes: decoded.bytes, contentType: photo.contentType || decoded.contentType });
+      const media = input.newPhotos[item.index];
+      if (!media) continue;
+      const decoded = decodeDataUrl(media.dataUrl);
+      const contentType = media.contentType || decoded.contentType;
+      resolved.push({
+        bytes: decoded.bytes,
+        contentType,
+        isVideo: item.media === "video" || contentType.startsWith("video/"),
+      });
     } else {
       const sourceKey = storageKeyFromUrl(item.url, vin);
       if (!sourceKey) continue;
@@ -157,19 +170,24 @@ export async function saveVehiclePhotos(input: {
         cache: "no-store",
       });
       if (!res.ok) continue;
+      const contentType = res.headers.get("content-type") ?? "image/jpeg";
       resolved.push({
         bytes: new Uint8Array(await res.arrayBuffer()),
-        contentType: res.headers.get("content-type") ?? "image/jpeg",
+        contentType,
+        isVideo: /video-\d+\./i.test(sourceKey) || contentType.startsWith("video/"),
       });
     }
   }
 
-  // Assign sequential slots to the final order so photo-1 is always the cover.
+  // Assign sequential slots per media type so photo-1 is always the cover.
   const finalKeys: string[] = [];
-  for (let i = 0; i < resolved.length; i++) {
-    const key = `${vin}/photo-${i + 1}.jpg`;
-    const photo = resolved[i]!;
-    await uploadObject(key, photo.bytes, photo.contentType);
+  let photoSlot = 0;
+  let videoSlot = 0;
+  for (const item of resolved) {
+    const key = item.isVideo
+      ? `${vin}/video-${++videoSlot}.${videoExtension(item.contentType)}`
+      : `${vin}/photo-${++photoSlot}.jpg`;
+    await uploadObject(key, item.bytes, item.contentType);
     finalKeys.push(key);
   }
 
@@ -178,7 +196,7 @@ export async function saveVehiclePhotos(input: {
 
   const storedPaths = finalKeys.map((k) => `uploads/cars/${k}`);
   // Slot names are reused, so a version stamp keeps browsers and the edge cache
-  // from serving the photo that was just replaced.
+  // from serving the file that was just replaced.
   const stamp = Date.now();
   const appUrls = finalKeys.map((k) => `/api/public/vehicle-photos/${k}?v=${stamp}`);
 
@@ -205,7 +223,9 @@ export async function saveVehiclePhotos(input: {
           vehicle_id: publicId,
           url,
           position: i + 1,
-          alt: `${input.altBase} — photo ${i + 1}`,
+          alt: /video-\d+\./i.test(url)
+            ? `${input.altBase} — video`
+            : `${input.altBase} — photo ${i + 1}`,
         })),
       });
     }
