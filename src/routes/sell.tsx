@@ -1470,9 +1470,6 @@ function VehiclePickerDialog({
       <DialogContent className="flex max-h-[88vh] max-w-5xl flex-col gap-0 overflow-hidden rounded-sm border-slate-300 p-0">
         <DialogHeader className="border-b border-cyan-200 bg-[#e8f7f7] px-4 py-3 text-left">
           <DialogTitle className="text-sm font-semibold text-slate-800">Pick Vehicle(s) to Sell</DialogTitle>
-          <DialogDescription className="text-[11px] text-slate-500">
-            Select one or more available vehicles to include with this request.
-          </DialogDescription>
         </DialogHeader>
 
         <div className="flex border-b border-slate-300 bg-white px-4 pt-2">
