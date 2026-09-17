@@ -573,7 +573,6 @@ function SellPage() {
                 <>
                   <Panel
                     title="What Are You Looking For?"
-                    description="Optional preferences help us find vehicles that fit your trade."
                     action={
                       <Button
                         type="button"
