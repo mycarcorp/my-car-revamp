@@ -115,9 +115,6 @@ async function copyObject(sourceKey: string, destinationKey: string): Promise<bo
       bucketId: "vehicle-photos",
       sourceKey,
       destinationKey,
-      bucket: "vehicle-photos",
-      from: sourceKey,
-      to: destinationKey,
     }),
   });
   return res.ok;
