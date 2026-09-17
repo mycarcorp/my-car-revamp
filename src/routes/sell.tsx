@@ -52,11 +52,11 @@ type WishListState = {
 
 type TradeInRecord = {
   id: string;
-  data: Record<string, string>;
+  data: TradeInDraft;
   photoNames: string[];
 };
 
-const emptyTradeIn: Record<string, string> = {
+const emptyTradeIn = {
   status: "Trade-In",
   customStatus: "",
   newUsed: "Used",
@@ -111,6 +111,8 @@ const emptyTradeIn: Record<string, string> = {
   licenseExpiryDate: "",
   notes: "",
 };
+
+type TradeInDraft = typeof emptyTradeIn;
 
 const emptyWishList: WishListState = {
   newUsed: "used",
@@ -306,7 +308,7 @@ function SellPage() {
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [tradeInOpen, setTradeInOpen] = useState(false);
   const [tradeInTab, setTradeInTab] = useState<"details" | "books" | "market">("details");
-  const [tradeInDraft, setTradeInDraft] = useState<Record<string, string>>({ ...emptyTradeIn });
+  const [tradeInDraft, setTradeInDraft] = useState<TradeInDraft>({ ...emptyTradeIn });
   const [tradeInPhotoNames, setTradeInPhotoNames] = useState<string[]>([]);
   const [tradeIns, setTradeIns] = useState<TradeInRecord[]>([]);
   const leadFormScopeRef = useRef<HTMLDivElement>(null);
