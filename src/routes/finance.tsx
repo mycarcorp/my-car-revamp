@@ -614,10 +614,7 @@ function FinancePage() {
 
                   <div className="p-3 sm:p-5">
                     <TabsContent value="applicant" className="m-0 focus-visible:outline-none">
-                      <FormSection
-                        title="Buyer Info"
-                        description="Enter the applicant's contact and identification information."
-                      >
+                      <FormSection title="Buyer Info">
                         <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
                           <div className="sm:col-span-2 lg:col-span-2">
                             <Label htmlFor="buyer-name" className="text-[11px] font-medium text-slate-700">
