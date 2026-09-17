@@ -785,7 +785,7 @@ function AdminVehicleDetailsDialog({
                     onClick={() => onActivePhotoChange(index)}
                     aria-label={`View photo ${index + 1} of ${photos.length}`}
                     aria-pressed={index === activePhoto}
-                    className={`aspect-[4/3] overflow-hidden rounded-md border-2 bg-muted transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] ${
+                    className={`relative aspect-[4/3] overflow-hidden rounded-md border-2 bg-muted transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] ${
                       index === activePhoto ? "border-[#F7941D]" : "border-transparent"
                     }`}
                   >
@@ -793,6 +793,13 @@ function AdminVehicleDetailsDialog({
                       <span className="flex size-full items-center justify-center">
                         <Camera className="size-4 text-muted-foreground" />
                       </span>
+                    ) : isVideoUrl(photo.url) ? (
+                      <>
+                        <video src={photo.url} muted playsInline preload="metadata" className="size-full bg-black object-cover" />
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <Play className="size-4 text-white" />
+                        </span>
+                      </>
                     ) : (
                       <img
                         src={photo.url}
@@ -802,6 +809,7 @@ function AdminVehicleDetailsDialog({
                         className="size-full object-cover"
                       />
                     )}
+
                   </button>
                 ))}
               </div>
