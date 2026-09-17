@@ -45,26 +45,8 @@ function SchedulePage() {
 
   return (
     <div className="bg-surface">
-      <PageHero
-        eyebrow="Book a visit"
-        title="Pick a time that works."
-        subtitle="We'll have the vehicle pulled up front and ready when you arrive."
-      />
-      <div className="mx-auto grid max-w-5xl gap-8 px-4 py-10 lg:grid-cols-[1fr_300px]">
-        <div className="rounded-xl border border-border bg-card p-6">
-          <LeadForm
-            leadType="appointment"
-            submitLabel="Request this time"
-            successTitle="Appointment requested"
-            successBody="We'll confirm your time by phone or email. If anything changes we'll offer the nearest slot."
-            messageLabel="Anything we should prepare?"
-            collectDetails={() => ({
-              appointment_type: type,
-              preferred_date: date,
-              preferred_time: time,
-              vehicle_of_interest: vehicle,
-            })}
-          >
+      
+     
             <div className="grid gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label>Appointment type</Label>
