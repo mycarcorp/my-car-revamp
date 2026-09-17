@@ -763,16 +763,7 @@ function SellPage() {
               )}
 
               {intent && (
-                <Panel
-                  title="Your Vehicle"
-                  description={
-                    intent === "trade"
-                      ? "Tell us about the vehicle you want to trade."
-                      : intent === "sell"
-                        ? "Tell us about the vehicle you want to sell."
-                        : "Tell us about your vehicle so our team can review your options."
-                  }
-                >
+                <Panel title="Your Vehicle">
                   <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
                     <CompactField label="VIN" htmlFor="vin">
                       <Input
