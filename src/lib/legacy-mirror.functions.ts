@@ -40,10 +40,14 @@ export const mirrorLeadToLegacy = createServerFn({ method: "POST" })
     };
   })
   .handler(async ({ data }): Promise<{ mirrored: boolean }> => {
-    const { mirrorContactRow, mirrorFinancingRow } = await import("./legacy-mirror.server");
+    const { mirrorContactRow, mirrorFinancingRow, mirrorTradeRow } = await import("./legacy-mirror.server");
     try {
       if (data.leadType === "finance") {
         await mirrorFinancingRow(data);
+      } else if (data.leadType === "trade") {
+        // Full appraisal worksheet + a contact row so the lead stays visible.
+        await mirrorTradeRow(data);
+        await mirrorContactRow(data).catch(() => undefined);
       } else {
         await mirrorContactRow(data);
       }
