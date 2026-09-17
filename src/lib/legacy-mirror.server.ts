@@ -211,6 +211,29 @@ async function vehicleLabel(vehicleId: string): Promise<string | null> {
   }
 }
 
+const jsonField = (v: unknown): Json | null => {
+  if (v == null) return null;
+  if (typeof v === "object") return v as Json;
+  const s = String(v).trim();
+  if (!s) return null;
+  try {
+    const parsed = JSON.parse(s);
+    return parsed && typeof parsed === "object" ? (parsed as Json) : null;
+  } catch {
+    return null;
+  }
+};
+
+const dateField = (v: unknown): string | null => {
+  const s = String(v ?? "").trim();
+  if (!s) return null;
+  const d = new Date(s);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString().slice(0, 10);
+};
+
+const boolField = (v: unknown): boolean | null =>
+  typeof v === "boolean" ? v : v === "true" ? true : v === "false" ? false : null;
+
 /** Mirror a financing request into mycarco_db.mc_financing. */
 export async function mirrorFinancingRow(input: MirrorLeadInput): Promise<void> {
   const d = input.details ?? {};
@@ -229,24 +252,76 @@ export async function mirrorFinancingRow(input: MirrorLeadInput): Promise<void> 
   if (nz(d["income_band"], 200)) extras.push(`Stated monthly income band: ${d["income_band"]}`);
   const notes = [input.message ?? "", extras.join("\n")].filter(Boolean).join("\n\n") || null;
 
-  await rest("mc_financing", {
-    method: "POST",
-    profile: "mycarco_db",
-    body: {
-      user_id: legacyUserId,
-      full_name: nz(input.fullName, 255) ?? "Website visitor",
-      email: nz(input.email, 255) ?? "",
-      phone: nz(input.phone, 40),
-      vehicle_price: num(d["vehicle_price"]),
-      down_payment: num(d["down_payment"]),
-      loan_term: num(d["loan_term"]),
-      credit_band: nz(d["credit_band"], 40),
-      employment: nz(d["employment"], 80),
-      annual_income: num(d["annual_income"]),
-      notes,
-    },
-  });
+  const employer1 = jsonField(d["current_employer_1"]) ?? {};
+  const monthlyIncome = num(employer1["monthlyIncome"]);
+  const employment =
+    nz(d["employment"], 80) ?? nz(employer1["employmentStatus"], 80) ?? null;
+  const annualIncome =
+    num(d["annual_income"]) ?? (monthlyIncome != null ? Math.round(monthlyIncome * 12) : null);
+
+  const base: Json = {
+    user_id: legacyUserId,
+    full_name: nz(input.fullName, 255) ?? "Website visitor",
+    email: nz(input.email, 255) ?? "",
+    phone: nz(input.phone, 40) ?? nz(d["cell_phone"], 40),
+    vehicle_price: num(d["vehicle_price"]),
+    down_payment: num(d["down_payment"]) ?? num(d["cash_down"]),
+    loan_term: num(d["loan_term"]),
+    credit_band: nz(d["credit_band"], 40),
+    employment,
+    annual_income: annualIncome,
+    notes,
+  };
+
+  // Full credit-application payload. Written only when the extended columns
+  // exist (see supabase/migrations_legacy/2026_mc_financing_application.sql);
+  // otherwise we fall back to the base row so a submission is never lost.
+  const extended: Json = {
+    ...base,
+    salutation: nz(d["salutation"], 20),
+    first_name: nz(d["first_name"], 120),
+    middle_name: nz(d["middle_name"], 120),
+    last_name: nz(d["last_name"], 120),
+    suffix: nz(d["suffix"], 20),
+    nick_name: nz(d["nick_name"], 120),
+    gender: nz(d["gender"], 40),
+    cash_down: num(d["cash_down"]),
+    ssn: nz(d["ssn"], 20),
+    date_of_birth: dateField(d["date_of_birth"]),
+    cell_phone: nz(d["cell_phone"], 40),
+    home_phone: nz(d["home_phone"], 40),
+    work_phone: nz(d["work_phone"], 40),
+    id_type: nz(d["id_type"], 60),
+    id_state: nz(d["id_state"], 10),
+    id_number: nz(d["id_number"], 60),
+    id_issued_date: dateField(d["issued_date"]),
+    id_expiration_date: dateField(d["expiration_date"]),
+    current_address: jsonField(d["current_address"]),
+    mailing_address: jsonField(d["mailing_address"]),
+    mailing_same_as_current: boolField(d["mailing_same_as_current"]),
+    previous_address: jsonField(d["previous_address"]),
+    current_employer_1: jsonField(d["current_employer_1"]),
+    current_employer_2: jsonField(d["current_employer_2"]),
+    previous_employer_1: jsonField(d["previous_employer_1"]),
+    previous_employer_2: jsonField(d["previous_employer_2"]),
+    other_income_amount: num(d["other_income_amount"]),
+    other_income_source: nz(d["other_income_source"], 160),
+    applicant_references: jsonField(d["references"]),
+    apr: num(d["apr"]),
+    estimated_payment: num(d["estimated_payment"]),
+    application: d as Json,
+  };
+
+  try {
+    await rest("mc_financing", { method: "POST", profile: "mycarco_db", body: extended });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "";
+    // PGRST204 = column not found: the extended migration has not been run yet.
+    if (!/PGRST204|column .* does not exist/i.test(message)) throw err;
+    await rest("mc_financing", { method: "POST", profile: "mycarco_db", body: base });
+  }
 }
+
 
 /** Mirror a save/unsave into mycarco_db.mc_saved_cars. */
 export async function mirrorSavedCar(

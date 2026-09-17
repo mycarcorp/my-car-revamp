@@ -8,6 +8,8 @@ import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LeadForm } from "@/components/LeadForm";
 import { siteSettingsQuery } from "@/lib/queries";
+import { useAuth } from "@/hooks/useAuth";
+
 import { monthlyPayment } from "@/lib/format";
 
 export const Route = createFileRoute("/finance")({
@@ -304,6 +306,8 @@ function moneyOnBlur(value: string) {
 
 function FinancePage() {
   const { data: settings } = useQuery(siteSettingsQuery());
+  const { user } = useAuth();
+
 
   const [buyerName, setBuyerName] = useState("");
   const [showBuyerNameDetails, setShowBuyerNameDetails] = useState(false);
@@ -365,6 +369,7 @@ function FinancePage() {
   const [price, setPrice] = useState(22000);
   const [down, setDown] = useState(2000);
   const [term, setTerm] = useState(72);
+  const [defaultsApplied, setDefaultsApplied] = useState(false);
 
   const apr = Number(settings?.finance_apr ?? 8.9);
   const estimate = monthlyPayment(price * 100, {
@@ -372,6 +377,28 @@ function FinancePage() {
     termMonths: term,
     downPercent: price > 0 ? (down / price) * 100 : 0,
   });
+
+  // Estimator defaults come from the dealership settings stored in the database.
+  useEffect(() => {
+    if (defaultsApplied || !settings) return;
+    const months = Number(settings.finance_term_months ?? 0);
+    const downPercent = Number(settings.finance_down_percent ?? 0);
+    if (months > 0) setTerm(months);
+    if (downPercent > 0) setDown(Math.round((22000 * downPercent) / 100));
+    setDefaultsApplied(true);
+  }, [settings, defaultsApplied]);
+
+  // Prefill the applicant's contact details for a signed-in shopper.
+  useEffect(() => {
+    if (!user) return;
+    const meta = (user.user_metadata ?? {}) as Record<string, unknown>;
+    const metaName = String(meta["full_name"] ?? "").trim();
+    const metaPhone = String(meta["phone"] ?? "").trim();
+    setBuyerEmail((current) => current || (user.email ?? ""));
+    if (metaName) setBuyerName((current) => current || metaName);
+    if (metaPhone) setCellPhone((current) => current || digitsOnly(metaPhone, 10));
+  }, [user]);
+
 
   useEffect(() => {
     const scope = leadFormScopeRef.current;
@@ -537,6 +564,8 @@ function FinancePage() {
                   down_payment: down,
                   loan_term: term,
                   apr,
+                  estimated_payment: estimate,
+
                 })}
               >
                 <div className="space-y-3">
@@ -1374,17 +1403,18 @@ function SelectField({
   return (
     <div className="space-y-1">
       <Label className="text-[10px] font-medium leading-none text-slate-700">{label}</Label>
-      <Select value={value} onValueChange={onChange} disabled={disabled}>
+      <Select value={value} onValueChange={onChange} disabled={disabled ?? false}>
         <SelectTrigger className="h-8 rounded-sm border-slate-300 bg-white px-2 text-xs focus:ring-1">
           <SelectValue placeholder={placeholder} />
         </SelectTrigger>
         <SelectContent>
           {options.map(([optionValue, optionLabel]) => (
-            <SelectItem key={optionValue} value={optionValue}>
+            <SelectItem key={optionValue ?? ""} value={optionValue ?? ""}>
               {optionLabel}
             </SelectItem>
           ))}
         </SelectContent>
+
       </Select>
     </div>
   );
