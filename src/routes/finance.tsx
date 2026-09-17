@@ -167,7 +167,7 @@ function FinancePage() {
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-12">
-      <h1 className="font-display text-4xl font-bold">Financings Application</h1>
+      <h1 className="font-display text-4xl font-bold">Financing Application</h1>
       <p className="mt-3 max-w-3xl text-muted-foreground">
         Complete the information below so our finance team can review your request and contact you about available next
         steps.
