@@ -28,7 +28,11 @@ import {
 
 import { VIN_RE, vehicleSlug } from "@/lib/inventory-csv";
 import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
-import { saveVehiclePhotosFn, type PhotoOrderInput } from "@/lib/vehicle-photos.functions";
+import {
+  createMediaUploadFn,
+  saveVehiclePhotosFn,
+  type PhotoOrderInput,
+} from "@/lib/vehicle-photos.functions";
 import { decodeVin, type VinDecodedVehicle } from "@/lib/vin-decoder.functions";
 
 function fileToDataUrl(file: File): Promise<string> {
@@ -294,7 +298,7 @@ export function VehicleFormDialog({
 
     if (rejected > 0) {
       toast.warning(
-        `Photos: JPG, PNG or WebP under 10 MB (up to ${MAX_PHOTOS}). Videos: MP4, WebM or MOV under 25 MB (up to ${MAX_VIDEOS}).`,
+        `Photos: JPG, PNG or WebP under 10 MB (up to ${MAX_PHOTOS}). Videos: MP4, WebM or MOV up to 5 GB (up to ${MAX_VIDEOS}).`,
       );
     }
 
@@ -429,10 +433,27 @@ export function VehicleFormDialog({
         const media = isVideoDraft(p) ? ("video" as const) : ("photo" as const);
         if (p.kind === "existing") {
           order.push({ kind: "keep", url: p.url, media });
-        } else {
-          order.push({ kind: "new", index: newPhotos.length, media });
-          newPhotos.push({ dataUrl: await fileToDataUrl(p.file), contentType: p.file.type });
+          continue;
         }
+        if (media === "video") {
+          // Large files go straight to storage with a signed URL so nothing
+          // huge has to travel inside the save request.
+          setUploadLabel(`Uploading ${p.file.name}…`);
+          const { uploadUrl, key } = await createMediaUploadFn({
+            data: { accessToken: session.access_token, vin, contentType: p.file.type },
+          });
+          const put = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: { "content-type": p.file.type, "x-upsert": "true" },
+            body: p.file,
+          });
+          if (!put.ok) throw new Error(`Could not upload ${p.file.name}. Please try again.`);
+          order.push({ kind: "new", index: -1, media, uploadedKey: key });
+          setUploadLabel(null);
+          continue;
+        }
+        order.push({ kind: "new", index: newPhotos.length, media });
+        newPhotos.push({ dataUrl: await fileToDataUrl(p.file), contentType: p.file.type });
       }
 
       await saveVehiclePhotosFn({
@@ -617,7 +638,7 @@ export function VehicleFormDialog({
               {isDraggingFiles ? "Drop photos or videos here" : "Drag and drop vehicle photos or videos"}
             </p>
             <p className="mt-1 text-xs text-muted-foreground">
-              or click to browse JPG, PNG, WebP under 10 MB — or MP4, WebM, MOV videos under 25 MB
+              or click to browse JPG, PNG, WebP under 10 MB — or MP4, WebM, MOV videos up to 5 GB
             </p>
             <input
               id="vehicle-photo-upload"
