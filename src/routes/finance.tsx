@@ -445,6 +445,13 @@ function FinancePage() {
       if (wrapper) wrapper.style.display = "none";
     });
 
+    Array.from(scope.querySelectorAll<HTMLElement>("p, small")).forEach((element) => {
+      const text = element.textContent?.replace(/\s+/g, " ").trim().toLowerCase();
+      if (text?.startsWith("by submitting you agree to be contacted by my car business services llc")) {
+        element.style.display = "none";
+      }
+    });
+
     const generatedSubmitButton = Array.from(scope.querySelectorAll<HTMLButtonElement>('button[type="submit"]')).find(
       (button) => !button.hasAttribute("data-finance-submit"),
     );
@@ -811,6 +818,7 @@ function FinancePage() {
                           />
                         </div>
                       </FormSection>
+                      <StepActions onNext={() => setActiveStep("address")} />
                     </TabsContent>
 
                     <TabsContent value="address" className="m-0 focus-visible:outline-none">
@@ -877,7 +885,10 @@ function FinancePage() {
                           </Button>
                         )}
                       </FormSection>
-                      <StepActions onBack={() => setActiveStep("applicant")} />
+                      <StepActions
+                        onBack={() => setActiveStep("applicant")}
+                        onNext={() => setActiveStep("employment")}
+                      />
                     </TabsContent>
 
                     <TabsContent value="employment" className="m-0 space-y-4 focus-visible:outline-none">
@@ -1020,7 +1031,7 @@ function FinancePage() {
                           />
                         </div>
                       </FormSection>
-                      <StepActions onBack={() => setActiveStep("address")} />
+                      <StepActions onBack={() => setActiveStep("address")} onNext={() => setActiveStep("references")} />
                     </TabsContent>
 
                     <TabsContent value="references" className="m-0 focus-visible:outline-none">
@@ -1164,7 +1175,11 @@ function FinancePage() {
                         <Button type="button" variant="ghost" onClick={() => setActiveStep("employment")}>
                           Back
                         </Button>
-                        <Button type="submit" data-finance-submit>
+                        <Button
+                          type="submit"
+                          data-finance-submit
+                          className="bg-amber-400 font-semibold text-slate-950 hover:bg-amber-500"
+                        >
                           Submit
                         </Button>
                       </div>
@@ -1245,11 +1260,16 @@ function FormSection({
   );
 }
 
-function StepActions({ onBack }: { onBack: () => void }) {
+function StepActions({ onBack, onNext }: { onBack?: () => void; onNext: () => void }) {
   return (
-    <div className="mt-5 flex items-center justify-start">
-      <Button type="button" variant="ghost" onClick={onBack}>
-        Back
+    <div className={`mt-5 flex items-center ${onBack ? "justify-between" : "justify-end"}`}>
+      {onBack && (
+        <Button type="button" variant="ghost" onClick={onBack}>
+          Back
+        </Button>
+      )}
+      <Button type="button" onClick={onNext} className="bg-blue-600 font-semibold text-white hover:bg-blue-700">
+        Continue
       </Button>
     </div>
   );
