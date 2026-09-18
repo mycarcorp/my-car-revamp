@@ -466,12 +466,6 @@ function SearchPage() {
             onChange={(v) => set({ fuel: v })}
           />
           <FacetSelect
-            label="Drivetrain"
-            value={params.drivetrain}
-            options={facets?.drivetrains ?? []}
-            onChange={(v) => set({ drivetrain: v })}
-          />
-          <FacetSelect
             label="Exterior color"
             value={params.color}
             options={facets?.colors ?? []}
