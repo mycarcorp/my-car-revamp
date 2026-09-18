@@ -35,7 +35,6 @@ import { Route as LocationsSlugRouteImport } from './routes/locations.$slug'
 import { Route as AdminBlogIndexRouteImport } from './routes/admin.blog.index'
 import { Route as AdminBlogNewRouteImport } from './routes/admin.blog.new'
 import { Route as ApiPublicReceiveArticleRouteImport } from './routes/api/public/receive-article'
-import { Route as ApiPublicTmpCleanupRouteImport } from './routes/api/public/tmp-cleanup'
 import { Route as AdminBlogIdEditRouteImport } from './routes/admin.blog.$id.edit'
 import { Route as ApiPublicVehiclePhotosSplatRouteImport } from './routes/api/public/vehicle-photos.$'
 
@@ -169,11 +168,6 @@ const ApiPublicReceiveArticleRoute = ApiPublicReceiveArticleRouteImport.update({
   path: '/api/public/receive-article',
   getParentRoute: () => rootRouteImport,
 } as any)
-const ApiPublicTmpCleanupRoute = ApiPublicTmpCleanupRouteImport.update({
-  id: '/api/public/tmp-cleanup',
-  path: '/api/public/tmp-cleanup',
-  getParentRoute: () => rootRouteImport,
-} as any)
 const AdminBlogIdEditRoute = AdminBlogIdEditRouteImport.update({
   id: '/blog/$id/edit',
   path: '/blog/$id/edit',
@@ -212,7 +206,6 @@ export interface FileRoutesByFullPath {
   '/locations/': typeof LocationsIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
-  '/api/public/tmp-cleanup': typeof ApiPublicTmpCleanupRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
@@ -242,7 +235,6 @@ export interface FileRoutesByTo {
   '/locations': typeof LocationsIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
-  '/api/public/tmp-cleanup': typeof ApiPublicTmpCleanupRoute
   '/admin/blog': typeof AdminBlogIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
@@ -274,7 +266,6 @@ export interface FileRoutesById {
   '/locations/': typeof LocationsIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
-  '/api/public/tmp-cleanup': typeof ApiPublicTmpCleanupRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
@@ -307,7 +298,6 @@ export interface FileRouteTypes {
     | '/locations/'
     | '/admin/blog/new'
     | '/api/public/receive-article'
-    | '/api/public/tmp-cleanup'
     | '/admin/blog/'
     | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
@@ -337,7 +327,6 @@ export interface FileRouteTypes {
     | '/locations'
     | '/admin/blog/new'
     | '/api/public/receive-article'
-    | '/api/public/tmp-cleanup'
     | '/admin/blog'
     | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
@@ -368,7 +357,6 @@ export interface FileRouteTypes {
     | '/locations/'
     | '/admin/blog/new'
     | '/api/public/receive-article'
-    | '/api/public/tmp-cleanup'
     | '/admin/blog/'
     | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
@@ -394,7 +382,6 @@ export interface RootRouteChildren {
   BlogIndexRoute: typeof BlogIndexRoute
   LocationsIndexRoute: typeof LocationsIndexRoute
   ApiPublicReceiveArticleRoute: typeof ApiPublicReceiveArticleRoute
-  ApiPublicTmpCleanupRoute: typeof ApiPublicTmpCleanupRoute
   ApiPublicVehiclePhotosSplatRoute: typeof ApiPublicVehiclePhotosSplatRoute
 }
 
@@ -582,13 +569,6 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicReceiveArticleRouteImport
       parentRoute: typeof rootRouteImport
     }
-    '/api/public/tmp-cleanup': {
-      id: '/api/public/tmp-cleanup'
-      path: '/api/public/tmp-cleanup'
-      fullPath: '/api/public/tmp-cleanup'
-      preLoaderRoute: typeof ApiPublicTmpCleanupRouteImport
-      parentRoute: typeof rootRouteImport
-    }
     '/admin/blog/$id/edit': {
       id: '/admin/blog/$id/edit'
       path: '/blog/$id/edit'
@@ -658,7 +638,6 @@ const rootRouteChildren: RootRouteChildren = {
   BlogIndexRoute: BlogIndexRoute,
   LocationsIndexRoute: LocationsIndexRoute,
   ApiPublicReceiveArticleRoute: ApiPublicReceiveArticleRoute,
-  ApiPublicTmpCleanupRoute: ApiPublicTmpCleanupRoute,
   ApiPublicVehiclePhotosSplatRoute: ApiPublicVehiclePhotosSplatRoute,
 }
 export const routeTree = rootRouteImport
