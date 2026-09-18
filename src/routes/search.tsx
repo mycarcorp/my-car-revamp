@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Banknote, Handshake, Search, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -9,9 +9,8 @@ import { Slider } from "@/components/ui/slider";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { VehicleCard } from "@/components/VehicleCard";
 import { useAuth } from "@/hooks/useAuth";
-import { supabase } from "@/integrations/supabase/app-client";
 import { formatUsd } from "@/lib/format";
-import { allVehiclesQuery, facetsQuery, siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
+import { allVehiclesQuery, siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
 
 type SearchParams = {
   q?: string | undefined;
@@ -85,78 +84,160 @@ const SORTS = [
   { value: "oldest", label: "Year: oldest first" },
 ];
 
+const FILTER_KEYS = [
+  "q",
+  "make",
+  "model",
+  "body",
+  "fuel",
+  "drivetrain",
+  "color",
+  "priceMin",
+  "priceMax",
+  "yearMin",
+  "yearMax",
+  "mileageMax",
+  "mpgMin",
+  "deal",
+] as const;
+
+const clean = (f: SearchParams): SearchParams => {
+  const out: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(f)) {
+    if (v !== undefined && v !== "" && k !== "page") out[k] = v;
+  }
+  return out as SearchParams;
+};
+
+const signature = (f: SearchParams) => JSON.stringify(clean(f), Object.keys(clean(f)).sort());
+
 function SearchPage() {
   const params = Route.useSearch();
   const navigate = useNavigate({ from: "/search" });
   const { user } = useAuth();
-  const { data: facets } = useQuery(facetsQuery());
   const { data: settings } = useQuery(siteSettingsQuery());
   const { data: allVehicles = [], isLoading } = useQuery(allVehiclesQuery());
-  const { data: inventoryPrices = [] } = useQuery({
-    queryKey: ["search", "price-bounds"],
-    queryFn: async () => {
-      const { data: rows, error } = await supabase.from("vehicles").select("price_cents").eq("status", "available");
 
-      if (error) throw error;
-      return rows ?? [];
-    },
-  });
+  /* Filters live in local state so every change is applied instantly; the URL is
+     synced afterwards (debounced, replace) purely so links stay shareable. */
+  const [filters, setFilters] = useState<SearchParams>(params);
+  const lastPushed = useRef(signature(params));
+  const urlTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Adopt external URL changes (shared links, in-app links like deal=price-drop).
+  useEffect(() => {
+    const incoming = signature(params);
+    if (incoming !== lastPushed.current) {
+      lastPushed.current = incoming;
+      setFilters(params);
+    }
+  }, [params]);
+
+  useEffect(() => {
+    const next = signature(filters);
+    if (next === lastPushed.current) return;
+    if (urlTimer.current) clearTimeout(urlTimer.current);
+    urlTimer.current = setTimeout(() => {
+      lastPushed.current = next;
+      void navigate({ search: () => clean(filters), replace: true, resetScroll: false });
+    }, 350);
+    return () => {
+      if (urlTimer.current) clearTimeout(urlTimer.current);
+    };
+  }, [filters, navigate]);
+
+  const set = useCallback((patch: Partial<SearchParams>) => {
+    setFilters((prev) => ({ ...prev, ...patch, page: undefined }));
+  }, []);
+
+  const clearAll = useCallback(() => setFilters({}), []);
+
+  const liveVehicles = useMemo(
+    () => allVehicles.filter((v) => v.status === "available" || v.status === "pending"),
+    [allVehicles],
+  );
+
+  /* Facets and price bounds come from the inventory already in memory — no extra
+     network round trips while filtering. */
+  const facets = useMemo(() => {
+    const tally = (pick: (v: VehicleWithPhotos) => unknown) => {
+      const map = new Map<string, number>();
+      for (const v of liveVehicles) {
+        const value = pick(v);
+        if (typeof value === "string" && value) map.set(value, (map.get(value) ?? 0) + 1);
+      }
+      return [...map.entries()].sort((a, b) => b[1] - a[1]).map(([value, count]) => ({ value, count }));
+    };
+    return {
+      makes: tally((v) => v.make),
+      models: tally((v) => v.model),
+      bodies: tally((v) => v.body_style),
+      fuels: tally((v) => v.fuel_type),
+      colors: tally((v) => v.exterior_color),
+    };
+  }, [liveVehicles]);
 
   const priceBounds = useMemo(() => {
-    const prices = inventoryPrices
-      .map((vehicle) => Number(vehicle.price_cents) / 100)
-      .filter((price) => Number.isFinite(price) && price > 0);
-
+    const prices = liveVehicles
+      .map((v) => Number(v.price_cents) / 100)
+      .filter((p) => Number.isFinite(p) && p > 0);
     if (prices.length === 0) return { min: 0, max: 0 };
-
     return {
       min: Math.floor(Math.min(...prices) / 1000) * 1000,
       max: Math.ceil(Math.max(...prices) / 1000) * 1000,
     };
-  }, [inventoryPrices]);
+  }, [liveVehicles]);
 
-  const [priceRange, setPriceRange] = useState<[number, number]>([0, 0]);
-  const priceFilterTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const priceRange = useMemo<[number, number]>(() => {
+    if (priceBounds.max <= 0) return [0, 0];
+    const minimum = Math.max(priceBounds.min, Math.min(filters.priceMin ?? priceBounds.min, priceBounds.max));
+    const maximum = Math.max(minimum, Math.min(filters.priceMax ?? priceBounds.max, priceBounds.max));
+    return [minimum, maximum];
+  }, [filters.priceMax, filters.priceMin, priceBounds.max, priceBounds.min]);
 
-  useEffect(() => {
-    if (priceBounds.max <= 0) return;
-
-    const minimum = Math.max(priceBounds.min, Math.min(params.priceMin ?? priceBounds.min, priceBounds.max));
-    const maximum = Math.max(minimum, Math.min(params.priceMax ?? priceBounds.max, priceBounds.max));
-    setPriceRange([minimum, maximum]);
-  }, [params.priceMax, params.priceMin, priceBounds.max, priceBounds.min]);
-
-  const set = (patch: Partial<SearchParams>) =>
-    navigate({ search: (prev) => ({ ...prev, ...patch, page: undefined }) });
-
-  const commitPriceRange = (range: [number, number]) => {
+  const setPriceRange = (range: [number, number]) =>
     set({
-      priceMin: range[0] === priceBounds.min ? undefined : range[0],
-      priceMax: range[1] === priceBounds.max ? undefined : range[1],
+      priceMin: range[0] <= priceBounds.min ? undefined : range[0],
+      priceMax: range[1] >= priceBounds.max ? undefined : range[1],
     });
-  };
 
-  const schedulePriceRangeFilter = (range: [number, number]) => {
-    if (priceFilterTimerRef.current) clearTimeout(priceFilterTimerRef.current);
+  const activeCount = FILTER_KEYS.filter((k) => filters[k] !== undefined && filters[k] !== "").length;
 
-    priceFilterTimerRef.current = setTimeout(() => {
-      commitPriceRange(range);
-      priceFilterTimerRef.current = null;
-    }, 120);
-  };
+  const years = useMemo(() => {
+    const set = new Set<number>();
+    for (const v of liveVehicles) if (v.year) set.add(v.year);
+    return [...set].sort((a, b) => b - a);
+  }, [liveVehicles]);
 
-  useEffect(
-    () => () => {
-      if (priceFilterTimerRef.current) clearTimeout(priceFilterTimerRef.current);
-    },
-    [],
-  );
+  const allSorted = useMemo(() => {
+    const eq = (a?: string | null, b?: string) => !b || (!!a && a.toLowerCase() === b.toLowerCase());
+    const words = (filters.q ?? "").toLowerCase().split(/\s+/).filter(Boolean);
 
-  const activeCount = Object.entries(params).filter(([k, v]) => v !== undefined && k !== "sort" && k !== "page").length;
+    const matches = (v: VehicleWithPhotos) => {
+      const price = Number(v.price_cents) / 100;
+      if (words.length > 0) {
+        const haystack = `${v.year} ${v.make} ${v.model} ${v.trim ?? ""} ${v.exterior_color ?? ""} ${
+          v.body_style ?? ""
+        } ${v.fuel_type ?? ""} ${v.vin ?? ""} ${v.stock_number ?? ""}`.toLowerCase();
+        if (!words.every((w) => haystack.includes(w))) return false;
+      }
+      if (!eq(v.make, filters.make)) return false;
+      if (!eq(v.model, filters.model)) return false;
+      if (!eq(v.body_style, filters.body)) return false;
+      if (!eq(v.fuel_type, filters.fuel)) return false;
+      if (!eq(v.exterior_color, filters.color)) return false;
+      if (filters.priceMin && price < filters.priceMin) return false;
+      if (filters.priceMax && price > filters.priceMax) return false;
+      if (filters.yearMin && v.year < filters.yearMin) return false;
+      if (filters.yearMax && v.year > filters.yearMax) return false;
+      if (filters.mileageMax && (v.mileage ?? 0) > filters.mileageMax) return false;
+      if (filters.mpgMin && (v.mpg_combined ?? 0) < filters.mpgMin) return false;
+      if (filters.deal === "price-drop" && v.prior_price_cents == null) return false;
+      return true;
+    };
 
-  const sortVehicles = (list: VehicleWithPhotos[]) => {
-    const rows = [...list];
-    switch (params.sort) {
+    const rows = liveVehicles.filter(matches);
+    switch (filters.sort) {
       case "price-asc":
         return rows.sort((a, b) => Number(a.price_cents) - Number(b.price_cents));
       case "price-desc":
@@ -169,58 +250,22 @@ function SearchPage() {
         return rows.sort((a, b) => a.year - b.year);
       default:
         return rows.sort(
-          (a, b) => Number(b.is_featured) - Number(a.is_featured) || String(b.date_received).localeCompare(String(a.date_received)),
+          (a, b) =>
+            Number(b.is_featured) - Number(a.is_featured) ||
+            String(b.date_received).localeCompare(String(a.date_received)),
         );
     }
-  };
-
-  /** Every active filter must be satisfied. */
-  const matchesFilters = (v: VehicleWithPhotos) => {
-    const eq = (a?: string | null, b?: string) => !b || (!!a && a.toLowerCase() === b.toLowerCase());
-    const price = Number(v.price_cents) / 100;
-    if (params.q) {
-      const haystack = `${v.year} ${v.make} ${v.model} ${v.trim ?? ""}`.toLowerCase();
-      const words = params.q.toLowerCase().split(/\s+/).filter(Boolean);
-      if (!words.every((word) => haystack.includes(word))) return false;
-    }
-    if (!eq(v.make, params.make)) return false;
-    if (!eq(v.model, params.model)) return false;
-    if (!eq(v.body_style, params.body)) return false;
-    if (!eq(v.fuel_type, params.fuel)) return false;
-    if (!eq(v.exterior_color, params.color)) return false;
-    if (params.priceMin && price < params.priceMin) return false;
-    if (params.priceMax && price > params.priceMax) return false;
-    if (params.yearMin && v.year < params.yearMin) return false;
-    if (params.yearMax && v.year > params.yearMax) return false;
-    if (params.mileageMax && (v.mileage ?? 0) > params.mileageMax) return false;
-    if (params.mpgMin && (v.mpg_combined ?? 0) < params.mpgMin) return false;
-    if (params.deal === "price-drop" && v.prior_price_cents == null) return false;
-    return true;
-  };
-
-  const liveVehicles = useMemo(
-    () => allVehicles.filter((v) => v.status === "available" || v.status === "pending"),
-    [allVehicles],
-  );
-
-  const years = useMemo(() => {
-    const set = new Set<number>();
-    for (const v of liveVehicles) if (v.year) set.add(v.year);
-    return [...set].sort((a, b) => b - a);
-  }, [liveVehicles]);
-
-  const allSorted = useMemo(
-    () => sortVehicles(liveVehicles.filter(matchesFilters)),
-    [liveVehicles, params],
-  );
+  }, [liveVehicles, filters]);
 
   const [shown, setShown] = useState(24);
+  const filterSignature = signature(filters);
 
   useEffect(() => {
     setShown(24);
-  }, [params]);
+  }, [filterSignature]);
 
-  const visible = allSorted.slice(0, shown);
+  const visible = useMemo(() => allSorted.slice(0, shown), [allSorted, shown]);
+
   const displayName =
     String(user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "")
       .trim()
@@ -271,10 +316,10 @@ function SearchPage() {
             </p>
           </div>
           <div className="grid gap-px bg-border md:grid-cols-3">
-            <Link
-              to="/search"
-              search={{ deal: "price-drop" }}
-              className="group bg-card p-5 transition-colors hover:bg-muted/50"
+            <button
+              type="button"
+              onClick={() => setFilters({ deal: "price-drop" })}
+              className="group bg-card p-5 text-left transition-colors hover:bg-muted/50"
             >
               <Search className="size-5 text-primary" />
               <h2 className="mt-4 font-display text-lg font-semibold">Suggested deals</h2>
@@ -282,7 +327,7 @@ function SearchPage() {
               <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
                 Browse deals <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
               </span>
-            </Link>
+            </button>
             <Link to="/finance" className="group bg-card p-5 transition-colors hover:bg-muted/50">
               <Banknote className="size-5 text-primary" />
               <h2 className="mt-4 font-display text-lg font-semibold">Plan your payment</h2>
@@ -317,7 +362,7 @@ function SearchPage() {
         <div className="flex items-center gap-2">
           <SlidersHorizontal className="size-4 text-muted-foreground" />
           <Select
-            value={params.sort ?? "recommended"}
+            value={filters.sort ?? "recommended"}
             onValueChange={(v) => set({ sort: v === "recommended" ? undefined : v })}
           >
             <SelectTrigger className="w-56">
@@ -341,7 +386,7 @@ function SearchPage() {
             {activeCount > 0 && (
               <button
                 className="inline-flex items-center gap-1 text-xs font-medium text-muted-foreground hover:text-primary"
-                onClick={() => navigate({ search: {} })}
+                onClick={clearAll}
               >
                 <X className="size-3" /> Clear all
               </button>
@@ -352,9 +397,9 @@ function SearchPage() {
             <Label htmlFor="q">Keyword</Label>
             <Input
               id="q"
-              defaultValue={params.q ?? ""}
+              value={filters.q ?? ""}
               placeholder="Make, model or trim"
-              onBlur={(e) => set({ q: e.target.value || undefined })}
+              onChange={(e) => set({ q: e.target.value || undefined })}
             />
           </div>
 
@@ -374,16 +419,7 @@ function SearchPage() {
               value={priceRange}
               onValueChange={(value) => {
                 const next = value as [number, number];
-                const ordered = next[0] <= next[1] ? next : ([next[1], next[1]] as [number, number]);
-                setPriceRange(ordered);
-                schedulePriceRangeFilter(ordered);
-              }}
-              onValueCommit={(value) => {
-                const next = value as [number, number];
-                const ordered = next[0] <= next[1] ? next : ([next[1], next[1]] as [number, number]);
-                if (priceFilterTimerRef.current) clearTimeout(priceFilterTimerRef.current);
-                priceFilterTimerRef.current = null;
-                commitPriceRange(ordered);
+                setPriceRange(next[0] <= next[1] ? next : [next[1], next[1]]);
               }}
               disabled={priceBounds.max <= priceBounds.min}
               aria-label="Filter by price range"
@@ -410,7 +446,6 @@ function SearchPage() {
                     );
                     setPriceRange([minimum, priceRange[1]]);
                   }}
-                  onBlur={() => commitPriceRange(priceRange)}
                   className="h-9 rounded-lg text-xs"
                 />
               </div>
@@ -434,7 +469,6 @@ function SearchPage() {
                     );
                     setPriceRange([priceRange[0], maximum]);
                   }}
-                  onBlur={() => commitPriceRange(priceRange)}
                   className="h-9 rounded-lg text-xs"
                 />
               </div>
@@ -443,32 +477,17 @@ function SearchPage() {
 
           <FacetSelect
             label="Make"
-            value={params.make}
-            options={facets?.makes ?? []}
+            value={filters.make}
+            options={facets.makes}
             onChange={(v) => set({ make: v, model: undefined })}
           />
-          <FacetSelect
-            label="Model"
-            value={params.model}
-            options={facets?.models ?? []}
-            onChange={(v) => set({ model: v })}
-          />
-          <FacetSelect
-            label="Body type"
-            value={params.body}
-            options={facets?.bodies ?? []}
-            onChange={(v) => set({ body: v })}
-          />
-          <FacetSelect
-            label="Fuel type"
-            value={params.fuel}
-            options={facets?.fuels ?? []}
-            onChange={(v) => set({ fuel: v })}
-          />
+          <FacetSelect label="Model" value={filters.model} options={facets.models} onChange={(v) => set({ model: v })} />
+          <FacetSelect label="Body type" value={filters.body} options={facets.bodies} onChange={(v) => set({ body: v })} />
+          <FacetSelect label="Fuel type" value={filters.fuel} options={facets.fuels} onChange={(v) => set({ fuel: v })} />
           <FacetSelect
             label="Exterior color"
-            value={params.color}
-            options={facets?.colors ?? []}
+            value={filters.color}
+            options={facets.colors}
             onChange={(v) => set({ color: v })}
           />
 
@@ -476,7 +495,7 @@ function SearchPage() {
             <div className="space-y-2">
               <Label>Year from</Label>
               <Select
-                value={params.yearMin ? String(params.yearMin) : "any"}
+                value={filters.yearMin ? String(filters.yearMin) : "any"}
                 onValueChange={(v) => set({ yearMin: v === "any" ? undefined : Number(v) })}
               >
                 <SelectTrigger>
@@ -495,7 +514,7 @@ function SearchPage() {
             <div className="space-y-2">
               <Label>Year to</Label>
               <Select
-                value={params.yearMax ? String(params.yearMax) : "any"}
+                value={filters.yearMax ? String(filters.yearMax) : "any"}
                 onValueChange={(v) => set({ yearMax: v === "any" ? undefined : Number(v) })}
               >
                 <SelectTrigger>
@@ -516,7 +535,7 @@ function SearchPage() {
           <div className="space-y-2">
             <Label>Max mileage</Label>
             <Select
-              value={params.mileageMax ? String(params.mileageMax) : "any"}
+              value={filters.mileageMax ? String(filters.mileageMax) : "any"}
               onValueChange={(v) => set({ mileageMax: v === "any" ? undefined : Number(v) })}
             >
               <SelectTrigger>
@@ -532,7 +551,6 @@ function SearchPage() {
               </SelectContent>
             </Select>
           </div>
-
         </aside>
 
         <section>
@@ -549,7 +567,7 @@ function SearchPage() {
                 Try widening the price, year or mileage range — or tell us what you're after.
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-3">
-                <Button variant="outline" onClick={() => navigate({ search: {} })}>
+                <Button variant="outline" onClick={clearAll}>
                   Clear filters
                 </Button>
                 <Button asChild>
