@@ -9,7 +9,6 @@ import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LeadForm } from "@/components/LeadForm";
-import { supabase } from "@/integrations/supabase/app-client";
 import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
 import type { VehicleWithPhotos } from "@/lib/queries";
 
@@ -314,23 +313,44 @@ function SellPage() {
   const leadFormScopeRef = useRef<HTMLDivElement>(null);
 
   const { data: inventory = [], isLoading: inventoryLoading } = useQuery({
-    queryKey: ["sell", "available-inventory"],
+    queryKey: ["sell", "mc-cars-inventory"],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from("vehicles")
-        .select("*, vehicle_photos(id, vehicle_id, url, alt, position, created_at)")
-        .eq("status", "available")
-        .order("year", { ascending: false });
+      const response = await fetch("/api/public/inventory", {
+        headers: { Accept: "application/json" },
+      });
 
-      if (error) throw error;
-      return (data ?? []) as unknown as VehicleWithPhotos[];
+      if (!response.ok) {
+        throw new Error(`Could not load inventory (${response.status}).`);
+      }
+
+      const payload = (await response.json()) as
+        | VehicleWithPhotos[]
+        | { data?: VehicleWithPhotos[]; vehicles?: VehicleWithPhotos[] };
+
+      const rows = Array.isArray(payload)
+        ? payload
+        : Array.isArray(payload.vehicles)
+          ? payload.vehicles
+          : Array.isArray(payload.data)
+            ? payload.data
+            : [];
+
+      return rows;
     },
+    staleTime: 30_000,
+    refetchOnWindowFocus: true,
   });
 
-  const matchingVehicles = useMemo(
-    () => inventory.filter((vehicle) => matchesWishList(vehicle, wishList)),
-    [inventory, wishList],
-  );
+  const matchingVehicles = useMemo(() => {
+    return inventory
+      .map((vehicle) => ({
+        vehicle,
+        score: getWishListMatchScore(vehicle, wishList),
+      }))
+      .filter(({ score }) => score > 0)
+      .sort((a, b) => b.score - a.score || b.vehicle.year - a.vehicle.year)
+      .map(({ vehicle }) => vehicle);
+  }, [inventory, wishList]);
 
   const pickerVehicles = useMemo(() => {
     const source = pickerTab === "matching" ? matchingVehicles : inventory;
@@ -2001,33 +2021,54 @@ function numericValue(value: string) {
   return Number.isFinite(numeric) ? numeric : 0;
 }
 
-function matchesWishList(vehicle: VehicleWithPhotos, wish: WishListState) {
-  if (wish.makeModel && !includesText(`${vehicle.make} ${vehicle.model} ${vehicle.trim ?? ""}`, wish.makeModel))
-    return false;
-  if (wish.bodyType !== "all") {
-    const selectedBody = wish.bodyType === "Pickup" ? "Truck" : wish.bodyType.replace("_", " ");
-    if (!includesText(vehicle.body_style, selectedBody)) return false;
-  }
-  if (wish.vehicleType !== "all" && wish.vehicleType !== "auto") {
-    const body = vehicle.body_style.toLowerCase();
-    const matchesType =
-      wish.vehicleType === "car"
-        ? ["sedan", "coupe", "hatchback", "convertible", "wagon"].includes(body)
-        : wish.vehicleType === "van"
-          ? ["van", "minivan"].includes(body)
-          : body === wish.vehicleType;
-    if (!matchesType) return false;
-  }
-  if (wish.minYear && vehicle.year < Number(wish.minYear)) return false;
-  if (wish.maxPrice && Number(vehicle.price_cents) / 100 > numericValue(wish.maxPrice)) return false;
-  if (wish.maxMileage && wish.maxMileage !== "Any Mileage" && vehicle.mileage > numericValue(wish.maxMileage))
-    return false;
-  if (wish.transmission !== "all" && !includesText(vehicle.transmission, wish.transmission)) return false;
-  if (wish.drivetrain !== "all" && !includesText(vehicle.drivetrain, wish.drivetrain)) return false;
-  if (wish.fuelType !== "all" && !includesText(vehicle.fuel_type, wish.fuelType)) return false;
-  if (wish.exteriorColor && !includesText(vehicle.exterior_color, wish.exteriorColor)) return false;
-  if (wish.interiorColor && !includesText(vehicle.interior_color, wish.interiorColor)) return false;
+function getWishListMatchScore(vehicle: VehicleWithPhotos, wish: WishListState) {
+  let score = 0;
+  let activePreferences = 0;
+
+  const addMatch = (active: boolean, matches: boolean, weight = 1) => {
+    if (!active) return;
+    activePreferences += 1;
+    if (matches) score += weight;
+  };
+
+  const vehicleName = `${vehicle.make} ${vehicle.model} ${vehicle.trim ?? ""}`;
+  const body = (vehicle.body_style ?? "").toLowerCase();
+  const selectedBody = wish.bodyType === "Pickup" ? "Truck" : wish.bodyType.replace("_", " ");
+  const selectedType = wish.vehicleType.toLowerCase();
+  const typeMatches =
+    selectedType === "auto"
+      ? true
+      : selectedType === "car"
+        ? ["sedan", "coupe", "hatchback", "convertible", "wagon"].some((type) => body.includes(type))
+        : selectedType === "van"
+          ? ["van", "minivan"].some((type) => body.includes(type))
+          : body.includes(selectedType);
+
+  addMatch(Boolean(wish.makeModel.trim()), includesText(vehicleName, wish.makeModel), 3);
+  addMatch(wish.bodyType !== "all", includesText(vehicle.body_style, selectedBody), 2);
+  addMatch(wish.vehicleType !== "all", typeMatches, 2);
+  addMatch(Boolean(wish.minYear), vehicle.year >= numericValue(wish.minYear), 1);
+  addMatch(Boolean(wish.maxPrice), Number(vehicle.price_cents) / 100 <= numericValue(wish.maxPrice), 1);
+  addMatch(
+    Boolean(wish.maxMileage) && wish.maxMileage !== "Any Mileage",
+    vehicle.mileage <= numericValue(wish.maxMileage),
+    1,
+  );
+  addMatch(wish.transmission !== "all", includesText(vehicle.transmission, wish.transmission), 2);
+  addMatch(wish.drivetrain !== "all", includesText(vehicle.drivetrain, wish.drivetrain), 2);
+  addMatch(wish.fuelType !== "all", includesText(vehicle.fuel_type, wish.fuelType.replace("_", " ")), 2);
+  addMatch(Boolean(wish.exteriorColor), includesText(vehicle.exterior_color, wish.exteriorColor), 1);
+  addMatch(Boolean(wish.interiorColor), includesText(vehicle.interior_color, wish.interiorColor), 1);
+
   const features = (vehicle.features ?? []).map((feature) => feature.toLowerCase());
-  if (wish.features.some((feature) => !features.some((item) => item.includes(feature.toLowerCase())))) return false;
-  return true;
+  wish.features.forEach((feature) => {
+    addMatch(
+      true,
+      features.some((item) => item.includes(feature.toLowerCase())),
+      1,
+    );
+  });
+
+  // With no specific preference entered, do not label every inventory unit as a match.
+  return activePreferences === 0 ? 0 : score;
 }
