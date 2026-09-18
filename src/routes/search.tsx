@@ -335,7 +335,7 @@ function SearchPage() {
       </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[280px_1fr]">
-        <aside className="space-y-5 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-24 lg:self-start">
+        <aside className="space-y-5 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold">Filters</h2>
             {activeCount > 0 && (
