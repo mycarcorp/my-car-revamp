@@ -310,7 +310,7 @@ function SearchPage() {
             {isLoading
               ? "Loading inventory…"
               : activeCount > 0
-                ? `${matching.length} vehicles close to what you're looking for · ${allSorted.length} total in stock`
+                ? `${allSorted.length} vehicles match your filters`
                 : `${allSorted.length} vehicles in stock`}
           </p>
         </div>
