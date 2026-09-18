@@ -519,18 +519,6 @@ function SearchPage() {
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Deals</Label>
-            <Select value={params.deal ?? "any"} onValueChange={(v) => set({ deal: v === "any" ? undefined : v })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Any" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Any</SelectItem>
-                <SelectItem value="price-drop">Recent price drops</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </aside>
 
         <section>
