@@ -174,29 +174,28 @@ function SearchPage() {
     }
   };
 
-  /** How many of the shopper's inputs this vehicle satisfies. One is enough to be "close". */
-  const matchScore = (v: VehicleWithPhotos) => {
-    const eq = (a?: string | null, b?: string) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+  /** Every active filter must be satisfied. */
+  const matchesFilters = (v: VehicleWithPhotos) => {
+    const eq = (a?: string | null, b?: string) => !b || (!!a && a.toLowerCase() === b.toLowerCase());
     const price = Number(v.price_cents) / 100;
-    let score = 0;
     if (params.q) {
       const haystack = `${v.year} ${v.make} ${v.model} ${v.trim ?? ""}`.toLowerCase();
-      if (params.q.toLowerCase().split(/\s+/).some((word) => word && haystack.includes(word))) score++;
+      const words = params.q.toLowerCase().split(/\s+/).filter(Boolean);
+      if (!words.every((word) => haystack.includes(word))) return false;
     }
-    if (eq(v.make, params.make)) score++;
-    if (eq(v.model, params.model)) score++;
-    if (eq(v.body_style, params.body)) score++;
-    if (eq(v.fuel_type, params.fuel)) score++;
-    if (eq(v.drivetrain, params.drivetrain)) score++;
-    if (eq(v.exterior_color, params.color)) score++;
-    if (params.priceMin && price >= params.priceMin) score++;
-    if (params.priceMax && price <= params.priceMax) score++;
-    if (params.yearMin && v.year >= params.yearMin) score++;
-    if (params.yearMax && v.year <= params.yearMax) score++;
-    if (params.mileageMax && (v.mileage ?? 0) <= params.mileageMax) score++;
-    if (params.mpgMin && (v.mpg_combined ?? 0) >= params.mpgMin) score++;
-    if (params.deal === "price-drop" && v.prior_price_cents != null) score++;
-    return score;
+    if (!eq(v.make, params.make)) return false;
+    if (!eq(v.model, params.model)) return false;
+    if (!eq(v.body_style, params.body)) return false;
+    if (!eq(v.fuel_type, params.fuel)) return false;
+    if (!eq(v.exterior_color, params.color)) return false;
+    if (params.priceMin && price < params.priceMin) return false;
+    if (params.priceMax && price > params.priceMax) return false;
+    if (params.yearMin && v.year < params.yearMin) return false;
+    if (params.yearMax && v.year > params.yearMax) return false;
+    if (params.mileageMax && (v.mileage ?? 0) > params.mileageMax) return false;
+    if (params.mpgMin && (v.mpg_combined ?? 0) < params.mpgMin) return false;
+    if (params.deal === "price-drop" && v.prior_price_cents == null) return false;
+    return true;
   };
 
   const liveVehicles = useMemo(
@@ -204,27 +203,24 @@ function SearchPage() {
     [allVehicles],
   );
 
-  const allSorted = useMemo(() => sortVehicles(liveVehicles), [liveVehicles, params.sort]);
+  const years = useMemo(() => {
+    const set = new Set<number>();
+    for (const v of liveVehicles) if (v.year) set.add(v.year);
+    return [...set].sort((a, b) => b - a);
+  }, [liveVehicles]);
 
-  const matching = useMemo(() => {
-    if (activeCount === 0) return [];
-    return liveVehicles
-      .map((v) => ({ v, score: matchScore(v) }))
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map((x) => x.v);
-  }, [liveVehicles, params, activeCount]);
+  const allSorted = useMemo(
+    () => sortVehicles(liveVehicles.filter(matchesFilters)),
+    [liveVehicles, params],
+  );
 
-  const [tab, setTab] = useState<"matching" | "all">("all");
   const [shown, setShown] = useState(24);
 
   useEffect(() => {
-    setTab(activeCount > 0 ? "matching" : "all");
     setShown(24);
-  }, [activeCount, params]);
+  }, [params]);
 
-  const activeList = tab === "matching" ? matching : allSorted;
-  const visible = activeList.slice(0, shown);
+  const visible = allSorted.slice(0, shown);
   const displayName =
     String(user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "")
       .trim()
@@ -314,7 +310,7 @@ function SearchPage() {
             {isLoading
               ? "Loading inventory…"
               : activeCount > 0
-                ? `${matching.length} vehicles close to what you're looking for · ${allSorted.length} total in stock`
+                ? `${allSorted.length} vehicles match your filters`
                 : `${allSorted.length} vehicles in stock`}
           </p>
         </div>
@@ -339,7 +335,7 @@ function SearchPage() {
       </div>
 
       <div className="mt-8 grid gap-8 lg:grid-cols-[280px_1fr]">
-        <aside className="space-y-5 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-24 lg:self-start">
+        <aside className="space-y-5 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-4 lg:max-h-[calc(100vh-2rem)] lg:self-start lg:overflow-y-auto lg:overscroll-contain">
           <div className="flex items-center justify-between">
             <h2 className="font-display text-lg font-semibold">Filters</h2>
             {activeCount > 0 && (
@@ -470,12 +466,6 @@ function SearchPage() {
             onChange={(v) => set({ fuel: v })}
           />
           <FacetSelect
-            label="Drivetrain"
-            value={params.drivetrain}
-            options={facets?.drivetrains ?? []}
-            onChange={(v) => set({ drivetrain: v })}
-          />
-          <FacetSelect
             label="Exterior color"
             value={params.color}
             options={facets?.colors ?? []}
@@ -484,22 +474,42 @@ function SearchPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="yearMin">Year from</Label>
-              <Input
-                id="yearMin"
-                type="number"
-                defaultValue={params.yearMin ?? ""}
-                onBlur={(e) => set({ yearMin: Number(e.target.value) || undefined })}
-              />
+              <Label>Year from</Label>
+              <Select
+                value={params.yearMin ? String(params.yearMin) : "any"}
+                onValueChange={(v) => set({ yearMin: v === "any" ? undefined : Number(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Any" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  {years.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="yearMax">Year to</Label>
-              <Input
-                id="yearMax"
-                type="number"
-                defaultValue={params.yearMax ?? ""}
-                onBlur={(e) => set({ yearMax: Number(e.target.value) || undefined })}
-              />
+              <Label>Year to</Label>
+              <Select
+                value={params.yearMax ? String(params.yearMax) : "any"}
+                onValueChange={(v) => set({ yearMax: v === "any" ? undefined : Number(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Any" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  {years.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
@@ -523,54 +533,9 @@ function SearchPage() {
             </Select>
           </div>
 
-          <div className="space-y-2">
-            <Label>Deals</Label>
-            <Select value={params.deal ?? "any"} onValueChange={(v) => set({ deal: v === "any" ? undefined : v })}>
-              <SelectTrigger>
-                <SelectValue placeholder="Any" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="any">Any</SelectItem>
-                <SelectItem value="price-drop">Recent price drops</SelectItem>
-              </SelectContent>
-            </Select>
-          </div>
         </aside>
 
         <section>
-          <div className="mb-6 inline-flex rounded-lg border border-border bg-card p-1">
-            <button
-              type="button"
-              onClick={() => {
-                setTab("matching");
-                setShown(24);
-              }}
-              className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                tab === "matching" ? "bg-[#F7941D] text-slate-950" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              Matching vehicles ({matching.length})
-            </button>
-            <button
-              type="button"
-              onClick={() => {
-                setTab("all");
-                setShown(24);
-              }}
-              className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
-                tab === "all" ? "bg-[#F7941D] text-slate-950" : "text-muted-foreground hover:text-foreground"
-              }`}
-            >
-              All vehicles ({allSorted.length})
-            </button>
-          </div>
-
-          {tab === "matching" && activeCount > 0 && matching.length > 0 && (
-            <p className="mb-4 text-sm text-muted-foreground">
-              Vehicles that share at least one thing with what you're looking for, closest first.
-            </p>
-          )}
-
           {isLoading ? (
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
@@ -579,17 +544,13 @@ function SearchPage() {
             </div>
           ) : visible.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border p-12 text-center">
-              <h2 className="font-display text-xl font-semibold">
-                {tab === "matching" && activeCount === 0 ? "Tell us what you're after" : "No close matches"}
-              </h2>
+              <h2 className="font-display text-xl font-semibold">No vehicles match those filters</h2>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                {tab === "matching" && activeCount === 0
-                  ? "Set a make, price, body type or keyword on the left and we'll show the vehicles closest to it. Meanwhile, browse everything in stock."
-                  : "Nothing in stock is close to those inputs yet. Try widening the price or mileage range, or browse all vehicles."}
+                Try widening the price, year or mileage range — or tell us what you're after.
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-3">
-                <Button variant="outline" onClick={() => setTab("all")}>
-                  View all vehicles
+                <Button variant="outline" onClick={() => navigate({ search: {} })}>
+                  Clear filters
                 </Button>
                 <Button asChild>
                   <Link to="/contact">Request a vehicle</Link>
@@ -603,7 +564,7 @@ function SearchPage() {
                   <VehicleCard key={v.id} vehicle={v} settings={settings} />
                 ))}
               </div>
-              {activeList.length > visible.length && (
+              {allSorted.length > visible.length && (
                 <div className="mt-10 flex justify-center">
                   <Button variant="outline" onClick={() => setShown((n) => n + 24)}>
                     Show more vehicles
