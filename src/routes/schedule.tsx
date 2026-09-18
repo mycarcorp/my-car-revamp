@@ -138,7 +138,7 @@ function SchedulePage() {
               <div className="space-y-2">
                 <Label htmlFor="preferred-time">Preferred time</Label>
 
-                <Select value={time} onValueChange={setTime}>
+                <Select value={time ?? ""} onValueChange={setTime}>
                   <SelectTrigger id="preferred-time">
                     <SelectValue />
                   </SelectTrigger>
