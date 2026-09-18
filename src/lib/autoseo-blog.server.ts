@@ -63,6 +63,13 @@ export async function listAutoseoPosts(): Promise<AutoseoPost[]> {
   )) as AutoseoPost[];
 }
 
+/** Admin read: every column the table happens to have, newest activity first. */
+export async function listAutoseoAdminRows(): Promise<Array<Record<string, unknown>>> {
+  return (await rest(
+    "blog_posts?select=*&order=updated_at.desc.nullslast,published_at.desc.nullslast,created_at.desc.nullslast",
+  )) as Array<Record<string, unknown>>;
+}
+
 export async function getAutoseoPost(slug: string): Promise<AutoseoPost | null> {
   const rows = (await rest(
     `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(slug)}&limit=1`,
