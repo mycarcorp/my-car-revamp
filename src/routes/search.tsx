@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Banknote, Handshake, Search, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { VehicleCard } from "@/components/VehicleCard";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/app-client";
 import { formatUsd } from "@/lib/format";
-import { PAGE_SIZE, facetsQuery, siteSettingsQuery, vehicleSearchQuery, type SearchFilters } from "@/lib/queries";
+import { allVehiclesQuery, facetsQuery, siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
 
 type SearchParams = {
   q?: string | undefined;
@@ -91,10 +91,7 @@ function SearchPage() {
   const { user } = useAuth();
   const { data: facets } = useQuery(facetsQuery());
   const { data: settings } = useQuery(siteSettingsQuery());
-  const { data, isLoading } = useQuery({
-    ...vehicleSearchQuery(params as SearchFilters),
-    placeholderData: keepPreviousData,
-  });
+  const { data: allVehicles = [], isLoading } = useQuery(allVehiclesQuery());
   const { data: inventoryPrices = [] } = useQuery({
     queryKey: ["search", "price-bounds"],
     queryFn: async () => {
