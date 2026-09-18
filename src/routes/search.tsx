@@ -174,29 +174,28 @@ function SearchPage() {
     }
   };
 
-  /** How many of the shopper's inputs this vehicle satisfies. One is enough to be "close". */
-  const matchScore = (v: VehicleWithPhotos) => {
-    const eq = (a?: string | null, b?: string) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+  /** Every active filter must be satisfied. */
+  const matchesFilters = (v: VehicleWithPhotos) => {
+    const eq = (a?: string | null, b?: string) => !b || (!!a && a.toLowerCase() === b.toLowerCase());
     const price = Number(v.price_cents) / 100;
-    let score = 0;
     if (params.q) {
       const haystack = `${v.year} ${v.make} ${v.model} ${v.trim ?? ""}`.toLowerCase();
-      if (params.q.toLowerCase().split(/\s+/).some((word) => word && haystack.includes(word))) score++;
+      const words = params.q.toLowerCase().split(/\s+/).filter(Boolean);
+      if (!words.every((word) => haystack.includes(word))) return false;
     }
-    if (eq(v.make, params.make)) score++;
-    if (eq(v.model, params.model)) score++;
-    if (eq(v.body_style, params.body)) score++;
-    if (eq(v.fuel_type, params.fuel)) score++;
-    if (eq(v.drivetrain, params.drivetrain)) score++;
-    if (eq(v.exterior_color, params.color)) score++;
-    if (params.priceMin && price >= params.priceMin) score++;
-    if (params.priceMax && price <= params.priceMax) score++;
-    if (params.yearMin && v.year >= params.yearMin) score++;
-    if (params.yearMax && v.year <= params.yearMax) score++;
-    if (params.mileageMax && (v.mileage ?? 0) <= params.mileageMax) score++;
-    if (params.mpgMin && (v.mpg_combined ?? 0) >= params.mpgMin) score++;
-    if (params.deal === "price-drop" && v.prior_price_cents != null) score++;
-    return score;
+    if (!eq(v.make, params.make)) return false;
+    if (!eq(v.model, params.model)) return false;
+    if (!eq(v.body_style, params.body)) return false;
+    if (!eq(v.fuel_type, params.fuel)) return false;
+    if (!eq(v.exterior_color, params.color)) return false;
+    if (params.priceMin && price < params.priceMin) return false;
+    if (params.priceMax && price > params.priceMax) return false;
+    if (params.yearMin && v.year < params.yearMin) return false;
+    if (params.yearMax && v.year > params.yearMax) return false;
+    if (params.mileageMax && (v.mileage ?? 0) > params.mileageMax) return false;
+    if (params.mpgMin && (v.mpg_combined ?? 0) < params.mpgMin) return false;
+    if (params.deal === "price-drop" && v.prior_price_cents == null) return false;
+    return true;
   };
 
   const liveVehicles = useMemo(
@@ -204,27 +203,24 @@ function SearchPage() {
     [allVehicles],
   );
 
-  const allSorted = useMemo(() => sortVehicles(liveVehicles), [liveVehicles, params.sort]);
+  const years = useMemo(() => {
+    const set = new Set<number>();
+    for (const v of liveVehicles) if (v.year) set.add(v.year);
+    return [...set].sort((a, b) => b - a);
+  }, [liveVehicles]);
 
-  const matching = useMemo(() => {
-    if (activeCount === 0) return [];
-    return liveVehicles
-      .map((v) => ({ v, score: matchScore(v) }))
-      .filter((x) => x.score > 0)
-      .sort((a, b) => b.score - a.score)
-      .map((x) => x.v);
-  }, [liveVehicles, params, activeCount]);
+  const allSorted = useMemo(
+    () => sortVehicles(liveVehicles.filter(matchesFilters)),
+    [liveVehicles, params],
+  );
 
-  const [tab, setTab] = useState<"matching" | "all">("all");
   const [shown, setShown] = useState(24);
 
   useEffect(() => {
-    setTab(activeCount > 0 ? "matching" : "all");
     setShown(24);
-  }, [activeCount, params]);
+  }, [params]);
 
-  const activeList = tab === "matching" ? matching : allSorted;
-  const visible = activeList.slice(0, shown);
+  const visible = allSorted.slice(0, shown);
   const displayName =
     String(user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "")
       .trim()
