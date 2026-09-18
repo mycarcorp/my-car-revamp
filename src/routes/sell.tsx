@@ -312,34 +312,12 @@ function SellPage() {
   const [tradeIns, setTradeIns] = useState<TradeInRecord[]>([]);
   const leadFormScopeRef = useRef<HTMLDivElement>(null);
 
-  const { data: inventory = [], isLoading: inventoryLoading } = useQuery({
-    queryKey: ["sell", "mc-cars-inventory"],
-    queryFn: async () => {
-      const response = await fetch("/api/public/inventory", {
-        headers: { Accept: "application/json" },
-      });
+  const { data: allVehicles = [], isLoading: inventoryLoading } = useQuery(allVehiclesQuery());
 
-      if (!response.ok) {
-        throw new Error(`Could not load inventory (${response.status}).`);
-      }
-
-      const payload = (await response.json()) as
-        | VehicleWithPhotos[]
-        | { data?: VehicleWithPhotos[]; vehicles?: VehicleWithPhotos[] };
-
-      const rows = Array.isArray(payload)
-        ? payload
-        : Array.isArray(payload.vehicles)
-          ? payload.vehicles
-          : Array.isArray(payload.data)
-            ? payload.data
-            : [];
-
-      return rows;
-    },
-    staleTime: 30_000,
-    refetchOnWindowFocus: true,
-  });
+  const inventory = useMemo(
+    () => allVehicles.filter((vehicle) => vehicle.status === "available" || vehicle.status === "pending"),
+    [allVehicles],
+  );
 
   const matchingVehicles = useMemo(() => {
     return inventory
