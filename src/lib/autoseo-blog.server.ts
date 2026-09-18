@@ -85,6 +85,130 @@ const text = (v: unknown): string | null => {
   return s ? s : null;
 };
 
+// ---------------------------------------------------------------- image mirror
+
+const IMAGE_BUCKET = "autoseo-images";
+const MAX_IMAGE_BYTES = 10 * 1024 * 1024;
+
+const EXT_BY_TYPE: Record<string, string> = {
+  "image/jpeg": "jpg",
+  "image/jpg": "jpg",
+  "image/png": "png",
+  "image/webp": "webp",
+  "image/gif": "gif",
+  "image/avif": "avif",
+  "image/svg+xml": "svg",
+};
+
+let bucketReady = false;
+
+/** Create the public image bucket if it isn't there yet. Other buckets untouched. */
+async function ensureImageBucket(): Promise<void> {
+  if (bucketReady) return;
+  const c = creds();
+  const res = await fetch(`${c.url}/storage/v1/bucket`, {
+    method: "POST",
+    headers: {
+      apikey: c.key,
+      Authorization: `Bearer ${c.key}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({ id: IMAGE_BUCKET, name: IMAGE_BUCKET, public: true }),
+  });
+  if (res.ok || res.status === 409) {
+    bucketReady = true;
+    return;
+  }
+  const detail = await res.text();
+  if (/already exists|Duplicate/i.test(detail)) {
+    bucketReady = true;
+    return;
+  }
+  throw new Error(`Could not prepare image bucket (${res.status}): ${detail.slice(0, 200)}`);
+}
+
+/**
+ * Copy a remote image into storage and return its public URL.
+ * Returns the original URL when anything goes wrong, so an image problem never
+ * fails the article delivery.
+ */
+async function mirrorImage(
+  remoteUrl: string | null,
+  articleId: number,
+  name: "hero" | "infographic",
+): Promise<string | null> {
+  if (!remoteUrl) return null;
+  try {
+    await ensureImageBucket();
+
+    const download = await fetch(remoteUrl);
+    if (!download.ok) throw new Error(`download failed (${download.status})`);
+
+    const contentType = (download.headers.get("content-type") ?? "").split(";")[0]!.toLowerCase();
+    if (!contentType.startsWith("image/")) throw new Error(`not an image (${contentType})`);
+
+    const bytes = new Uint8Array(await download.arrayBuffer());
+    if (bytes.byteLength === 0) throw new Error("empty image");
+    if (bytes.byteLength > MAX_IMAGE_BYTES) throw new Error("image too large");
+
+    const fromUrl = new URL(remoteUrl).pathname.split(".").pop()?.toLowerCase() ?? "";
+    const ext = EXT_BY_TYPE[contentType] ?? (/^[a-z0-9]{2,5}$/.test(fromUrl) ? fromUrl : "jpg");
+    const path = `articles/${articleId}/${name}.${ext}`;
+
+    const c = creds();
+    const upload = await fetch(
+      `${c.url}/storage/v1/object/${IMAGE_BUCKET}/${path}`,
+      {
+        method: "POST",
+        headers: {
+          apikey: c.key,
+          Authorization: `Bearer ${c.key}`,
+          "Content-Type": contentType,
+          "x-upsert": "true",
+          "cache-control": "public, max-age=31536000",
+        },
+        body: bytes,
+      },
+    );
+    if (!upload.ok) throw new Error(`upload failed (${upload.status})`);
+
+    return `${c.url}/storage/v1/object/public/${IMAGE_BUCKET}/${path}`;
+  } catch (error) {
+    console.error(
+      `[autoseo] ${name} image kept as remote URL for article ${articleId}:`,
+      error instanceof Error ? error.message : error,
+    );
+    return remoteUrl;
+  }
+}
+
+// ---------------------------------------------------------------------- upsert
+
+/** Retry the upsert without columns the table doesn't have (never alters schema). */
+async function upsertRow(row: Record<string, unknown>): Promise<void> {
+  let payload = { ...row };
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    try {
+      await rest("blog_posts?on_conflict=id", {
+        method: "POST",
+        prefer: "resolution=merge-duplicates,return=minimal",
+        body: payload,
+      });
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const missing = /PGRST204/.test(message)
+        ? /'([^']+)' column/.exec(message)?.[1] ?? /column\s+"?([a-z_]+)"?/i.exec(message)?.[1]
+        : undefined;
+      if (!missing || !(missing in payload)) throw error;
+      console.error(`[autoseo] blog_posts has no "${missing}" column — skipping that field.`);
+      const { [missing]: _drop, ...rest } = payload;
+      payload = rest;
+    }
+  }
+  throw new Error("Could not store the article after removing unknown columns.");
+}
+
 export async function upsertAutoseoArticle(body: WebhookBody): Promise<{ slug: string }> {
   const id = Number(body["id"]);
   const title = text(body["title"]);
@@ -95,15 +219,22 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{ slug: s
   const faq = body["faqSchema"];
   const now = new Date().toISOString();
 
+  const [heroUrl, infographicUrl] = await Promise.all([
+    mirrorImage(text(body["heroImageUrl"]), id, "hero"),
+    mirrorImage(text(body["infographicImageUrl"]), id, "infographic"),
+  ]);
+
+  const sourceArticleId = Number(body["sourceArticleId"]);
+
   const row = {
     id,
     title,
     slug,
     content_html: html || null,
     content_markdown: text(body["content_markdown"]),
-    hero_image_url: text(body["heroImageUrl"]),
+    hero_image_url: heroUrl,
     hero_image_alt: text(body["heroImageAlt"]),
-    infographic_url: text(body["infographicImageUrl"]),
+    infographic_url: infographicUrl,
     meta_description: text(body["metaDescription"]),
     meta_keywords:
       text(body["metaKeywords"]) ??
@@ -112,17 +243,16 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{ slug: s
     faq_schema: Array.isArray(faq) && faq.length > 0 ? faq : null,
     language: text(body["languageCode"]) ?? "en",
     reading_time: readingTimeFromHtml(html),
+    published_url: text(body["published_url"]) ?? text(body["publishedUrl"]),
+    source_article_id: Number.isFinite(sourceArticleId) ? sourceArticleId : null,
+    status: text(body["status"]),
     published_at: text(body["publishedAt"]) ?? now,
     updated_at: text(body["updatedAt"]) ?? now,
     created_at: text(body["createdAt"]) ?? now,
     received_at: now,
   };
 
-  await rest("blog_posts?on_conflict=id", {
-    method: "POST",
-    prefer: "resolution=merge-duplicates,return=minimal",
-    body: row,
-  });
+  await upsertRow(row);
 
   return { slug };
 }
