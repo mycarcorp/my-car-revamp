@@ -564,7 +564,7 @@ function SearchPage() {
                   <VehicleCard key={v.id} vehicle={v} settings={settings} />
                 ))}
               </div>
-              {activeList.length > visible.length && (
+              {allSorted.length > visible.length && (
                 <div className="mt-10 flex justify-center">
                   <Button variant="outline" onClick={() => setShown((n) => n + 24)}>
                     Show more vehicles
