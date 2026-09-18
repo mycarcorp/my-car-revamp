@@ -1,5 +1,5 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { keepPreviousData, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import { ArrowRight, Banknote, Handshake, Search, SlidersHorizontal, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,7 +11,7 @@ import { VehicleCard } from "@/components/VehicleCard";
 import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/app-client";
 import { formatUsd } from "@/lib/format";
-import { PAGE_SIZE, facetsQuery, siteSettingsQuery, vehicleSearchQuery, type SearchFilters } from "@/lib/queries";
+import { allVehiclesQuery, facetsQuery, siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
 
 type SearchParams = {
   q?: string | undefined;
@@ -91,10 +91,7 @@ function SearchPage() {
   const { user } = useAuth();
   const { data: facets } = useQuery(facetsQuery());
   const { data: settings } = useQuery(siteSettingsQuery());
-  const { data, isLoading } = useQuery({
-    ...vehicleSearchQuery(params as SearchFilters),
-    placeholderData: keepPreviousData,
-  });
+  const { data: allVehicles = [], isLoading } = useQuery(allVehiclesQuery());
   const { data: inventoryPrices = [] } = useQuery({
     queryKey: ["search", "price-bounds"],
     queryFn: async () => {
@@ -157,8 +154,77 @@ function SearchPage() {
 
   const activeCount = Object.entries(params).filter(([k, v]) => v !== undefined && k !== "sort" && k !== "page").length;
 
-  const totalPages = data ? Math.max(1, Math.ceil(data.count / PAGE_SIZE)) : 1;
-  const page = params.page ?? 1;
+  const sortVehicles = (list: VehicleWithPhotos[]) => {
+    const rows = [...list];
+    switch (params.sort) {
+      case "price-asc":
+        return rows.sort((a, b) => Number(a.price_cents) - Number(b.price_cents));
+      case "price-desc":
+        return rows.sort((a, b) => Number(b.price_cents) - Number(a.price_cents));
+      case "mileage-asc":
+        return rows.sort((a, b) => (a.mileage ?? 0) - (b.mileage ?? 0));
+      case "newest":
+        return rows.sort((a, b) => b.year - a.year);
+      case "oldest":
+        return rows.sort((a, b) => a.year - b.year);
+      default:
+        return rows.sort(
+          (a, b) => Number(b.is_featured) - Number(a.is_featured) || String(b.date_received).localeCompare(String(a.date_received)),
+        );
+    }
+  };
+
+  /** How many of the shopper's inputs this vehicle satisfies. One is enough to be "close". */
+  const matchScore = (v: VehicleWithPhotos) => {
+    const eq = (a?: string | null, b?: string) => !!a && !!b && a.toLowerCase() === b.toLowerCase();
+    const price = Number(v.price_cents) / 100;
+    let score = 0;
+    if (params.q) {
+      const haystack = `${v.year} ${v.make} ${v.model} ${v.trim ?? ""}`.toLowerCase();
+      if (params.q.toLowerCase().split(/\s+/).some((word) => word && haystack.includes(word))) score++;
+    }
+    if (eq(v.make, params.make)) score++;
+    if (eq(v.model, params.model)) score++;
+    if (eq(v.body_style, params.body)) score++;
+    if (eq(v.fuel_type, params.fuel)) score++;
+    if (eq(v.drivetrain, params.drivetrain)) score++;
+    if (eq(v.exterior_color, params.color)) score++;
+    if (params.priceMin && price >= params.priceMin) score++;
+    if (params.priceMax && price <= params.priceMax) score++;
+    if (params.yearMin && v.year >= params.yearMin) score++;
+    if (params.yearMax && v.year <= params.yearMax) score++;
+    if (params.mileageMax && (v.mileage ?? 0) <= params.mileageMax) score++;
+    if (params.mpgMin && (v.mpg_combined ?? 0) >= params.mpgMin) score++;
+    if (params.deal === "price-drop" && v.prior_price_cents != null) score++;
+    return score;
+  };
+
+  const liveVehicles = useMemo(
+    () => allVehicles.filter((v) => v.status === "available" || v.status === "pending"),
+    [allVehicles],
+  );
+
+  const allSorted = useMemo(() => sortVehicles(liveVehicles), [liveVehicles, params.sort]);
+
+  const matching = useMemo(() => {
+    if (activeCount === 0) return [];
+    return liveVehicles
+      .map((v) => ({ v, score: matchScore(v) }))
+      .filter((x) => x.score > 0)
+      .sort((a, b) => b.score - a.score)
+      .map((x) => x.v);
+  }, [liveVehicles, params, activeCount]);
+
+  const [tab, setTab] = useState<"matching" | "all">("all");
+  const [shown, setShown] = useState(24);
+
+  useEffect(() => {
+    setTab(activeCount > 0 ? "matching" : "all");
+    setShown(24);
+  }, [activeCount, params]);
+
+  const activeList = tab === "matching" ? matching : allSorted;
+  const visible = activeList.slice(0, shown);
   const displayName =
     String(user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "")
       .trim()
@@ -245,7 +311,11 @@ function SearchPage() {
         <div>
           <h1 className="font-display text-3xl font-bold">Used vehicle inventory</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {isLoading ? "Loading inventory…" : `${data?.count ?? 0} vehicles match your filters`}
+            {isLoading
+              ? "Loading inventory…"
+              : activeCount > 0
+                ? `${matching.length} vehicles close to what you're looking for · ${allSorted.length} total in stock`
+                : `${allSorted.length} vehicles in stock`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -468,22 +538,58 @@ function SearchPage() {
         </aside>
 
         <section>
+          <div className="mb-6 inline-flex rounded-lg border border-border bg-card p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setTab("matching");
+                setShown(24);
+              }}
+              className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                tab === "matching" ? "bg-[#F7941D] text-slate-950" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Matching vehicles ({matching.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTab("all");
+                setShown(24);
+              }}
+              className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                tab === "all" ? "bg-[#F7941D] text-slate-950" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              All vehicles ({allSorted.length})
+            </button>
+          </div>
+
+          {tab === "matching" && activeCount > 0 && matching.length > 0 && (
+            <p className="mb-4 text-sm text-muted-foreground">
+              Vehicles that share at least one thing with what you're looking for, closest first.
+            </p>
+          )}
+
           {isLoading ? (
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="h-72 animate-pulse rounded-xl bg-muted" />
               ))}
             </div>
-          ) : (data?.vehicles.length ?? 0) === 0 ? (
+          ) : visible.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border p-12 text-center">
-              <h2 className="font-display text-xl font-semibold">No matches</h2>
+              <h2 className="font-display text-xl font-semibold">
+                {tab === "matching" && activeCount === 0 ? "Tell us what you're after" : "No close matches"}
+              </h2>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                Nothing in stock fits every filter right now. Try widening the price or mileage range, or tell us what
-                you're after and we'll source it.
+                {tab === "matching" && activeCount === 0
+                  ? "Set a make, price, body type or keyword on the left and we'll show the vehicles closest to it. Meanwhile, browse everything in stock."
+                  : "Nothing in stock is close to those inputs yet. Try widening the price or mileage range, or browse all vehicles."}
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-3">
-                <Button variant="outline" onClick={() => navigate({ search: {} })}>
-                  Clear filters
+                <Button variant="outline" onClick={() => setTab("all")}>
+                  View all vehicles
                 </Button>
                 <Button asChild>
                   <Link to="/contact">Request a vehicle</Link>
@@ -493,28 +599,14 @@ function SearchPage() {
           ) : (
             <>
               <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                {data?.vehicles.map((v) => (
+                {visible.map((v) => (
                   <VehicleCard key={v.id} vehicle={v} settings={settings} />
                 ))}
               </div>
-              {totalPages > 1 && (
-                <div className="mt-10 flex items-center justify-center gap-3">
-                  <Button
-                    variant="outline"
-                    disabled={page <= 1}
-                    onClick={() => navigate({ search: (p) => ({ ...p, page: page - 1 }) })}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {page} of {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    disabled={page >= totalPages}
-                    onClick={() => navigate({ search: (p) => ({ ...p, page: page + 1 }) })}
-                  >
-                    Next
+              {activeList.length > visible.length && (
+                <div className="mt-10 flex justify-center">
+                  <Button variant="outline" onClick={() => setShown((n) => n + 24)}>
+                    Show more vehicles
                   </Button>
                 </div>
               )}

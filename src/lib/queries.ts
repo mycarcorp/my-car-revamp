@@ -124,6 +124,17 @@ export const featuredVehiclesQuery = () =>
     },
   });
 
+/** Every live vehicle in the legacy inventory (mc_cars), unfiltered. */
+export const allVehiclesQuery = () =>
+  queryOptions({
+    queryKey: ["vehicles", "all"],
+    queryFn: async () => {
+      const data = await listPublicLegacyInventoryRows({ data: { page: 1, pageSize: 10000 } });
+      return data.vehicles as unknown as VehicleWithPhotos[];
+    },
+    staleTime: 60 * 1000,
+  });
+
 export const vehicleBySlugQuery = (slug: string) =>
   queryOptions({
     queryKey: ["vehicle", slug],
