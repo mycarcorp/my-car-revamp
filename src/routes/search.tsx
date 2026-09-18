@@ -480,22 +480,42 @@ function SearchPage() {
 
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
-              <Label htmlFor="yearMin">Year from</Label>
-              <Input
-                id="yearMin"
-                type="number"
-                defaultValue={params.yearMin ?? ""}
-                onBlur={(e) => set({ yearMin: Number(e.target.value) || undefined })}
-              />
+              <Label>Year from</Label>
+              <Select
+                value={params.yearMin ? String(params.yearMin) : "any"}
+                onValueChange={(v) => set({ yearMin: v === "any" ? undefined : Number(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Any" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  {years.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
             <div className="space-y-2">
-              <Label htmlFor="yearMax">Year to</Label>
-              <Input
-                id="yearMax"
-                type="number"
-                defaultValue={params.yearMax ?? ""}
-                onBlur={(e) => set({ yearMax: Number(e.target.value) || undefined })}
-              />
+              <Label>Year to</Label>
+              <Select
+                value={params.yearMax ? String(params.yearMax) : "any"}
+                onValueChange={(v) => set({ yearMax: v === "any" ? undefined : Number(v) })}
+              >
+                <SelectTrigger>
+                  <SelectValue placeholder="Any" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="any">Any</SelectItem>
+                  {years.map((y) => (
+                    <SelectItem key={y} value={String(y)}>
+                      {y}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
             </div>
           </div>
 
