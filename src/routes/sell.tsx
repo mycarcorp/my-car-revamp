@@ -147,100 +147,6 @@ const BODY_TYPES = [
 const TRANSMISSIONS = ["Automatic", "Manual"];
 const DRIVETRAINS = ["AWD", "4WD", "FWD", "RWD", "2WD"];
 const FUEL_TYPES = ["Gasoline", "Diesel", "Hybrid", "Electric", "Flexible_Fuel", "Natural_Gas", "Hydrogen"];
-const COLORS = [
-  "Any Color",
-  "Beige",
-  "Black",
-  "Blue",
-  "Brown",
-  "Burgundy",
-  "Charcoal",
-  "Gold",
-  "Gray",
-  "Green",
-  "Off-White",
-  "Orange",
-  "Pink",
-  "Purple",
-  "Red",
-  "Silver",
-  "Tan",
-  "Turquoise",
-  "White",
-  "Yellow",
-];
-const MAX_PRICES = [
-  "$10,000",
-  "$12,000",
-  "$14,000",
-  "$15,000",
-  "$16,000",
-  "$18,000",
-  "$20,000",
-  "$22,000",
-  "$24,000",
-  "$25,000",
-  "$26,000",
-  "$28,000",
-  "$30,000",
-  "$35,000",
-  "$40,000",
-  "$45,000",
-  "$50,000",
-];
-const MAX_MILEAGES = ["Any Mileage", "15,000", "30,000", "45,000", "60,000", "75,000", "120,000", "200,000"];
-const MAKE_MODELS = [
-  "AODES Desert Cross 1000-3",
-  "AODES Desert Cross 1000-3 HVA",
-  "AODES Desert Cross 1000-6 HVA",
-  "AODES E-Trail Cross Dump Bed",
-  "AODES E-Trail Cross Golf",
-  "AODES Jungle Cross 1000 LT-2",
-  "AODES Jungle Cross 1000 LT-5",
-  "AODES Jungle Cross 800 ST-2",
-  "AODES Jungle Cross 800 ST-5",
-  "AODES Path Cross 1000 L",
-  "AODES Path Cross 1000 XL",
-  "AODES Path Cross 1000 SX",
-  "AODES Path Cross 1000 S",
-  "AODES Path Cross 650 L",
-  "AODES Path Cross 650 S",
-  "AODES Trail Cross 250 Dump Bed",
-  "AODES Trail Cross 250 Go",
-  "AODES Trail Cross 400 Dump Bed",
-  "AODES Trail Cross 400 Go",
-  "AODES Work Cross 1000-3",
-  "Arctic Cat Alterra",
-  "Arctic Cat Prowler",
-  "Arctic Cat Wildcat",
-  "Bennche Big Horn",
-  "Bennche Gray Wolf",
-  "Bennche Spire",
-  "Bombardier Outlander",
-  "Bombardier Quest",
-  "Bombardier Rally",
-  "Bombardier Traxter",
-  "CFMOTO CForce 1000",
-  "Can-Am Commander",
-  "Can-Am DS",
-  "Can-Am Defender",
-  "Kawasaki Brute Force",
-  "Kawasaki KFX",
-  "Kawasaki Mule",
-  "Kawasaki Teryx",
-  "Polaris General",
-  "Polaris Ranger",
-  "Polaris RZR",
-  "Polaris Sportsman",
-  "Suzuki KingQuad",
-  "Suzuki QuadSport",
-  "Yamaha Grizzly",
-  "Yamaha Kodiak",
-  "Yamaha Raptor",
-  "Yamaha Viking",
-  "Yamaha Wolverine",
-  "Yamaha YFZ",
-];
 const WISH_FEATURES = [
   "Dual Power Seats",
   "Leather Seats",
@@ -318,6 +224,34 @@ function SellPage() {
     () => allVehicles.filter((vehicle) => vehicle.status === "available" || vehicle.status === "pending"),
     [allVehicles],
   );
+
+  const inventoryOptions = useMemo(() => {
+    const uniqueText = (values: Array<string | null | undefined>) =>
+      Array.from(new Set(values.map((value) => value?.trim()).filter((value): value is string => Boolean(value)))).sort(
+        (a, b) => a.localeCompare(b),
+      );
+
+    return {
+      makeModels: uniqueText(inventory.map((vehicle) => `${vehicle.make} ${vehicle.model}`)),
+      bodyTypes: uniqueText(inventory.map((vehicle) => vehicle.body_style)),
+      years: Array.from(new Set(inventory.map((vehicle) => vehicle.year)))
+        .sort((a, b) => b - a)
+        .map(String),
+      prices: Array.from(new Set(inventory.map((vehicle) => Number(vehicle.price_cents))))
+        .filter((price) => Number.isFinite(price) && price > 0)
+        .sort((a, b) => a - b)
+        .map((price) => formatUsd(price)),
+      mileages: Array.from(new Set(inventory.map((vehicle) => Number(vehicle.mileage))))
+        .filter((miles) => Number.isFinite(miles) && miles >= 0)
+        .sort((a, b) => a - b)
+        .map((miles) => miles.toLocaleString("en-US")),
+      transmissions: uniqueText(inventory.map((vehicle) => vehicle.transmission)),
+      drivetrains: uniqueText(inventory.map((vehicle) => vehicle.drivetrain)),
+      fuelTypes: uniqueText(inventory.map((vehicle) => vehicle.fuel_type)),
+      exteriorColors: uniqueText(inventory.map((vehicle) => vehicle.exterior_color)),
+      interiorColors: uniqueText(inventory.map((vehicle) => vehicle.interior_color)),
+    };
+  }, [inventory]);
 
   const matchingVehicles = useMemo(() => {
     return inventory
@@ -592,71 +526,41 @@ function SellPage() {
                       }
                     >
                       <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
-                        <CompactSelect label="New / Used">
-                          <Select value={wishList.newUsed} onValueChange={(value) => updateWishList("newUsed", value)}>
-                            <SelectTrigger className={selectClass}>
-                              <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                              <SelectItem value="new">New</SelectItem>
-                              <SelectItem value="used">Used</SelectItem>
-                              <SelectItem value="manufacturer-search">Manufacturer Search</SelectItem>
-                            </SelectContent>
-                          </Select>
-                        </CompactSelect>
-
-                        <CompactSelect label="Vehicle Type">
-                          <Select
-                            value={wishList.vehicleType}
-                            onValueChange={(value) => updateWishList("vehicleType", value)}
-                          >
-                            <SelectTrigger className={selectClass}>
-                              <SelectValue placeholder="All types" />
-                            </SelectTrigger>
-                            <SelectContent>
-                              {VEHICLE_TYPES.map((option) => (
-                                <SelectItem key={option} value={option.toLowerCase()}>
-                                  {option}
-                                </SelectItem>
-                              ))}
-                            </SelectContent>
-                          </Select>
-                        </CompactSelect>
-
                         <DatalistField
                           id="wish-make-model"
                           label="Make and Model"
                           value={wishList.makeModel}
-                          options={MAKE_MODELS}
+                          options={inventoryOptions.makeModels}
                           onChange={(value) => updateWishList("makeModel", value)}
-                          placeholder="Type or select a make and model"
+                          placeholder="Any make or model"
                         />
 
-                        <OptionSelect
+                        <DatalistField
+                          id="wish-body-type"
                           label="Body Type"
-                          value={wishList.bodyType}
-                          options={BODY_TYPES}
-                          onChange={(value) => updateWishList("bodyType", value)}
+                          value={wishList.bodyType === "all" ? "" : wishList.bodyType}
+                          options={inventoryOptions.bodyTypes}
+                          onChange={(value) => updateWishList("bodyType", value || "all")}
+                          placeholder="Any body type"
                         />
 
-                        <CompactField label="Min. Year" htmlFor="wish-min-year">
-                          <Input
-                            id="wish-min-year"
-                            value={wishList.minYear}
-                            onChange={(event) => updateWishList("minYear", digitsOnly(event.target.value, 4))}
-                            inputMode="numeric"
-                            placeholder="2018"
-                            className={fieldClass}
-                          />
-                        </CompactField>
+                        <DatalistField
+                          id="wish-min-year"
+                          label="Year or Newer"
+                          value={wishList.minYear}
+                          options={inventoryOptions.years}
+                          onChange={(value) => updateWishList("minYear", digitsOnly(value, 4))}
+                          placeholder="Any year"
+                          inputMode="numeric"
+                        />
 
                         <DatalistField
                           id="wish-max-price"
                           label="Max Price"
                           value={wishList.maxPrice}
-                          options={MAX_PRICES}
+                          options={inventoryOptions.prices}
                           onChange={(value) => updateWishList("maxPrice", value)}
-                          placeholder="Type or select a price"
+                          placeholder="Any price"
                           inputMode="decimal"
                         />
 
@@ -664,7 +568,7 @@ function SellPage() {
                           id="wish-max-mileage"
                           label="Max Mileage"
                           value={wishList.maxMileage}
-                          options={MAX_MILEAGES}
+                          options={inventoryOptions.mileages}
                           onChange={(value) => updateWishList("maxMileage", value)}
                           placeholder="Any Mileage"
                           inputMode="numeric"
@@ -674,29 +578,32 @@ function SellPage() {
                           id="wish-transmission"
                           label="Transmission"
                           value={wishList.transmission === "all" ? "" : wishList.transmission}
-                          options={TRANSMISSIONS}
+                          options={inventoryOptions.transmissions}
                           onChange={(value) => updateWishList("transmission", value || "all")}
+                          placeholder="Any transmission"
                         />
                         <DatalistField
                           id="wish-drivetrain"
                           label="Drive Train"
                           value={wishList.drivetrain === "all" ? "" : wishList.drivetrain}
-                          options={DRIVETRAINS}
+                          options={inventoryOptions.drivetrains}
                           onChange={(value) => updateWishList("drivetrain", value || "all")}
+                          placeholder="Any drive train"
                         />
                         <DatalistField
                           id="wish-fuel-type"
                           label="Fuel Type"
                           value={wishList.fuelType === "all" ? "" : wishList.fuelType}
-                          options={FUEL_TYPES}
+                          options={inventoryOptions.fuelTypes}
                           onChange={(value) => updateWishList("fuelType", value || "all")}
+                          placeholder="Any fuel type"
                         />
 
                         <DatalistField
                           id="wish-exterior-color"
                           label="Exterior Color"
                           value={wishList.exteriorColor}
-                          options={COLORS}
+                          options={inventoryOptions.exteriorColors}
                           onChange={(value) => updateWishList("exteriorColor", value === "Any Color" ? "" : value)}
                           placeholder="Any Color"
                         />
@@ -705,7 +612,7 @@ function SellPage() {
                           id="wish-interior-color"
                           label="Interior Color"
                           value={wishList.interiorColor}
-                          options={COLORS}
+                          options={inventoryOptions.interiorColors}
                           onChange={(value) => updateWishList("interiorColor", value === "Any Color" ? "" : value)}
                           placeholder="Any Color"
                         />
