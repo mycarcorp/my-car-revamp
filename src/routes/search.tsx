@@ -311,7 +311,11 @@ function SearchPage() {
         <div>
           <h1 className="font-display text-3xl font-bold">Used vehicle inventory</h1>
           <p className="mt-1 text-sm text-muted-foreground">
-            {isLoading ? "Loading inventory…" : `${data?.count ?? 0} vehicles match your filters`}
+            {isLoading
+              ? "Loading inventory…"
+              : activeCount > 0
+                ? `${matching.length} vehicles close to what you're looking for · ${allSorted.length} total in stock`
+                : `${allSorted.length} vehicles in stock`}
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -534,22 +538,58 @@ function SearchPage() {
         </aside>
 
         <section>
+          <div className="mb-6 inline-flex rounded-lg border border-border bg-card p-1">
+            <button
+              type="button"
+              onClick={() => {
+                setTab("matching");
+                setShown(24);
+              }}
+              className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                tab === "matching" ? "bg-[#F7941D] text-slate-950" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              Matching vehicles ({matching.length})
+            </button>
+            <button
+              type="button"
+              onClick={() => {
+                setTab("all");
+                setShown(24);
+              }}
+              className={`rounded-md px-4 py-2 text-sm font-semibold transition ${
+                tab === "all" ? "bg-[#F7941D] text-slate-950" : "text-muted-foreground hover:text-foreground"
+              }`}
+            >
+              All vehicles ({allSorted.length})
+            </button>
+          </div>
+
+          {tab === "matching" && activeCount > 0 && matching.length > 0 && (
+            <p className="mb-4 text-sm text-muted-foreground">
+              Vehicles that share at least one thing with what you're looking for, closest first.
+            </p>
+          )}
+
           {isLoading ? (
             <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
               {Array.from({ length: 6 }).map((_, i) => (
                 <div key={i} className="h-72 animate-pulse rounded-xl bg-muted" />
               ))}
             </div>
-          ) : (data?.vehicles.length ?? 0) === 0 ? (
+          ) : visible.length === 0 ? (
             <div className="rounded-xl border border-dashed border-border p-12 text-center">
-              <h2 className="font-display text-xl font-semibold">No matches</h2>
+              <h2 className="font-display text-xl font-semibold">
+                {tab === "matching" && activeCount === 0 ? "Tell us what you're after" : "No close matches"}
+              </h2>
               <p className="mx-auto mt-2 max-w-md text-sm text-muted-foreground">
-                Nothing in stock fits every filter right now. Try widening the price or mileage range, or tell us what
-                you're after and we'll source it.
+                {tab === "matching" && activeCount === 0
+                  ? "Set a make, price, body type or keyword on the left and we'll show the vehicles closest to it. Meanwhile, browse everything in stock."
+                  : "Nothing in stock is close to those inputs yet. Try widening the price or mileage range, or browse all vehicles."}
               </p>
               <div className="mt-5 flex flex-wrap justify-center gap-3">
-                <Button variant="outline" onClick={() => navigate({ search: {} })}>
-                  Clear filters
+                <Button variant="outline" onClick={() => setTab("all")}>
+                  View all vehicles
                 </Button>
                 <Button asChild>
                   <Link to="/contact">Request a vehicle</Link>
@@ -559,28 +599,14 @@ function SearchPage() {
           ) : (
             <>
               <div className="grid gap-5 sm:grid-cols-2 xl:grid-cols-3">
-                {data?.vehicles.map((v) => (
+                {visible.map((v) => (
                   <VehicleCard key={v.id} vehicle={v} settings={settings} />
                 ))}
               </div>
-              {totalPages > 1 && (
-                <div className="mt-10 flex items-center justify-center gap-3">
-                  <Button
-                    variant="outline"
-                    disabled={page <= 1}
-                    onClick={() => navigate({ search: (p) => ({ ...p, page: page - 1 }) })}
-                  >
-                    Previous
-                  </Button>
-                  <span className="text-sm text-muted-foreground">
-                    Page {page} of {totalPages}
-                  </span>
-                  <Button
-                    variant="outline"
-                    disabled={page >= totalPages}
-                    onClick={() => navigate({ search: (p) => ({ ...p, page: page + 1 }) })}
-                  >
-                    Next
+              {activeList.length > visible.length && (
+                <div className="mt-10 flex justify-center">
+                  <Button variant="outline" onClick={() => setShown((n) => n + 24)}>
+                    Show more vehicles
                   </Button>
                 </div>
               )}
