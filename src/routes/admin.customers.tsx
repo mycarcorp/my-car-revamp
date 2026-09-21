@@ -776,7 +776,7 @@ function LeadDetailsDialog({
                 </ProfessionalSection>
               )}
 
-              <ProfessionalSection title="Form Information" description="Complete information provided in the form.">
+              <ProfessionalSection title="Form Information">
                 {otherDetails.length > 0 ? (
                   <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
                     {otherDetails.map(([key, value]) => (
