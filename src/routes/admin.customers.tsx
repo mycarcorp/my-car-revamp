@@ -314,7 +314,6 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
 
             <div>
               <h2 className="font-semibold">Customer Submissions</h2>
-              <p className="mt-0.5 text-sm text-muted-foreground">Requests submitted through the website forms.</p>
             </div>
           </div>
 
