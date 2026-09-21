@@ -79,10 +79,6 @@ function AdminCustomers() {
           <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
             <div>
               <h2 className="text-base font-semibold text-foreground">Administrators and Customers</h2>
-
-              <p className="mt-1 text-sm text-muted-foreground">
-                Administrator accounts are separated from registered customer accounts.
-              </p>
             </div>
 
             <div className="relative w-full lg:max-w-md">
