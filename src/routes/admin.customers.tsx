@@ -759,7 +759,7 @@ function LeadDetailsDialog({
 
             <div className="min-w-0 space-y-5">
               {selectedVehicleEntries.length > 0 && (
-                <ProfessionalSection title="Selected Vehicles" description="Vehicles selected by the customer.">
+                <ProfessionalSection title="Selected Vehicles">
                   <div className="space-y-3">
                     {selectedVehicleEntries.map(([key, value]) => (
                       <SelectedVehiclesDisplay key={key} value={value} />
