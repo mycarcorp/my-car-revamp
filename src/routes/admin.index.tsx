@@ -217,8 +217,11 @@ function AdminDashboard() {
                         <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{lead.phone || "—"}</td>
 
                         <td className="whitespace-nowrap px-4 py-3">
-                          <Badge variant={lead.role === "owner" ? "default" : "secondary"} className="capitalize">
-                            {lead.role || "customer"}
+                          <Badge
+                            variant={lead.roles.includes("owner") ? "default" : "secondary"}
+                            className="capitalize"
+                          >
+                            {lead.roles[0] ?? "customer"}
                           </Badge>
                         </td>
 
