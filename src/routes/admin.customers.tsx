@@ -769,7 +769,7 @@ function LeadDetailsDialog({
               )}
 
               {lead.message && (
-                <ProfessionalSection title="Customer Message" description="Additional information from the customer.">
+                <ProfessionalSection title="Customer Message">
                   <div className="rounded-lg border border-border bg-background p-4">
                     <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{lead.message}</p>
                   </div>
