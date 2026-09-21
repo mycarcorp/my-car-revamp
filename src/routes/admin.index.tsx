@@ -5,9 +5,9 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { listLegacyInventoryRows } from "@/lib/legacy-inventory.functions";
-import { listCustomers } from "@/lib/admin-customers.functions";
-import { listLegacyPosts } from "@/lib/legacy-blog.functions";
+import { listInventory } from "@/lib/admin-inventory.functions";
+import { listLeads } from "@/lib/admin-leads.functions";
+import { listBlogPosts } from "@/lib/admin-blog.functions";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/")({
@@ -18,31 +18,47 @@ function AdminDashboard() {
   const { session } = useAuth();
   const accessToken = session?.access_token ?? "";
 
-  const { data: inventoryRows, isLoading: inventoryLoading } = useQuery({
+  const { data: inventoryData, isLoading: inventoryLoading } = useQuery({
     queryKey: ["admin", "inventory", "dashboard"],
     enabled: Boolean(accessToken),
-    queryFn: () => listLegacyInventoryRows({ data: { accessToken } }),
+    queryFn: () =>
+      listInventory({
+        data: {
+          accessToken,
+          limit: 200,
+          offset: 0,
+        },
+      }),
   });
 
-  const { data: customers, isLoading: leadsLoading } = useQuery({
-    queryKey: ["admin", "customers", "dashboard"],
+  const { data: leadsData, isLoading: leadsLoading } = useQuery({
+    queryKey: ["admin", "leads", "dashboard"],
     enabled: Boolean(accessToken),
-    queryFn: () => listCustomers({ data: { accessToken } }),
+    queryFn: () =>
+      listLeads({
+        data: {
+          accessToken,
+          limit: 8,
+        },
+      }),
   });
 
   const { data: blogPosts, isLoading: blogLoading } = useQuery({
     queryKey: ["admin", "blog", "dashboard"],
     enabled: Boolean(accessToken),
-    queryFn: () => listLegacyPosts({ data: { accessToken } }),
+    queryFn: () =>
+      listBlogPosts({
+        data: {
+          accessToken,
+        },
+      }),
   });
 
-  const vehicles = inventoryRows ?? [];
-  const leads = (customers ?? []).slice(0, 8);
+  const vehicles = inventoryData?.vehicles ?? [];
+  const leads = leadsData?.leads ?? [];
   const posts = blogPosts ?? [];
 
-  const activeVehicles = vehicles.filter(
-    (vehicle) => vehicle.status === "available" || vehicle.status === "pending",
-  ).length;
+  const activeVehicles = vehicles.filter((vehicle) => vehicle.status === "active").length;
 
   const soldVehicles = vehicles.filter((vehicle) => vehicle.status === "sold").length;
 
@@ -50,7 +66,7 @@ function AdminDashboard() {
 
   const draftPosts = posts.filter((post) => post.status === "draft").length;
 
-  const newThisWeek = (customers ?? []).filter((lead) => {
+  const newThisWeek = leads.filter((lead) => {
     if (!lead.created_at) return false;
 
     const createdAt = new Date(lead.created_at);
@@ -100,7 +116,7 @@ function AdminDashboard() {
     },
     {
       label: "Customers",
-      value: (customers ?? []).length,
+      value: leads.length,
       icon: Users,
       iconClassName: "text-cyan-600",
       iconBackgroundClassName: "bg-cyan-100",
@@ -198,8 +214,8 @@ function AdminDashboard() {
                   <thead className="bg-muted/50 text-muted-foreground">
                     <tr>
                       <th className="whitespace-nowrap px-4 py-3 font-medium sm:px-5">Customer</th>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium">Phone</th>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium">Role</th>
+                      <th className="whitespace-nowrap px-4 py-3 font-medium">Type</th>
+                      <th className="whitespace-nowrap px-4 py-3 font-medium">Status</th>
                       <th className="whitespace-nowrap px-4 py-3 font-medium">Date</th>
                     </tr>
                   </thead>
@@ -209,22 +225,20 @@ function AdminDashboard() {
                       <tr key={lead.id} className="border-t border-border">
                         <td className="px-4 py-3 sm:px-5">
                           <div className="min-w-[180px]">
-                            <p className="font-medium text-foreground">{lead.full_name || "Unnamed customer"}</p>
+                            <p className="font-medium text-foreground">
+                              {lead.full_name || lead.name || "Unnamed customer"}
+                            </p>
                             <p className="truncate text-xs text-muted-foreground">{lead.email || "No email"}</p>
                           </div>
                         </td>
 
-                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{lead.phone || "—"}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{lead.type || "Inquiry"}</td>
 
                         <td className="whitespace-nowrap px-4 py-3">
-                          <Badge
-                            variant={lead.roles.includes("owner") ? "default" : "secondary"}
-                            className="capitalize"
-                          >
-                            {lead.roles[0] ?? "customer"}
+                          <Badge variant={lead.status === "completed" ? "default" : "secondary"} className="capitalize">
+                            {lead.status || "new"}
                           </Badge>
                         </td>
-
 
                         <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                           {lead.created_at ? formatDate(lead.created_at) : "—"}
