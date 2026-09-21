@@ -19,15 +19,17 @@ import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { listCustomers } from "@/lib/admin-customers.functions";
 import { listLeads, type AdminLeadRow } from "@/lib/admin-leads.functions";
-import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/customers")({
   component: AdminCustomers,
 });
 
+type PageTab = "customers" | "admins";
+
 function AdminCustomers() {
   const { session } = useAuth();
   const accessToken = session?.access_token ?? "";
+  const [pageTab, setPageTab] = useState<PageTab>("customers");
   const [accountSearch, setAccountSearch] = useState("");
 
   const { data, isLoading, error } = useQuery({
@@ -41,15 +43,25 @@ function AdminCustomers() {
 
   const accounts = data ?? [];
 
-  const filteredAccounts = useMemo(() => {
+  const customerAccounts = useMemo(() => {
     const needle = accountSearch.trim().toLowerCase();
 
-    if (!needle) return accounts;
-
     return accounts.filter((account) => {
-      const roles = Array.isArray(account.roles) ? account.roles.join(" ") : "";
+      const roles = account.roles ?? [];
 
-      return [account.full_name, account.email, account.phone, roles, account.legacy_user_id]
+      const hasCustomerRole = roles.some((role) => role.trim().toLowerCase() === "customer");
+
+      if (!hasCustomerRole) return false;
+      if (!needle) return true;
+
+      return [
+        account.full_name,
+        account.email,
+        account.phone,
+        account.legacy_user_id,
+        roles.join(" "),
+        account.created_at ? formatLongDate(account.created_at) : "",
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -57,231 +69,101 @@ function AdminCustomers() {
     });
   }, [accounts, accountSearch]);
 
-  const administrators = useMemo(
-    () =>
-      filteredAccounts.filter((account) => (account.roles ?? []).some((role) => role.toLowerCase().includes("admin"))),
-    [filteredAccounts],
-  );
+  const administrators = useMemo(() => {
+    const needle = accountSearch.trim().toLowerCase();
 
-  const customers = useMemo(
-    () =>
-      filteredAccounts.filter((account) => !(account.roles ?? []).some((role) => role.toLowerCase().includes("admin"))),
-    [filteredAccounts],
-  );
+    return accounts.filter((account) => {
+      const roles = account.roles ?? [];
+
+      const hasAdminRole = roles.some((role) => role.trim().toLowerCase().includes("admin"));
+
+      if (!hasAdminRole) return false;
+      if (!needle) return true;
+
+      return [
+        account.full_name,
+        account.email,
+        account.phone,
+        account.legacy_user_id,
+        roles.join(" "),
+        account.created_at ? formatLongDate(account.created_at) : "",
+      ]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(needle);
+    });
+  }, [accounts, accountSearch]);
+
+  const totalCustomers = accounts.filter((account) =>
+    (account.roles ?? []).some((role) => role.trim().toLowerCase() === "customer"),
+  ).length;
+
+  const totalAdministrators = accounts.filter((account) =>
+    (account.roles ?? []).some((role) => role.trim().toLowerCase().includes("admin")),
+  ).length;
 
   return (
     <div className="w-full">
       <AdminPageHeader title="Customers" />
 
       <main className="space-y-6 p-4 sm:p-6">
-        <LeadsSection accessToken={accessToken} />
+        <div className="flex w-full overflow-x-auto border-b border-border">
+          <button
+            type="button"
+            onClick={() => setPageTab("customers")}
+            className={`flex min-w-max items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+              pageTab === "customers"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <Users className="size-4" />
+            Customers
+            <Badge variant={pageTab === "customers" ? "default" : "secondary"}>{totalCustomers}</Badge>
+          </button>
 
-        {isLoading ? (
-          <LoadingState />
-        ) : error ? (
-          <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 p-6">
-            <p className="font-medium text-destructive">Couldn&apos;t load user accounts</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {(error as Error).message || "An unexpected error occurred while loading the accounts."}
-            </p>
-          </div>
+          <button
+            type="button"
+            onClick={() => setPageTab("admins")}
+            className={`flex min-w-max items-center gap-2 border-b-2 px-4 py-3 text-sm font-medium transition-colors ${
+              pageTab === "admins"
+                ? "border-primary text-primary"
+                : "border-transparent text-muted-foreground hover:text-foreground"
+            }`}
+          >
+            <ShieldCheck className="size-4" />
+            Admins
+            <Badge variant={pageTab === "admins" ? "default" : "secondary"}>{totalAdministrators}</Badge>
+          </button>
+        </div>
+
+        {pageTab === "customers" ? (
+          <>
+            <LeadsSection accessToken={accessToken} />
+
+            <AccountsSection
+              title="Registered Customers"
+              description="Website accounts assigned the customer role."
+              accounts={customerAccounts}
+              search={accountSearch}
+              onSearchChange={setAccountSearch}
+              isLoading={isLoading}
+              error={error}
+              admin={false}
+            />
+          </>
         ) : (
-          <section>
-            <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h2 className="text-base font-semibold text-foreground">Website Accounts</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Administrator and registered customer accounts.</p>
-              </div>
-
-              <div className="relative w-full sm:max-w-sm">
-                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-                <Input
-                  id="account-search"
-                  type="search"
-                  className="pl-9"
-                  placeholder="Search website accounts"
-                  value={accountSearch}
-                  onChange={(event) => setAccountSearch(event.target.value)}
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(250px,0.7fr)_minmax(0,2.3fr)]">
-              <aside className="min-w-0 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
-                <SectionHeader title="Administrators" count={administrators.length} icon={ShieldCheck} />
-
-                {administrators.length === 0 ? (
-                  <EmptyAccounts
-                    icon={ShieldCheck}
-                    title={accountSearch.trim() ? "No matching administrators" : "No administrators found"}
-                    description={
-                      accountSearch.trim()
-                        ? "Try using a different search term."
-                        : "Accounts with an administrator role appear here."
-                    }
-                  />
-                ) : (
-                  <div className="divide-y divide-border">
-                    {administrators.map((administrator) => (
-                      <article key={administrator.id} className="p-4 transition-colors hover:bg-muted/30">
-                        <div className="flex items-start gap-3">
-                          <AccountAvatar
-                            avatarUrl={administrator.avatar_url}
-                            name={administrator.full_name ?? administrator.email ?? "Administrator"}
-                            fallbackLetter="A"
-                            admin
-                          />
-
-                          <div className="min-w-0 flex-1">
-                            <p className="truncate font-medium text-foreground">
-                              {administrator.full_name || "Unnamed administrator"}
-                            </p>
-
-                            <div className="mt-2 flex flex-wrap gap-1.5">
-                              {(administrator.roles ?? []).map((role) => (
-                                <Badge
-                                  key={role}
-                                  className="capitalize"
-                                  variant={role.toLowerCase().includes("admin") ? "default" : "secondary"}
-                                >
-                                  {role.replaceAll("_", " ")}
-                                </Badge>
-                              ))}
-                            </div>
-                          </div>
-                        </div>
-
-                        <div className="mt-4 space-y-2">
-                          <AccountDetail icon={Mail} value={administrator.email} fallback="No email" />
-                          <AccountDetail icon={Phone} value={administrator.phone} fallback="No phone" />
-                          <AccountDetail
-                            icon={CalendarDays}
-                            value={administrator.created_at ? `Joined ${formatDate(administrator.created_at)}` : null}
-                            fallback="Join date unavailable"
-                          />
-                        </div>
-                      </article>
-                    ))}
-                  </div>
-                )}
-              </aside>
-
-              <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
-                <SectionHeader title="Registered Customers" count={customers.length} icon={Users} />
-
-                {customers.length === 0 ? (
-                  <EmptyAccounts
-                    icon={UserRound}
-                    title={accountSearch.trim() ? "No matching customers" : "No registered customers"}
-                    description={
-                      accountSearch.trim()
-                        ? "Try using a different search term."
-                        : "Registered customer accounts will appear here."
-                    }
-                  />
-                ) : (
-                  <>
-                    <div className="divide-y divide-border md:hidden">
-                      {customers.map((customer) => (
-                        <article key={customer.id} className="p-4">
-                          <div className="flex items-start gap-3">
-                            <AccountAvatar
-                              avatarUrl={customer.avatar_url}
-                              name={customer.full_name ?? customer.email ?? "Customer"}
-                              fallbackLetter="C"
-                            />
-
-                            <div className="min-w-0 flex-1">
-                              <p className="truncate font-medium">{customer.full_name || "Unnamed customer"}</p>
-                              <p className="mt-0.5 truncate text-xs text-muted-foreground">
-                                {customer.legacy_user_id ? `Legacy ID: ${customer.legacy_user_id}` : "Auth account"}
-                              </p>
-                            </div>
-                          </div>
-
-                          <div className="mt-4 space-y-2">
-                            <AccountDetail icon={Mail} value={customer.email} fallback="No email" />
-                            <AccountDetail icon={Phone} value={customer.phone} fallback="No phone" />
-                            <AccountDetail
-                              icon={CalendarDays}
-                              value={customer.created_at ? `Joined ${formatDate(customer.created_at)}` : null}
-                              fallback="Join date unavailable"
-                            />
-                          </div>
-                        </article>
-                      ))}
-                    </div>
-
-                    <div className="hidden overflow-x-auto md:block">
-                      <table className="min-w-full text-left text-sm">
-                        <thead className="bg-muted/40 text-muted-foreground">
-                          <tr>
-                            <th className="px-4 py-3 font-medium">Customer</th>
-                            <th className="px-4 py-3 font-medium">Email</th>
-                            <th className="px-4 py-3 font-medium">Phone</th>
-                            <th className="px-4 py-3 font-medium">Roles</th>
-                            <th className="px-4 py-3 font-medium">Joined</th>
-                          </tr>
-                        </thead>
-
-                        <tbody>
-                          {customers.map((customer) => (
-                            <tr key={customer.id} className="border-t border-border hover:bg-muted/30">
-                              <td className="px-4 py-3">
-                                <div className="flex min-w-[190px] items-center gap-3">
-                                  <AccountAvatar
-                                    avatarUrl={customer.avatar_url}
-                                    name={customer.full_name ?? customer.email ?? "Customer"}
-                                    fallbackLetter="C"
-                                    small
-                                  />
-
-                                  <div className="min-w-0">
-                                    <p className="truncate font-medium">{customer.full_name || "Unnamed customer"}</p>
-                                    <p className="truncate text-xs text-muted-foreground">
-                                      {customer.legacy_user_id
-                                        ? `Legacy ID: ${customer.legacy_user_id}`
-                                        : "Auth account"}
-                                    </p>
-                                  </div>
-                                </div>
-                              </td>
-
-                              <td className="max-w-[220px] px-4 py-3 text-muted-foreground">
-                                <span className="block truncate">{customer.email || "—"}</span>
-                              </td>
-
-                              <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                                {customer.phone || "—"}
-                              </td>
-
-                              <td className="px-4 py-3">
-                                {(customer.roles ?? []).length > 0 ? (
-                                  <div className="flex flex-wrap gap-1.5">
-                                    {customer.roles.map((role) => (
-                                      <Badge key={role} variant="secondary" className="capitalize">
-                                        {role.replaceAll("_", " ")}
-                                      </Badge>
-                                    ))}
-                                  </div>
-                                ) : (
-                                  "—"
-                                )}
-                              </td>
-
-                              <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                                {customer.created_at ? formatDate(customer.created_at) : "—"}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                    </div>
-                  </>
-                )}
-              </section>
-            </div>
-          </section>
+          <AccountsSection
+            title="Administrators"
+            description="Website accounts assigned an administrator role."
+            accounts={administrators}
+            search={accountSearch}
+            onSearchChange={setAccountSearch}
+            isLoading={isLoading}
+            error={error}
+            admin
+          />
         )}
       </main>
     </div>
@@ -309,6 +191,7 @@ const LEAD_LABELS: Record<string, string> = {
 
 function getTradeIntent(lead: AdminLeadRow) {
   const intent = lead.details?.intent;
+
   return typeof intent === "string" ? intent.trim().toLowerCase() : "";
 }
 
@@ -359,7 +242,9 @@ function getPreferredDate(lead: AdminLeadRow) {
     "date",
   ]);
 
-  return value == null ? "—" : formatSimpleValue(value);
+  if (value === null || value === undefined) return "—";
+
+  return formatLongDate(value);
 }
 
 function getPreferredTime(lead: AdminLeadRow) {
@@ -373,7 +258,7 @@ function getPreferredTime(lead: AdminLeadRow) {
     "time",
   ]);
 
-  return value == null ? "—" : formatSimpleValue(value);
+  return value === null || value === undefined ? "—" : formatSimpleValue(value);
 }
 
 function LeadsSection({ accessToken }: { accessToken: string }) {
@@ -402,11 +287,13 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
       if (!matchesLeadType(lead, type)) return false;
       if (!needle) return true;
 
-      const detailsText = Object.entries(lead.details ?? {})
-        .map(([key, value]) => `${key} ${formatSimpleValue(value)}`)
-        .join(" ");
+      const request = getLeadTypeLabel(lead);
+      const preferredDate = getPreferredDate(lead);
+      const preferredTime = getPreferredTime(lead);
+      const status = lead.status || "new";
+      const submitted = lead.created_at ? formatLongDate(lead.created_at) : "—";
 
-      return [lead.full_name, lead.email, lead.phone, lead.message, lead.status, getLeadTypeLabel(lead), detailsText]
+      return [lead.full_name, request, preferredDate, preferredTime, status, submitted]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -424,17 +311,23 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
             <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Users className="size-5" />
             </div>
-            <h2 className="font-semibold">Customers</h2>
+
+            <div>
+              <h2 className="font-semibold">Customer Submissions</h2>
+              <p className="mt-0.5 text-sm text-muted-foreground">Requests submitted through the website forms.</p>
+            </div>
           </div>
 
-          <div className="relative w-full lg:max-w-sm">
+          <div className="relative w-full lg:max-w-md">
             <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+
             <Input
               type="search"
               className="pl-9"
-              placeholder="Search customer submissions"
+              placeholder="Search name, request, date, time or status"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
+              aria-label="Search customer submissions"
             />
           </div>
         </div>
@@ -446,10 +339,11 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
                 key={item.key}
                 type="button"
                 onClick={() => setType(item.key)}
+                aria-pressed={type === item.key}
                 className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
                   type === item.key
                     ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border text-muted-foreground hover:border-primary/40"
+                    : "border-border text-muted-foreground hover:border-primary/40 hover:text-foreground"
                 }`}
               >
                 {item.label} ({isLoading ? "…" : countFor(item.key)})
@@ -473,6 +367,7 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
           <div className="p-10 text-center">
             <Users className="mx-auto size-8 text-muted-foreground/60" />
             <p className="mt-3 font-medium">No customer submissions found</p>
+            <p className="mt-1 text-sm text-muted-foreground">Try changing the selected tab or search term.</p>
           </div>
         ) : (
           <>
@@ -482,7 +377,7 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
                   key={lead.id}
                   type="button"
                   onClick={() => setSelectedLead(lead)}
-                  className="flex w-full items-start justify-between gap-4 p-4 text-left hover:bg-muted/40"
+                  className="flex w-full items-start justify-between gap-4 p-4 text-left transition-colors hover:bg-muted/40"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
@@ -491,15 +386,8 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
                     </div>
 
                     <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                      <div>
-                        <p className="text-muted-foreground">Date</p>
-                        <p className="mt-0.5 font-medium text-foreground">{getPreferredDate(lead)}</p>
-                      </div>
-
-                      <div>
-                        <p className="text-muted-foreground">Time</p>
-                        <p className="mt-0.5 font-medium text-foreground">{getPreferredTime(lead)}</p>
-                      </div>
+                      <MobileColumn label="Date" value={getPreferredDate(lead)} />
+                      <MobileColumn label="Time" value={getPreferredTime(lead)} />
 
                       <div>
                         <p className="text-muted-foreground">Status</p>
@@ -508,12 +396,7 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
                         </Badge>
                       </div>
 
-                      <div>
-                        <p className="text-muted-foreground">Submitted</p>
-                        <p className="mt-0.5 font-medium text-foreground">
-                          {lead.created_at ? formatDate(lead.created_at) : "—"}
-                        </p>
-                      </div>
+                      <MobileColumn label="Submitted" value={lead.created_at ? formatLongDate(lead.created_at) : "—"} />
                     </div>
                   </div>
 
@@ -544,6 +427,7 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
                       key={lead.id}
                       role="button"
                       tabIndex={0}
+                      aria-label={`Open submission from ${lead.full_name || "customer"}`}
                       onClick={() => setSelectedLead(lead)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
@@ -551,7 +435,7 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
                           setSelectedLead(lead);
                         }
                       }}
-                      className="cursor-pointer border-t border-border hover:bg-muted/40 focus:bg-muted/40 focus:outline-none"
+                      className="cursor-pointer border-t border-border transition-colors hover:bg-muted/40 focus:bg-muted/40 focus:outline-none"
                     >
                       <td className="px-4 py-3 font-medium">{lead.full_name || "Unnamed customer"}</td>
 
@@ -570,7 +454,7 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
                       </td>
 
                       <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
-                        {lead.created_at ? formatDate(lead.created_at) : "—"}
+                        {lead.created_at ? formatLongDate(lead.created_at) : "—"}
                       </td>
 
                       <td className="px-4 py-3">
@@ -593,6 +477,197 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
         }}
       />
     </>
+  );
+}
+
+function MobileColumn({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-muted-foreground">{label}</p>
+      <p className="mt-0.5 font-medium text-foreground">{value}</p>
+    </div>
+  );
+}
+
+function AccountsSection({
+  title,
+  description,
+  accounts,
+  search,
+  onSearchChange,
+  isLoading,
+  error,
+  admin,
+}: {
+  title: string;
+  description: string;
+  accounts: Array<{
+    id: string;
+    full_name: string | null;
+    email: string | null;
+    phone: string | null;
+    avatar_url: string | null;
+    legacy_user_id: string | null;
+    created_at: string | null;
+    roles: string[];
+  }>;
+  search: string;
+  onSearchChange: (value: string) => void;
+  isLoading: boolean;
+  error: unknown;
+  admin: boolean;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
+        <div className="flex items-center gap-3">
+          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            {admin ? <ShieldCheck className="size-5" /> : <Users className="size-5" />}
+          </div>
+
+          <div>
+            <h2 className="font-semibold">{title}</h2>
+            <p className="text-sm text-muted-foreground">{description}</p>
+          </div>
+        </div>
+
+        <div className="relative w-full sm:max-w-sm">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            type="search"
+            className="pl-9"
+            placeholder={admin ? "Search administrators" : "Search registered customers"}
+            value={search}
+            onChange={(event) => onSearchChange(event.target.value)}
+          />
+        </div>
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3 p-4">
+          {Array.from({ length: 5 }).map((_, index) => (
+            <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
+          ))}
+        </div>
+      ) : error ? (
+        <div role="alert" className="p-6">
+          <p className="font-medium text-destructive">Couldn&apos;t load accounts</p>
+          <p className="mt-1 text-sm text-muted-foreground">{(error as Error).message}</p>
+        </div>
+      ) : accounts.length === 0 ? (
+        <div className="p-10 text-center">
+          {admin ? (
+            <ShieldCheck className="mx-auto size-9 text-muted-foreground/60" />
+          ) : (
+            <UserRound className="mx-auto size-9 text-muted-foreground/60" />
+          )}
+
+          <p className="mt-3 font-medium">
+            {search.trim()
+              ? `No matching ${admin ? "administrators" : "customers"}`
+              : `No ${admin ? "administrators" : "customers"} found`}
+          </p>
+        </div>
+      ) : (
+        <>
+          <div className="divide-y divide-border md:hidden">
+            {accounts.map((account) => (
+              <article key={account.id} className="p-4">
+                <div className="flex items-start gap-3">
+                  <AccountAvatar
+                    avatarUrl={account.avatar_url}
+                    name={account.full_name ?? account.email ?? (admin ? "Administrator" : "Customer")}
+                    fallbackLetter={admin ? "A" : "C"}
+                    admin={admin}
+                  />
+
+                  <div className="min-w-0">
+                    <p className="truncate font-medium">
+                      {account.full_name || (admin ? "Unnamed administrator" : "Unnamed customer")}
+                    </p>
+                    <p className="truncate text-sm text-muted-foreground">{account.email || "No email"}</p>
+                    <p className="text-sm text-muted-foreground">{account.phone || "No phone"}</p>
+                  </div>
+                </div>
+
+                <div className="mt-3 flex flex-wrap gap-1.5">
+                  {(account.roles ?? []).map((role) => (
+                    <Badge key={role} variant={admin ? "default" : "secondary"} className="capitalize">
+                      {role.replaceAll("_", " ")}
+                    </Badge>
+                  ))}
+                </div>
+
+                <p className="mt-3 text-xs text-muted-foreground">
+                  Joined: {account.created_at ? formatLongDate(account.created_at) : "—"}
+                </p>
+              </article>
+            ))}
+          </div>
+
+          <div className="hidden overflow-x-auto md:block">
+            <table className="min-w-full text-left text-sm">
+              <thead className="bg-muted/40 text-muted-foreground">
+                <tr>
+                  <th className="px-4 py-3 font-medium">Name</th>
+                  <th className="px-4 py-3 font-medium">Email</th>
+                  <th className="px-4 py-3 font-medium">Phone</th>
+                  <th className="px-4 py-3 font-medium">Role</th>
+                  <th className="px-4 py-3 font-medium">Joined</th>
+                </tr>
+              </thead>
+
+              <tbody>
+                {accounts.map((account) => (
+                  <tr key={account.id} className="border-t border-border hover:bg-muted/30">
+                    <td className="px-4 py-3">
+                      <div className="flex min-w-[180px] items-center gap-3">
+                        <AccountAvatar
+                          avatarUrl={account.avatar_url}
+                          name={account.full_name ?? account.email ?? (admin ? "Administrator" : "Customer")}
+                          fallbackLetter={admin ? "A" : "C"}
+                          admin={admin}
+                          small
+                        />
+
+                        <div className="min-w-0">
+                          <p className="truncate font-medium">
+                            {account.full_name || (admin ? "Unnamed administrator" : "Unnamed customer")}
+                          </p>
+                          <p className="truncate text-xs text-muted-foreground">
+                            {account.legacy_user_id ? `Legacy ID: ${account.legacy_user_id}` : "Auth account"}
+                          </p>
+                        </div>
+                      </div>
+                    </td>
+
+                    <td className="max-w-[220px] px-4 py-3 text-muted-foreground">
+                      <span className="block truncate">{account.email || "—"}</span>
+                    </td>
+
+                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{account.phone || "—"}</td>
+
+                    <td className="px-4 py-3">
+                      <div className="flex flex-wrap gap-1.5">
+                        {(account.roles ?? []).map((role) => (
+                          <Badge key={role} variant={admin ? "default" : "secondary"} className="capitalize">
+                            {role.replaceAll("_", " ")}
+                          </Badge>
+                        ))}
+                      </div>
+                    </td>
+
+                    <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                      {account.created_at ? formatLongDate(account.created_at) : "—"}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </section>
   );
 }
 
@@ -649,7 +724,7 @@ function LeadDetailsDialog({
             <ModalSection title="Submission Information" icon={CalendarDays}>
               <DetailGrid>
                 <SimpleDetailItem label="Status" value={lead.status || "new"} />
-                <SimpleDetailItem label="Submitted" value={lead.created_at ? formatDate(lead.created_at) : null} />
+                <SimpleDetailItem label="Submitted" value={lead.created_at ? formatLongDate(lead.created_at) : null} />
                 <SimpleDetailItem label="Submission ID" value={String(lead.id)} />
               </DetailGrid>
             </ModalSection>
@@ -683,97 +758,71 @@ function LeadDetailsDialog({
 }
 
 function StructuredDetail({ label, value }: { label: string; value: unknown }) {
-  const parsedValue = parsePossibleJson(value);
-
   return (
     <div className="overflow-hidden rounded-xl border border-border bg-background">
       <div className="border-b border-border bg-muted/30 px-4 py-3">
-        <p className="text-sm font-semibold text-foreground">{label}</p>
+        <p className="text-sm font-semibold">{label}</p>
       </div>
-
       <div className="p-4">
-        <ReadableValue value={parsedValue} />
+        <ReadableValue value={parsePossibleJson(value)} />
       </div>
     </div>
   );
 }
 
 function ReadableValue({ value }: { value: unknown }) {
-  const parsedValue = parsePossibleJson(value);
+  const parsed = parsePossibleJson(value);
 
-  if (parsedValue === null || parsedValue === undefined || parsedValue === "") {
+  if (parsed === null || parsed === undefined || parsed === "") {
     return <p className="text-sm text-muted-foreground">Not provided</p>;
   }
 
-  if (typeof parsedValue === "boolean") {
-    return <p className="text-sm text-foreground">{parsedValue ? "Yes" : "No"}</p>;
+  if (typeof parsed === "boolean") {
+    return <p className="text-sm">{parsed ? "Yes" : "No"}</p>;
   }
 
-  if (typeof parsedValue === "string" || typeof parsedValue === "number") {
-    return <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{String(parsedValue)}</p>;
+  if (typeof parsed === "string" || typeof parsed === "number") {
+    return <p className="whitespace-pre-wrap break-words text-sm leading-6">{String(parsed)}</p>;
   }
 
-  if (Array.isArray(parsedValue)) {
-    if (parsedValue.length === 0) {
+  if (Array.isArray(parsed)) {
+    if (parsed.length === 0) {
       return <p className="text-sm text-muted-foreground">None provided</p>;
     }
 
     return (
       <div className="space-y-3">
-        {parsedValue.map((item, index) => {
-          const parsedItem = parsePossibleJson(item);
-          const isObject = parsedItem !== null && typeof parsedItem === "object" && !Array.isArray(parsedItem);
-
-          return (
-            <div key={index} className="rounded-lg border border-border bg-muted/10 p-3">
-              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                Item {index + 1}
-              </p>
-
-              {isObject ? (
-                <ObjectValue value={parsedItem as Record<string, unknown>} />
-              ) : (
-                <ReadableValue value={parsedItem} />
-              )}
-            </div>
-          );
-        })}
+        {parsed.map((item, index) => (
+          <div key={index} className="rounded-lg border border-border bg-muted/10 p-3">
+            <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Item {index + 1}</p>
+            <ReadableValue value={item} />
+          </div>
+        ))}
       </div>
     );
   }
 
-  if (typeof parsedValue === "object") {
-    return <ObjectValue value={parsedValue as Record<string, unknown>} />;
+  if (typeof parsed === "object") {
+    return <ObjectValue value={parsed as Record<string, unknown>} />;
   }
 
-  return <p className="text-sm text-foreground">{String(parsedValue)}</p>;
+  return <p className="text-sm">{String(parsed)}</p>;
 }
 
 function ObjectValue({ value }: { value: Record<string, unknown> }) {
-  const entries = Object.entries(value).filter(
-    ([, nestedValue]) => nestedValue !== null && nestedValue !== undefined && nestedValue !== "",
-  );
-
-  if (entries.length === 0) {
-    return <p className="text-sm text-muted-foreground">No information provided</p>;
-  }
+  const entries = Object.entries(value).filter(([, item]) => item !== null && item !== undefined && item !== "");
 
   return (
     <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
-      {entries.map(([key, nestedValue]) => {
-        const parsedNestedValue = parsePossibleJson(nestedValue);
-
-        const isComplex = parsedNestedValue !== null && typeof parsedNestedValue === "object";
+      {entries.map(([key, item]) => {
+        const parsed = parsePossibleJson(item);
+        const complex = parsed !== null && typeof parsed === "object";
 
         return (
-          <div
-            key={key}
-            className={`min-w-0 rounded-lg border border-border bg-background p-3 ${isComplex ? "sm:col-span-2" : ""}`}
-          >
+          <div key={key} className={`rounded-lg border border-border p-3 ${complex ? "sm:col-span-2" : ""}`}>
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{formatFieldLabel(key)}</p>
-
             <div className="mt-1.5">
-              <ReadableValue value={parsedNestedValue} />
+              <ReadableValue value={parsed} />
             </div>
           </div>
         );
@@ -783,9 +832,7 @@ function ObjectValue({ value }: { value: Record<string, unknown> }) {
 }
 
 function parsePossibleJson(value: unknown): unknown {
-  if (typeof value !== "string") {
-    return value;
-  }
+  if (typeof value !== "string") return value;
 
   const trimmed = value.trim();
 
@@ -817,11 +864,41 @@ function formatSimpleValue(value: unknown): string {
 
   if (typeof parsed === "object") {
     return Object.entries(parsed as Record<string, unknown>)
-      .map(([key, nestedValue]) => `${formatFieldLabel(key)}: ${formatSimpleValue(nestedValue)}`)
+      .map(([key, item]) => `${formatFieldLabel(key)}: ${formatSimpleValue(item)}`)
       .join(" • ");
   }
 
   return String(parsed);
+}
+
+function formatLongDate(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "—";
+  }
+
+  const rawValue = String(value).trim();
+
+  const dateOnlyMatch = rawValue.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+
+  let date: Date;
+
+  if (dateOnlyMatch) {
+    const [, year, month, day] = dateOnlyMatch;
+
+    date = new Date(Number(year), Number(month) - 1, Number(day));
+  } else {
+    date = new Date(rawValue);
+  }
+
+  if (Number.isNaN(date.getTime())) {
+    return rawValue;
+  }
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "long",
+    day: "numeric",
+    year: "numeric",
+  }).format(date);
 }
 
 function formatFieldLabel(key: string) {
@@ -941,50 +1018,6 @@ function SimpleDetailItem({ label, value, type }: { label: string; value?: strin
   );
 }
 
-function SectionHeader({ title, count, icon: Icon }: { title: string; count: number; icon: typeof Users }) {
-  return (
-    <div className="border-b border-border bg-muted/30 p-4">
-      <div className="flex items-center gap-3">
-        <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-          <Icon className="size-5" />
-        </div>
-        <div>
-          <h2 className="font-semibold">{title}</h2>
-          <p className="text-xs text-muted-foreground">
-            {count} {count === 1 ? "account" : "accounts"}
-          </p>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function EmptyAccounts({ icon: Icon, title, description }: { icon: typeof Users; title: string; description: string }) {
-  return (
-    <div className="p-8 text-center">
-      <Icon className="mx-auto size-9 text-muted-foreground/60" />
-      <p className="mt-3 font-medium">{title}</p>
-      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
-    </div>
-  );
-}
-
-function LoadingState() {
-  return (
-    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(250px,0.7fr)_minmax(0,2.3fr)]">
-      {[3, 6].map((count) => (
-        <div key={count} className="rounded-xl border border-border p-4">
-          <div className="space-y-3">
-            {Array.from({ length: count }).map((_, index) => (
-              <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
-            ))}
-          </div>
-        </div>
-      ))}
-    </div>
-  );
-}
-
 function AccountAvatar({
   avatarUrl,
   name,
@@ -1018,23 +1051,6 @@ function AccountAvatar({
       }`}
     >
       {(name.slice(0, 1) || fallbackLetter).toUpperCase()}
-    </div>
-  );
-}
-
-function AccountDetail({
-  icon: Icon,
-  value,
-  fallback,
-}: {
-  icon: typeof Mail;
-  value?: string | null;
-  fallback: string;
-}) {
-  return (
-    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-      <Icon className="size-3.5 shrink-0" />
-      <span className="truncate">{value || fallback}</span>
     </div>
   );
 }
