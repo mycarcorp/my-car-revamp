@@ -100,7 +100,7 @@ function AdminDashboard() {
     },
     {
       label: "Customers",
-      value: leads.length,
+      value: (customers ?? []).length,
       icon: Users,
       iconClassName: "text-cyan-600",
       iconBackgroundClassName: "bg-cyan-100",
