@@ -240,7 +240,6 @@ function AdminDashboard() {
             <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
               <div>
                 <h2 className="font-semibold text-foreground">Recent leads</h2>
-                <p className="mt-1 text-sm text-muted-foreground">Your latest customer inquiries.</p>
               </div>
 
               <Button asChild variant="outline" size="sm">
