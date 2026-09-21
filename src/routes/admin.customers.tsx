@@ -1,7 +1,7 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
-import { Search } from "lucide-react";
+import { CalendarDays, Mail, Phone, Search, ShieldCheck, UserRound, Users } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
@@ -21,132 +21,449 @@ function AdminCustomers() {
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin", "customers"],
     enabled: Boolean(accessToken),
-    queryFn: () => listCustomers({ data: { accessToken } }),
+    queryFn: () =>
+      listCustomers({
+        data: {
+          accessToken,
+        },
+      }),
   });
 
-  const customers = data ?? [];
-  const filteredCustomers = useMemo(() => {
-    const needle = q.trim().toLowerCase();
-    if (!needle) return customers;
+  const accounts = data ?? [];
 
-    return customers.filter((customer) => {
-      const haystack = [customer.full_name, customer.email, customer.phone, customer.roles.join(" ")]
+  const filteredAccounts = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+
+    if (!needle) {
+      return accounts;
+    }
+
+    return accounts.filter((account) => {
+      const roles = Array.isArray(account.roles) ? account.roles.join(" ") : "";
+
+      const haystack = [account.full_name, account.email, account.phone, roles, account.legacy_user_id]
         .filter(Boolean)
         .join(" ")
         .toLowerCase();
+
       return haystack.includes(needle);
     });
-  }, [customers, q]);
+  }, [accounts, q]);
+
+  const administrators = useMemo(() => {
+    return filteredAccounts.filter((account) =>
+      (account.roles ?? []).some((role) => role.toLowerCase().includes("admin")),
+    );
+  }, [filteredAccounts]);
+
+  const customers = useMemo(() => {
+    return filteredAccounts.filter(
+      (account) => !(account.roles ?? []).some((role) => role.toLowerCase().includes("admin")),
+    );
+  }, [filteredAccounts]);
+
+  const totalAdministrators = useMemo(() => {
+    return accounts.filter((account) => (account.roles ?? []).some((role) => role.toLowerCase().includes("admin")))
+      .length;
+  }, [accounts]);
+
+  const totalCustomers = accounts.length - totalAdministrators;
 
   return (
     <div className="w-full">
-      <AdminPageHeader
-        title="Customers"
-      />
+      <AdminPageHeader title="Users" />
 
-      <div className="p-6">
-        <div className="rounded-lg border border-border bg-background p-4">
-          <div className="flex flex-wrap items-center justify-between gap-3">
-            <p className="text-sm font-medium text-foreground">All customers ({filteredCustomers.length})</p>
-            <div className="relative w-full max-w-sm">
-              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+      <main className="p-4 sm:p-6">
+        <div className="mb-6 rounded-xl border border-border bg-background p-4 shadow-sm">
+          <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
+            <div>
+              <h2 className="text-base font-semibold text-foreground">Administrators and Customers</h2>
+
+              <p className="mt-1 text-sm text-muted-foreground">
+                Administrator accounts are separated from registered customer accounts.
+              </p>
+            </div>
+
+            <div className="relative w-full lg:max-w-md">
+              <Search
+                className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+                aria-hidden="true"
+              />
+
               <Input
-                id="customer-search"
+                id="account-search"
+                type="search"
                 className="pl-9"
-                placeholder="Search by name or email"
+                placeholder="Search name, email, phone or role"
                 value={q}
-                onChange={(e) => setQ(e.target.value)}
+                onChange={(event) => setQ(event.target.value)}
+                aria-label="Search administrators and customers"
               />
             </div>
+          </div>
+
+          <div className="mt-4 flex flex-wrap gap-2">
+            <Badge variant="secondary" className="gap-1.5 px-3 py-1">
+              <ShieldCheck className="size-3.5" />
+              {totalAdministrators} {totalAdministrators === 1 ? "Administrator" : "Administrators"}
+            </Badge>
+
+            <Badge variant="outline" className="gap-1.5 px-3 py-1">
+              <Users className="size-3.5" />
+              {totalCustomers} {totalCustomers === 1 ? "Customer" : "Customers"}
+            </Badge>
           </div>
         </div>
 
         {isLoading ? (
-          <div className="mt-4 space-y-3">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
-            ))}
-          </div>
+          <LoadingState />
         ) : error ? (
-          <p className="mt-6 rounded-lg border border-destructive/40 bg-background p-6 text-sm">
-            {(error as Error).message || "Couldn't load customers."}
-          </p>
-        ) : filteredCustomers.length === 0 ? (
-          <div className="mt-4 rounded-lg border border-dashed border-border bg-background p-10 text-center">
-            <p className="font-medium">No customers found</p>
+          <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 p-6">
+            <p className="font-medium text-destructive">Couldn&apos;t load users</p>
+
             <p className="mt-1 text-sm text-muted-foreground">
-              Registered customer accounts will appear here once they are created.
+              {(error as Error).message || "An unexpected error occurred while loading the accounts."}
             </p>
           </div>
         ) : (
-          <div className="mt-4 overflow-hidden rounded-lg border border-border">
-            <div className="overflow-x-auto">
-              <table className="min-w-full text-left text-sm">
-                <thead className="bg-muted/50 text-muted-foreground">
-                  <tr>
-                    <th className="px-4 py-3 font-medium">Customer</th>
-                    <th className="px-4 py-3 font-medium">Email</th>
-                    <th className="px-4 py-3 font-medium">Phone</th>
-                    <th className="px-4 py-3 font-medium">Roles</th>
-                    <th className="px-4 py-3 font-medium">Joined</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredCustomers.map((customer) => (
-                    <tr key={customer.id} className="border-t border-border bg-background">
-                      <td className="px-4 py-3 align-top">
-                        <div className="flex items-center gap-3">
-                          {customer.avatar_url ? (
-                            <img
-                              src={customer.avatar_url}
-                              alt={customer.full_name ?? customer.email ?? "Customer"}
-                              className="h-10 w-10 rounded-full object-cover"
-                            />
-                          ) : (
-                            <div className="flex h-10 w-10 items-center justify-center rounded-full bg-muted text-xs font-medium text-muted-foreground">
-                              {((customer.full_name ?? customer.email ?? "C").slice(0, 1) || "C").toUpperCase()}
-                            </div>
-                          )}
-                          <div>
-                            <div className="font-medium text-foreground">
-                              {customer.full_name || "Unnamed customer"}
-                            </div>
-                            <div className="text-xs text-muted-foreground">
-                              {customer.legacy_user_id ? `Legacy ID: ${customer.legacy_user_id}` : "Auth account"}
-                            </div>
-                          </div>
-                        </div>
-                      </td>
-                      <td className="px-4 py-3 align-top text-muted-foreground">
-                        {customer.email || "—"}
-                      </td>
-                      <td className="px-4 py-3 align-top text-muted-foreground">
-                        {customer.phone || "—"}
-                      </td>
-                      <td className="px-4 py-3 align-top">
-                        {customer.roles.length > 0 ? (
-                          <div className="flex flex-wrap gap-2">
-                            {customer.roles.map((role) => (
-                              <Badge key={role} variant="secondary" className="capitalize">
-                                {role}
+          <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(250px,0.7fr)_minmax(0,2.3fr)]">
+            <aside className="min-w-0 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+              <div className="border-b border-border bg-muted/30 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <ShieldCheck className="size-5" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h2 className="font-semibold text-foreground">Administrators</h2>
+
+                    <p className="text-xs text-muted-foreground">
+                      {administrators.length} {administrators.length === 1 ? "account" : "accounts"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {administrators.length === 0 ? (
+                <div className="p-6 text-center">
+                  <ShieldCheck className="mx-auto size-8 text-muted-foreground/60" />
+
+                  <p className="mt-3 text-sm font-medium text-foreground">
+                    {q.trim() ? "No matching administrators" : "No administrators found"}
+                  </p>
+
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    {q.trim() ? "Try using a different search term." : "Accounts with an admin role will appear here."}
+                  </p>
+                </div>
+              ) : (
+                <div className="divide-y divide-border">
+                  {administrators.map((administrator) => (
+                    <article key={administrator.id} className="p-4 transition-colors hover:bg-muted/30">
+                      <div className="flex items-start gap-3">
+                        <AccountAvatar
+                          avatarUrl={administrator.avatar_url}
+                          name={administrator.full_name ?? administrator.email ?? "Administrator"}
+                          fallbackLetter="A"
+                          admin
+                        />
+
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate font-medium text-foreground">
+                            {administrator.full_name || "Unnamed administrator"}
+                          </p>
+
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {(administrator.roles ?? []).map((role) => (
+                              <Badge
+                                key={role}
+                                className="capitalize"
+                                variant={role.toLowerCase().includes("admin") ? "default" : "secondary"}
+                              >
+                                {role.replaceAll("_", " ")}
                               </Badge>
                             ))}
                           </div>
-                        ) : (
-                          <span className="text-muted-foreground">—</span>
-                        )}
-                      </td>
-                      <td className="px-4 py-3 align-top text-muted-foreground">
-                        {customer.created_at ? formatDate(customer.created_at) : "—"}
-                      </td>
-                    </tr>
+                        </div>
+                      </div>
+
+                      <div className="mt-4 space-y-2">
+                        <AccountDetail icon={Mail} value={administrator.email} fallback="No email" />
+
+                        <AccountDetail icon={Phone} value={administrator.phone} fallback="No phone" />
+
+                        <AccountDetail
+                          icon={CalendarDays}
+                          value={administrator.created_at ? `Joined ${formatDate(administrator.created_at)}` : null}
+                          fallback="Join date unavailable"
+                        />
+                      </div>
+
+                      {administrator.legacy_user_id && (
+                        <p className="mt-3 truncate rounded-md bg-muted px-2.5 py-2 text-xs text-muted-foreground">
+                          Legacy ID: {administrator.legacy_user_id}
+                        </p>
+                      )}
+                    </article>
                   ))}
-                </tbody>
-              </table>
-            </div>
+                </div>
+              )}
+            </aside>
+
+            <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+              <div className="border-b border-border bg-muted/30 p-4">
+                <div className="flex items-center gap-3">
+                  <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+                    <Users className="size-5" />
+                  </div>
+
+                  <div className="min-w-0">
+                    <h2 className="font-semibold text-foreground">Customers</h2>
+
+                    <p className="text-xs text-muted-foreground">
+                      {customers.length} {customers.length === 1 ? "customer" : "customers"}
+                    </p>
+                  </div>
+                </div>
+              </div>
+
+              {customers.length === 0 ? (
+                <div className="p-10 text-center">
+                  <UserRound className="mx-auto size-10 text-muted-foreground/60" />
+
+                  <p className="mt-4 font-medium text-foreground">
+                    {q.trim() ? "No matching customers" : "No customers found"}
+                  </p>
+
+                  <p className="mt-1 text-sm text-muted-foreground">
+                    {q.trim()
+                      ? "Try using a different name, email, phone number or role."
+                      : "Registered customer accounts will appear here."}
+                  </p>
+                </div>
+              ) : (
+                <>
+                  <div className="divide-y divide-border md:hidden">
+                    {customers.map((customer) => (
+                      <article key={customer.id} className="p-4">
+                        <div className="flex items-start gap-3">
+                          <AccountAvatar
+                            avatarUrl={customer.avatar_url}
+                            name={customer.full_name ?? customer.email ?? "Customer"}
+                            fallbackLetter="C"
+                          />
+
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate font-medium text-foreground">
+                              {customer.full_name || "Unnamed customer"}
+                            </p>
+
+                            <p className="mt-0.5 truncate text-xs text-muted-foreground">
+                              {customer.legacy_user_id ? `Legacy ID: ${customer.legacy_user_id}` : "Auth account"}
+                            </p>
+                          </div>
+                        </div>
+
+                        <div className="mt-4 space-y-2">
+                          <AccountDetail icon={Mail} value={customer.email} fallback="No email" />
+
+                          <AccountDetail icon={Phone} value={customer.phone} fallback="No phone" />
+
+                          <AccountDetail
+                            icon={CalendarDays}
+                            value={customer.created_at ? `Joined ${formatDate(customer.created_at)}` : null}
+                            fallback="Join date unavailable"
+                          />
+                        </div>
+
+                        {(customer.roles ?? []).length > 0 && (
+                          <div className="mt-3 flex flex-wrap gap-1.5">
+                            {customer.roles.map((role) => (
+                              <Badge key={role} variant="secondary" className="capitalize">
+                                {role.replaceAll("_", " ")}
+                              </Badge>
+                            ))}
+                          </div>
+                        )}
+                      </article>
+                    ))}
+                  </div>
+
+                  <div className="hidden overflow-x-auto md:block">
+                    <table className="min-w-full text-left text-sm">
+                      <thead className="bg-muted/40 text-muted-foreground">
+                        <tr>
+                          <th className="whitespace-nowrap px-4 py-3 font-medium">Customer</th>
+
+                          <th className="whitespace-nowrap px-4 py-3 font-medium">Email</th>
+
+                          <th className="whitespace-nowrap px-4 py-3 font-medium">Phone</th>
+
+                          <th className="whitespace-nowrap px-4 py-3 font-medium">Roles</th>
+
+                          <th className="whitespace-nowrap px-4 py-3 font-medium">Joined</th>
+                        </tr>
+                      </thead>
+
+                      <tbody>
+                        {customers.map((customer) => (
+                          <tr key={customer.id} className="border-t border-border transition-colors hover:bg-muted/30">
+                            <td className="px-4 py-3 align-middle">
+                              <div className="flex min-w-[190px] items-center gap-3">
+                                <AccountAvatar
+                                  avatarUrl={customer.avatar_url}
+                                  name={customer.full_name ?? customer.email ?? "Customer"}
+                                  fallbackLetter="C"
+                                  small
+                                />
+
+                                <div className="min-w-0">
+                                  <p className="truncate font-medium text-foreground">
+                                    {customer.full_name || "Unnamed customer"}
+                                  </p>
+
+                                  <p className="truncate text-xs text-muted-foreground">
+                                    {customer.legacy_user_id ? `Legacy ID: ${customer.legacy_user_id}` : "Auth account"}
+                                  </p>
+                                </div>
+                              </div>
+                            </td>
+
+                            <td className="max-w-[220px] px-4 py-3 align-middle text-muted-foreground">
+                              <span className="block truncate" title={customer.email || undefined}>
+                                {customer.email || "—"}
+                              </span>
+                            </td>
+
+                            <td className="whitespace-nowrap px-4 py-3 align-middle text-muted-foreground">
+                              {customer.phone || "—"}
+                            </td>
+
+                            <td className="px-4 py-3 align-middle">
+                              {(customer.roles ?? []).length > 0 ? (
+                                <div className="flex max-w-[180px] flex-wrap gap-1.5">
+                                  {customer.roles.map((role) => (
+                                    <Badge key={role} variant="secondary" className="capitalize">
+                                      {role.replaceAll("_", " ")}
+                                    </Badge>
+                                  ))}
+                                </div>
+                              ) : (
+                                <span className="text-muted-foreground">—</span>
+                              )}
+                            </td>
+
+                            <td className="whitespace-nowrap px-4 py-3 align-middle text-muted-foreground">
+                              {customer.created_at ? formatDate(customer.created_at) : "—"}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </>
+              )}
+            </section>
           </div>
         )}
+      </main>
+    </div>
+  );
+}
+
+function LoadingState() {
+  return (
+    <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(250px,0.7fr)_minmax(0,2.3fr)]">
+      <div className="overflow-hidden rounded-xl border border-border bg-background">
+        <div className="h-20 animate-pulse border-b border-border bg-muted/60" />
+
+        <div className="space-y-4 p-4">
+          {Array.from({ length: 3 }).map((_, index) => (
+            <div key={index} className="space-y-3">
+              <div className="flex items-center gap-3">
+                <div className="size-11 animate-pulse rounded-full bg-muted" />
+
+                <div className="flex-1 space-y-2">
+                  <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
+                  <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
+                </div>
+              </div>
+
+              <div className="h-10 animate-pulse rounded bg-muted/70" />
+            </div>
+          ))}
+        </div>
       </div>
+
+      <div className="overflow-hidden rounded-xl border border-border bg-background">
+        <div className="h-20 animate-pulse border-b border-border bg-muted/60" />
+
+        <div className="space-y-3 p-4">
+          {Array.from({ length: 6 }).map((_, index) => (
+            <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
+          ))}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AccountAvatar({
+  avatarUrl,
+  name,
+  fallbackLetter,
+  admin = false,
+  small = false,
+}: {
+  avatarUrl?: string | null;
+  name: string;
+  fallbackLetter: string;
+  admin?: boolean;
+  small?: boolean;
+}) {
+  const sizeClassName = small ? "size-10" : "size-11";
+
+  if (avatarUrl) {
+    return (
+      <img
+        src={avatarUrl}
+        alt={name}
+        className={`${sizeClassName} shrink-0 rounded-full border border-border object-cover`}
+        loading="lazy"
+      />
+    );
+  }
+
+  const initial = (name.slice(0, 1) || fallbackLetter).toUpperCase();
+
+  return (
+    <div
+      className={`flex ${sizeClassName} shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+        admin ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
+      }`}
+      aria-hidden="true"
+    >
+      {initial}
+    </div>
+  );
+}
+
+function AccountDetail({
+  icon: Icon,
+  value,
+  fallback,
+}: {
+  icon: typeof Mail;
+  value?: string | null;
+  fallback: string;
+}) {
+  return (
+    <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
+      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
+
+      <span className="truncate" title={value || undefined}>
+        {value || fallback}
+      </span>
     </div>
   );
 }
