@@ -115,6 +115,8 @@ function AdminCustomers() {
           </div>
         </div>
 
+        <LeadsSection accessToken={accessToken} />
+
         {isLoading ? (
           <LoadingState />
         ) : error ? (
