@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { listCustomers } from "@/lib/admin-customers.functions";
+import { listLeads, type AdminLeadRow } from "@/lib/admin-leads.functions";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/customers")({
