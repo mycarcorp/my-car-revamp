@@ -1,5 +1,7 @@
 import { createServerFn } from "@tanstack/react-start";
 
+export type JsonValue = string | number | boolean | null | JsonValue[] | { [key: string]: JsonValue };
+
 export type AdminLeadRow = {
   id: string;
   lead_type: string;
@@ -9,7 +11,7 @@ export type AdminLeadRow = {
   phone: string | null;
   message: string | null;
   vehicle_id: string | null;
-  details: Record<string, unknown>;
+  details: Record<string, JsonValue>;
   created_at: string | null;
 };
 
@@ -40,7 +42,7 @@ export const listLeads = createServerFn({ method: "POST" })
     const text = await response.text();
     if (!response.ok) throw new Error(`Could not load leads (${response.status}): ${text.slice(0, 200)}`);
 
-    const rows = (text ? JSON.parse(text) : []) as Array<Record<string, unknown>>;
+    const rows = (text ? JSON.parse(text) : []) as Array<Record<string, JsonValue>>;
     return rows.map((row) => ({
       id: String(row["id"]),
       lead_type: String(row["lead_type"] ?? "contact"),
@@ -50,7 +52,7 @@ export const listLeads = createServerFn({ method: "POST" })
       phone: (row["phone"] as string | null) ?? null,
       message: (row["message"] as string | null) ?? null,
       vehicle_id: (row["vehicle_id"] as string | null) ?? null,
-      details: (row["details"] as Record<string, unknown>) ?? {},
+      details: (row["details"] as Record<string, JsonValue>) ?? {},
       created_at: (row["created_at"] as string | null) ?? null,
     }));
   });
