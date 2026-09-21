@@ -35,9 +35,7 @@ function AdminCustomers() {
     enabled: Boolean(accessToken),
     queryFn: () =>
       listCustomers({
-        data: {
-          accessToken,
-        },
+        data: { accessToken },
       }),
   });
 
@@ -46,33 +44,30 @@ function AdminCustomers() {
   const filteredAccounts = useMemo(() => {
     const needle = accountSearch.trim().toLowerCase();
 
-    if (!needle) {
-      return accounts;
-    }
+    if (!needle) return accounts;
 
     return accounts.filter((account) => {
       const roles = Array.isArray(account.roles) ? account.roles.join(" ") : "";
 
-      const haystack = [account.full_name, account.email, account.phone, roles, account.legacy_user_id]
+      return [account.full_name, account.email, account.phone, roles, account.legacy_user_id]
         .filter(Boolean)
         .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(needle);
+        .toLowerCase()
+        .includes(needle);
     });
   }, [accounts, accountSearch]);
 
-  const administrators = useMemo(() => {
-    return filteredAccounts.filter((account) =>
-      (account.roles ?? []).some((role) => role.toLowerCase().includes("admin")),
-    );
-  }, [filteredAccounts]);
+  const administrators = useMemo(
+    () =>
+      filteredAccounts.filter((account) => (account.roles ?? []).some((role) => role.toLowerCase().includes("admin"))),
+    [filteredAccounts],
+  );
 
-  const customers = useMemo(() => {
-    return filteredAccounts.filter(
-      (account) => !(account.roles ?? []).some((role) => role.toLowerCase().includes("admin")),
-    );
-  }, [filteredAccounts]);
+  const customers = useMemo(
+    () =>
+      filteredAccounts.filter((account) => !(account.roles ?? []).some((role) => role.toLowerCase().includes("admin"))),
+    [filteredAccounts],
+  );
 
   return (
     <div className="w-full">
@@ -86,7 +81,6 @@ function AdminCustomers() {
         ) : error ? (
           <div role="alert" className="rounded-xl border border-destructive/40 bg-destructive/5 p-6">
             <p className="font-medium text-destructive">Couldn&apos;t load user accounts</p>
-
             <p className="mt-1 text-sm text-muted-foreground">
               {(error as Error).message || "An unexpected error occurred while loading the accounts."}
             </p>
@@ -96,16 +90,11 @@ function AdminCustomers() {
             <div className="mb-4 flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <h2 className="text-base font-semibold text-foreground">Website Accounts</h2>
-
                 <p className="mt-1 text-sm text-muted-foreground">Administrator and registered customer accounts.</p>
               </div>
 
               <div className="relative w-full sm:max-w-sm">
-                <Search
-                  className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-                  aria-hidden="true"
-                />
-
+                <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
                 <Input
                   id="account-search"
                   type="search"
@@ -119,36 +108,18 @@ function AdminCustomers() {
 
             <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(250px,0.7fr)_minmax(0,2.3fr)]">
               <aside className="min-w-0 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
-                <div className="border-b border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <ShieldCheck className="size-5" />
-                    </div>
-
-                    <div className="min-w-0">
-                      <h2 className="font-semibold text-foreground">Administrators</h2>
-
-                      <p className="text-xs text-muted-foreground">
-                        {administrators.length} {administrators.length === 1 ? "account" : "accounts"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <SectionHeader title="Administrators" count={administrators.length} icon={ShieldCheck} />
 
                 {administrators.length === 0 ? (
-                  <div className="p-6 text-center">
-                    <ShieldCheck className="mx-auto size-8 text-muted-foreground/60" />
-
-                    <p className="mt-3 text-sm font-medium text-foreground">
-                      {accountSearch.trim() ? "No matching administrators" : "No administrators found"}
-                    </p>
-
-                    <p className="mt-1 text-xs text-muted-foreground">
-                      {accountSearch.trim()
+                  <EmptyAccounts
+                    icon={ShieldCheck}
+                    title={accountSearch.trim() ? "No matching administrators" : "No administrators found"}
+                    description={
+                      accountSearch.trim()
                         ? "Try using a different search term."
-                        : "Accounts with an administrator role appear here."}
-                    </p>
-                  </div>
+                        : "Accounts with an administrator role appear here."
+                    }
+                  />
                 ) : (
                   <div className="divide-y divide-border">
                     {administrators.map((administrator) => (
@@ -182,21 +153,13 @@ function AdminCustomers() {
 
                         <div className="mt-4 space-y-2">
                           <AccountDetail icon={Mail} value={administrator.email} fallback="No email" />
-
                           <AccountDetail icon={Phone} value={administrator.phone} fallback="No phone" />
-
                           <AccountDetail
                             icon={CalendarDays}
                             value={administrator.created_at ? `Joined ${formatDate(administrator.created_at)}` : null}
                             fallback="Join date unavailable"
                           />
                         </div>
-
-                        {administrator.legacy_user_id && (
-                          <p className="mt-3 truncate rounded-md bg-muted px-2.5 py-2 text-xs text-muted-foreground">
-                            Legacy ID: {administrator.legacy_user_id}
-                          </p>
-                        )}
                       </article>
                     ))}
                   </div>
@@ -204,36 +167,18 @@ function AdminCustomers() {
               </aside>
 
               <section className="min-w-0 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
-                <div className="border-b border-border bg-muted/30 p-4">
-                  <div className="flex items-center gap-3">
-                    <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
-                      <Users className="size-5" />
-                    </div>
-
-                    <div className="min-w-0">
-                      <h2 className="font-semibold text-foreground">Registered Customers</h2>
-
-                      <p className="text-xs text-muted-foreground">
-                        {customers.length} {customers.length === 1 ? "customer" : "customers"}
-                      </p>
-                    </div>
-                  </div>
-                </div>
+                <SectionHeader title="Registered Customers" count={customers.length} icon={Users} />
 
                 {customers.length === 0 ? (
-                  <div className="p-10 text-center">
-                    <UserRound className="mx-auto size-10 text-muted-foreground/60" />
-
-                    <p className="mt-4 font-medium text-foreground">
-                      {accountSearch.trim() ? "No matching customers" : "No registered customers"}
-                    </p>
-
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      {accountSearch.trim()
+                  <EmptyAccounts
+                    icon={UserRound}
+                    title={accountSearch.trim() ? "No matching customers" : "No registered customers"}
+                    description={
+                      accountSearch.trim()
                         ? "Try using a different search term."
-                        : "Registered customer accounts will appear here."}
-                    </p>
-                  </div>
+                        : "Registered customer accounts will appear here."
+                    }
+                  />
                 ) : (
                   <>
                     <div className="divide-y divide-border md:hidden">
@@ -247,10 +192,7 @@ function AdminCustomers() {
                             />
 
                             <div className="min-w-0 flex-1">
-                              <p className="truncate font-medium text-foreground">
-                                {customer.full_name || "Unnamed customer"}
-                              </p>
-
+                              <p className="truncate font-medium">{customer.full_name || "Unnamed customer"}</p>
                               <p className="mt-0.5 truncate text-xs text-muted-foreground">
                                 {customer.legacy_user_id ? `Legacy ID: ${customer.legacy_user_id}` : "Auth account"}
                               </p>
@@ -259,25 +201,13 @@ function AdminCustomers() {
 
                           <div className="mt-4 space-y-2">
                             <AccountDetail icon={Mail} value={customer.email} fallback="No email" />
-
                             <AccountDetail icon={Phone} value={customer.phone} fallback="No phone" />
-
                             <AccountDetail
                               icon={CalendarDays}
                               value={customer.created_at ? `Joined ${formatDate(customer.created_at)}` : null}
                               fallback="Join date unavailable"
                             />
                           </div>
-
-                          {(customer.roles ?? []).length > 0 && (
-                            <div className="mt-3 flex flex-wrap gap-1.5">
-                              {customer.roles.map((role) => (
-                                <Badge key={role} variant="secondary" className="capitalize">
-                                  {role.replaceAll("_", " ")}
-                                </Badge>
-                              ))}
-                            </div>
-                          )}
                         </article>
                       ))}
                     </div>
@@ -286,25 +216,18 @@ function AdminCustomers() {
                       <table className="min-w-full text-left text-sm">
                         <thead className="bg-muted/40 text-muted-foreground">
                           <tr>
-                            <th className="whitespace-nowrap px-4 py-3 font-medium">Customer</th>
-
-                            <th className="whitespace-nowrap px-4 py-3 font-medium">Email</th>
-
-                            <th className="whitespace-nowrap px-4 py-3 font-medium">Phone</th>
-
-                            <th className="whitespace-nowrap px-4 py-3 font-medium">Roles</th>
-
-                            <th className="whitespace-nowrap px-4 py-3 font-medium">Joined</th>
+                            <th className="px-4 py-3 font-medium">Customer</th>
+                            <th className="px-4 py-3 font-medium">Email</th>
+                            <th className="px-4 py-3 font-medium">Phone</th>
+                            <th className="px-4 py-3 font-medium">Roles</th>
+                            <th className="px-4 py-3 font-medium">Joined</th>
                           </tr>
                         </thead>
 
                         <tbody>
                           {customers.map((customer) => (
-                            <tr
-                              key={customer.id}
-                              className="border-t border-border transition-colors hover:bg-muted/30"
-                            >
-                              <td className="px-4 py-3 align-middle">
+                            <tr key={customer.id} className="border-t border-border hover:bg-muted/30">
+                              <td className="px-4 py-3">
                                 <div className="flex min-w-[190px] items-center gap-3">
                                   <AccountAvatar
                                     avatarUrl={customer.avatar_url}
@@ -314,10 +237,7 @@ function AdminCustomers() {
                                   />
 
                                   <div className="min-w-0">
-                                    <p className="truncate font-medium text-foreground">
-                                      {customer.full_name || "Unnamed customer"}
-                                    </p>
-
+                                    <p className="truncate font-medium">{customer.full_name || "Unnamed customer"}</p>
                                     <p className="truncate text-xs text-muted-foreground">
                                       {customer.legacy_user_id
                                         ? `Legacy ID: ${customer.legacy_user_id}`
@@ -327,19 +247,17 @@ function AdminCustomers() {
                                 </div>
                               </td>
 
-                              <td className="max-w-[220px] px-4 py-3 align-middle text-muted-foreground">
-                                <span className="block truncate" title={customer.email || undefined}>
-                                  {customer.email || "—"}
-                                </span>
+                              <td className="max-w-[220px] px-4 py-3 text-muted-foreground">
+                                <span className="block truncate">{customer.email || "—"}</span>
                               </td>
 
-                              <td className="whitespace-nowrap px-4 py-3 align-middle text-muted-foreground">
+                              <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                                 {customer.phone || "—"}
                               </td>
 
-                              <td className="px-4 py-3 align-middle">
+                              <td className="px-4 py-3">
                                 {(customer.roles ?? []).length > 0 ? (
-                                  <div className="flex max-w-[180px] flex-wrap gap-1.5">
+                                  <div className="flex flex-wrap gap-1.5">
                                     {customer.roles.map((role) => (
                                       <Badge key={role} variant="secondary" className="capitalize">
                                         {role.replaceAll("_", " ")}
@@ -347,11 +265,11 @@ function AdminCustomers() {
                                     ))}
                                   </div>
                                 ) : (
-                                  <span className="text-muted-foreground">—</span>
+                                  "—"
                                 )}
                               </td>
 
-                              <td className="whitespace-nowrap px-4 py-3 align-middle text-muted-foreground">
+                              <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                                 {customer.created_at ? formatDate(customer.created_at) : "—"}
                               </td>
                             </tr>
@@ -371,34 +289,13 @@ function AdminCustomers() {
 }
 
 const LEAD_TYPES = [
-  {
-    key: "all",
-    label: "All Customers",
-  },
-  {
-    key: "finance",
-    label: "Financing",
-  },
-  {
-    key: "sell",
-    label: "Sell",
-  },
-  {
-    key: "trade",
-    label: "Trade",
-  },
-  {
-    key: "appointment",
-    label: "Appointments",
-  },
-  {
-    key: "availability",
-    label: "Check Availability",
-  },
-  {
-    key: "contact",
-    label: "Contact",
-  },
+  { key: "all", label: "All Customers" },
+  { key: "finance", label: "Financing" },
+  { key: "sell", label: "Sell" },
+  { key: "trade", label: "Trade" },
+  { key: "appointment", label: "Appointments" },
+  { key: "availability", label: "Check Availability" },
+  { key: "contact", label: "Contact" },
 ] as const;
 
 type LeadFilterType = (typeof LEAD_TYPES)[number]["key"];
@@ -412,32 +309,19 @@ const LEAD_LABELS: Record<string, string> = {
 
 function getTradeIntent(lead: AdminLeadRow) {
   const intent = lead.details?.intent;
-
-  if (typeof intent !== "string") {
-    return "";
-  }
-
-  return intent.trim().toLowerCase();
+  return typeof intent === "string" ? intent.trim().toLowerCase() : "";
 }
 
 function getLeadTypeLabel(lead: AdminLeadRow) {
   if (lead.lead_type === "trade") {
-    const intent = getTradeIntent(lead);
-
-    if (intent.includes("sell")) {
-      return "Sell";
-    }
-
-    return "Trade";
+    return getTradeIntent(lead).includes("sell") ? "Sell" : "Trade";
   }
 
   return LEAD_LABELS[lead.lead_type] ?? lead.lead_type;
 }
 
 function matchesLeadType(lead: AdminLeadRow, selectedType: LeadFilterType) {
-  if (selectedType === "all") {
-    return true;
-  }
+  if (selectedType === "all") return true;
 
   if (selectedType === "sell") {
     return lead.lead_type === "trade" && getTradeIntent(lead).includes("sell");
@@ -450,47 +334,46 @@ function matchesLeadType(lead: AdminLeadRow, selectedType: LeadFilterType) {
   return lead.lead_type === selectedType;
 }
 
-function leadSummary(lead: AdminLeadRow): string {
+function getFirstDetail(lead: AdminLeadRow, keys: string[]): unknown {
   const details = lead.details ?? {};
 
-  const pick = (key: string) => {
+  for (const key of keys) {
     const value = details[key];
 
-    return value == null || value === "" ? null : formatDetailValue(value);
-  };
-
-  if (lead.lead_type === "appointment") {
-    const parts = [pick("appointment_type"), pick("preferred_date"), pick("preferred_time")].filter(Boolean);
-
-    return parts.join(" · ") || "Appointment request";
+    if (value !== null && value !== undefined && value !== "") {
+      return value;
+    }
   }
 
-  if (lead.lead_type === "finance") {
-    const parts = [pick("vehicle_of_interest"), pick("credit_band"), pick("desired_payment")].filter(Boolean);
+  return null;
+}
 
-    return parts.join(" · ") || "Financing application";
-  }
+function getPreferredDate(lead: AdminLeadRow) {
+  const value = getFirstDetail(lead, [
+    "preferred_date",
+    "preferredDate",
+    "appointment_date",
+    "appointmentDate",
+    "visit_date",
+    "visitDate",
+    "date",
+  ]);
 
-  if (lead.lead_type === "trade") {
-    const parts = [
-      pick("year_make_model"),
-      pick("trade_year"),
-      pick("trade_make"),
-      pick("trade_model"),
-      pick("vin"),
-      pick("trade_vin"),
-    ].filter(Boolean);
+  return value == null ? "—" : formatSimpleValue(value);
+}
 
-    return parts.join(" · ") || `${getLeadTypeLabel(lead)} request`;
-  }
+function getPreferredTime(lead: AdminLeadRow) {
+  const value = getFirstDetail(lead, [
+    "preferred_time",
+    "preferredTime",
+    "appointment_time",
+    "appointmentTime",
+    "visit_time",
+    "visitTime",
+    "time",
+  ]);
 
-  if (lead.lead_type === "availability") {
-    return (
-      pick("vehicle_of_interest") ?? pick("selected_vehicle") ?? pick("year_make_model") ?? "Vehicle availability check"
-    );
-  }
-
-  return lead.message?.slice(0, 120) || "Website message";
+  return value == null ? "—" : formatSimpleValue(value);
 }
 
 function LeadsSection({ accessToken }: { accessToken: string }) {
@@ -516,71 +399,42 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
     const needle = search.trim().toLowerCase();
 
     return leads.filter((lead) => {
-      if (!matchesLeadType(lead, type)) {
-        return false;
-      }
-
-      if (!needle) {
-        return true;
-      }
+      if (!matchesLeadType(lead, type)) return false;
+      if (!needle) return true;
 
       const detailsText = Object.entries(lead.details ?? {})
-        .map(([key, value]) => `${key} ${formatDetailValue(value)}`)
+        .map(([key, value]) => `${key} ${formatSimpleValue(value)}`)
         .join(" ");
 
-      const haystack = [
-        lead.full_name,
-        lead.email,
-        lead.phone,
-        lead.message,
-        lead.status,
-        getLeadTypeLabel(lead),
-        leadSummary(lead),
-        detailsText,
-      ]
+      return [lead.full_name, lead.email, lead.phone, lead.message, lead.status, getLeadTypeLabel(lead), detailsText]
         .filter(Boolean)
         .join(" ")
-        .toLowerCase();
-
-      return haystack.includes(needle);
+        .toLowerCase()
+        .includes(needle);
     });
   }, [leads, type, search]);
 
-  const countFor = (key: LeadFilterType) => {
-    return leads.filter((lead) => matchesLeadType(lead, key)).length;
-  };
-
-  const openLead = (lead: AdminLeadRow) => {
-    setSelectedLead(lead);
-  };
+  const countFor = (key: LeadFilterType) => leads.filter((lead) => matchesLeadType(lead, key)).length;
 
   return (
     <>
       <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
         <div className="flex flex-col gap-4 border-b border-border bg-muted/30 p-4 lg:flex-row lg:items-center lg:justify-between">
           <div className="flex items-center gap-3">
-            <div className="flex size-10 shrink-0 items-center justify-center rounded-lg bg-primary/10 text-primary">
+            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <Users className="size-5" />
             </div>
-
-            <div>
-              <h2 className="text-base font-semibold text-foreground">Customers</h2>
-            </div>
+            <h2 className="font-semibold">Customers</h2>
           </div>
 
           <div className="relative w-full lg:max-w-sm">
-            <Search
-              className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
-              aria-hidden="true"
-            />
-
+            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
             <Input
               type="search"
               className="pl-9"
               placeholder="Search customer submissions"
               value={search}
               onChange={(event) => setSearch(event.target.value)}
-              aria-label="Search customers"
             />
           </div>
         </div>
@@ -592,11 +446,10 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
                 key={item.key}
                 type="button"
                 onClick={() => setType(item.key)}
-                aria-pressed={type === item.key}
-                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 ${
+                className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
                   type === item.key
                     ? "border-primary bg-primary text-primary-foreground"
-                    : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+                    : "border-border text-muted-foreground hover:border-primary/40"
                 }`}
               >
                 {item.label} ({isLoading ? "…" : countFor(item.key)})
@@ -614,22 +467,12 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
         ) : error ? (
           <div role="alert" className="p-6">
             <p className="font-medium text-destructive">Couldn&apos;t load customer submissions</p>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              {(error as Error).message || "An unexpected error occurred."}
-            </p>
+            <p className="mt-1 text-sm text-muted-foreground">{(error as Error).message}</p>
           </div>
         ) : filtered.length === 0 ? (
           <div className="p-10 text-center">
             <Users className="mx-auto size-8 text-muted-foreground/60" />
-
-            <p className="mt-3 font-medium text-foreground">No customer submissions found</p>
-
-            <p className="mt-1 text-sm text-muted-foreground">
-              {search.trim()
-                ? "Try using another search term."
-                : "New form submissions will appear here automatically."}
-            </p>
+            <p className="mt-3 font-medium">No customer submissions found</p>
           </div>
         ) : (
           <>
@@ -638,22 +481,39 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
                 <button
                   key={lead.id}
                   type="button"
-                  onClick={() => openLead(lead)}
-                  className="flex w-full items-start justify-between gap-4 p-4 text-left transition-colors hover:bg-muted/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary"
+                  onClick={() => setSelectedLead(lead)}
+                  className="flex w-full items-start justify-between gap-4 p-4 text-left hover:bg-muted/40"
                 >
-                  <div className="min-w-0">
+                  <div className="min-w-0 flex-1">
                     <div className="flex flex-wrap items-center gap-2">
-                      <p className="font-medium text-foreground">{lead.full_name || "Unnamed customer"}</p>
-
+                      <p className="font-medium">{lead.full_name || "Unnamed customer"}</p>
                       <Badge variant="secondary">{getLeadTypeLabel(lead)}</Badge>
                     </div>
 
-                    <p className="mt-1 truncate text-sm text-muted-foreground">{leadSummary(lead)}</p>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                      <div>
+                        <p className="text-muted-foreground">Date</p>
+                        <p className="mt-0.5 font-medium text-foreground">{getPreferredDate(lead)}</p>
+                      </div>
 
-                    <div className="mt-2 flex flex-wrap items-center gap-2 text-xs text-muted-foreground">
-                      <span>{lead.email || "No email"}</span>
-                      <span aria-hidden="true">•</span>
-                      <span>{lead.created_at ? formatDate(lead.created_at) : "No date"}</span>
+                      <div>
+                        <p className="text-muted-foreground">Time</p>
+                        <p className="mt-0.5 font-medium text-foreground">{getPreferredTime(lead)}</p>
+                      </div>
+
+                      <div>
+                        <p className="text-muted-foreground">Status</p>
+                        <Badge variant={lead.status === "won" ? "default" : "outline"} className="mt-1 capitalize">
+                          {lead.status || "new"}
+                        </Badge>
+                      </div>
+
+                      <div>
+                        <p className="text-muted-foreground">Submitted</p>
+                        <p className="mt-0.5 font-medium text-foreground">
+                          {lead.created_at ? formatDate(lead.created_at) : "—"}
+                        </p>
+                      </div>
                     </div>
                   </div>
 
@@ -666,16 +526,12 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
               <table className="min-w-full text-left text-sm">
                 <thead className="bg-muted/40 text-muted-foreground">
                   <tr>
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">Customer</th>
-
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">Request</th>
-
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">Details</th>
-
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">Status</th>
-
-                    <th className="whitespace-nowrap px-4 py-3 font-medium">Submitted</th>
-
+                    <th className="px-4 py-3 font-medium">Name</th>
+                    <th className="px-4 py-3 font-medium">Request</th>
+                    <th className="px-4 py-3 font-medium">Date</th>
+                    <th className="px-4 py-3 font-medium">Time</th>
+                    <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">Submitted</th>
                     <th className="w-12 px-4 py-3">
                       <span className="sr-only">Open</span>
                     </th>
@@ -688,49 +544,36 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
                       key={lead.id}
                       role="button"
                       tabIndex={0}
-                      aria-label={`View details for ${lead.full_name || "customer"}`}
-                      onClick={() => openLead(lead)}
+                      onClick={() => setSelectedLead(lead)}
                       onKeyDown={(event) => {
                         if (event.key === "Enter" || event.key === " ") {
                           event.preventDefault();
-                          openLead(lead);
+                          setSelectedLead(lead);
                         }
                       }}
-                      className="cursor-pointer border-t border-border transition-colors hover:bg-muted/40 focus:bg-muted/40 focus:outline-none"
+                      className="cursor-pointer border-t border-border hover:bg-muted/40 focus:bg-muted/40 focus:outline-none"
                     >
-                      <td className="px-4 py-3 align-top">
-                        <div className="min-w-[190px]">
-                          <p className="font-medium text-foreground">{lead.full_name || "Unnamed customer"}</p>
+                      <td className="px-4 py-3 font-medium">{lead.full_name || "Unnamed customer"}</td>
 
-                          <p className="truncate text-xs text-muted-foreground">{lead.email || "No email"}</p>
-
-                          <p className="text-xs text-muted-foreground">{lead.phone || "No phone"}</p>
-                        </div>
+                      <td className="whitespace-nowrap px-4 py-3">
+                        <Badge variant="secondary">{getLeadTypeLabel(lead)}</Badge>
                       </td>
 
-                      <td className="whitespace-nowrap px-4 py-3 align-top">
-                        <Badge variant="secondary" className="capitalize">
-                          {getLeadTypeLabel(lead)}
-                        </Badge>
-                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{getPreferredDate(lead)}</td>
 
-                      <td className="max-w-[340px] px-4 py-3 align-top text-muted-foreground">
-                        <span className="block truncate" title={leadSummary(lead)}>
-                          {leadSummary(lead)}
-                        </span>
-                      </td>
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{getPreferredTime(lead)}</td>
 
-                      <td className="whitespace-nowrap px-4 py-3 align-top">
+                      <td className="whitespace-nowrap px-4 py-3">
                         <Badge variant={lead.status === "won" ? "default" : "outline"} className="capitalize">
                           {lead.status || "new"}
                         </Badge>
                       </td>
 
-                      <td className="whitespace-nowrap px-4 py-3 align-top text-muted-foreground">
+                      <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                         {lead.created_at ? formatDate(lead.created_at) : "—"}
                       </td>
 
-                      <td className="px-4 py-3 align-middle">
+                      <td className="px-4 py-3">
                         <ChevronRight className="size-4 text-muted-foreground" />
                       </td>
                     </tr>
@@ -746,9 +589,7 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
         lead={selectedLead}
         open={Boolean(selectedLead)}
         onOpenChange={(open) => {
-          if (!open) {
-            setSelectedLead(null);
-          }
+          if (!open) setSelectedLead(null);
         }}
       />
     </>
@@ -764,9 +605,7 @@ function LeadDetailsDialog({
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
-  if (!lead) {
-    return null;
-  }
+  if (!lead) return null;
 
   const details = Object.entries(lead.details ?? {}).filter(
     ([, value]) => value !== null && value !== undefined && value !== "",
@@ -774,7 +613,7 @@ function LeadDetailsDialog({
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] max-w-3xl overflow-hidden p-0">
+      <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] max-w-4xl overflow-hidden p-0">
         <DialogHeader className="border-b border-border px-5 py-4 pr-12">
           <div className="flex flex-wrap items-center gap-2">
             <DialogTitle className="text-xl">{lead.full_name || "Customer submission"}</DialogTitle>
@@ -793,41 +632,43 @@ function LeadDetailsDialog({
           <div className="space-y-6">
             <ModalSection title="Customer Information" icon={UserRound}>
               <DetailGrid>
-                <DetailItem label="Full Name" value={lead.full_name} />
+                <SimpleDetailItem label="Full Name" value={lead.full_name} />
+                <SimpleDetailItem label="Email" value={lead.email} type="email" />
+                <SimpleDetailItem label="Phone" value={lead.phone} type="phone" />
+                <SimpleDetailItem label="Request Type" value={getLeadTypeLabel(lead)} />
+              </DetailGrid>
+            </ModalSection>
 
-                <DetailItem label="Email" value={lead.email} type="email" />
-
-                <DetailItem label="Phone" value={lead.phone} type="phone" />
-
-                <DetailItem label="Request Type" value={getLeadTypeLabel(lead)} />
+            <ModalSection title="Appointment Preference" icon={CalendarDays}>
+              <DetailGrid>
+                <SimpleDetailItem label="Preferred Date" value={getPreferredDate(lead)} />
+                <SimpleDetailItem label="Preferred Time" value={getPreferredTime(lead)} />
               </DetailGrid>
             </ModalSection>
 
             <ModalSection title="Submission Information" icon={CalendarDays}>
               <DetailGrid>
-                <DetailItem label="Status" value={lead.status || "new"} />
-
-                <DetailItem label="Submitted" value={lead.created_at ? formatDate(lead.created_at) : null} />
-
-                <DetailItem label="Submission ID" value={String(lead.id)} />
+                <SimpleDetailItem label="Status" value={lead.status || "new"} />
+                <SimpleDetailItem label="Submitted" value={lead.created_at ? formatDate(lead.created_at) : null} />
+                <SimpleDetailItem label="Submission ID" value={String(lead.id)} />
               </DetailGrid>
             </ModalSection>
 
             {lead.message && (
               <ModalSection title="Customer Message" icon={Mail}>
                 <div className="rounded-lg border border-border bg-muted/20 p-4">
-                  <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{lead.message}</p>
+                  <p className="whitespace-pre-wrap break-words text-sm leading-6">{lead.message}</p>
                 </div>
               </ModalSection>
             )}
 
             <ModalSection title="Form Details" icon={ClipboardList}>
               {details.length > 0 ? (
-                <DetailGrid>
+                <div className="grid grid-cols-1 gap-4">
                   {details.map(([key, value]) => (
-                    <DetailItem key={key} label={formatFieldLabel(key)} value={formatDetailValue(value)} />
+                    <StructuredDetail key={key} label={formatFieldLabel(key)} value={value} />
                   ))}
-                </DetailGrid>
+                </div>
               ) : (
                 <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
                   No additional form details were submitted.
@@ -839,6 +680,210 @@ function LeadDetailsDialog({
       </DialogContent>
     </Dialog>
   );
+}
+
+function StructuredDetail({ label, value }: { label: string; value: unknown }) {
+  const parsedValue = parsePossibleJson(value);
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-background">
+      <div className="border-b border-border bg-muted/30 px-4 py-3">
+        <p className="text-sm font-semibold text-foreground">{label}</p>
+      </div>
+
+      <div className="p-4">
+        <ReadableValue value={parsedValue} />
+      </div>
+    </div>
+  );
+}
+
+function ReadableValue({ value }: { value: unknown }) {
+  const parsedValue = parsePossibleJson(value);
+
+  if (parsedValue === null || parsedValue === undefined || parsedValue === "") {
+    return <p className="text-sm text-muted-foreground">Not provided</p>;
+  }
+
+  if (typeof parsedValue === "boolean") {
+    return <p className="text-sm text-foreground">{parsedValue ? "Yes" : "No"}</p>;
+  }
+
+  if (typeof parsedValue === "string" || typeof parsedValue === "number") {
+    return <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{String(parsedValue)}</p>;
+  }
+
+  if (Array.isArray(parsedValue)) {
+    if (parsedValue.length === 0) {
+      return <p className="text-sm text-muted-foreground">None provided</p>;
+    }
+
+    return (
+      <div className="space-y-3">
+        {parsedValue.map((item, index) => {
+          const parsedItem = parsePossibleJson(item);
+          const isObject = parsedItem !== null && typeof parsedItem === "object" && !Array.isArray(parsedItem);
+
+          return (
+            <div key={index} className="rounded-lg border border-border bg-muted/10 p-3">
+              <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                Item {index + 1}
+              </p>
+
+              {isObject ? (
+                <ObjectValue value={parsedItem as Record<string, unknown>} />
+              ) : (
+                <ReadableValue value={parsedItem} />
+              )}
+            </div>
+          );
+        })}
+      </div>
+    );
+  }
+
+  if (typeof parsedValue === "object") {
+    return <ObjectValue value={parsedValue as Record<string, unknown>} />;
+  }
+
+  return <p className="text-sm text-foreground">{String(parsedValue)}</p>;
+}
+
+function ObjectValue({ value }: { value: Record<string, unknown> }) {
+  const entries = Object.entries(value).filter(
+    ([, nestedValue]) => nestedValue !== null && nestedValue !== undefined && nestedValue !== "",
+  );
+
+  if (entries.length === 0) {
+    return <p className="text-sm text-muted-foreground">No information provided</p>;
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+      {entries.map(([key, nestedValue]) => {
+        const parsedNestedValue = parsePossibleJson(nestedValue);
+
+        const isComplex = parsedNestedValue !== null && typeof parsedNestedValue === "object";
+
+        return (
+          <div
+            key={key}
+            className={`min-w-0 rounded-lg border border-border bg-background p-3 ${isComplex ? "sm:col-span-2" : ""}`}
+          >
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{formatFieldLabel(key)}</p>
+
+            <div className="mt-1.5">
+              <ReadableValue value={parsedNestedValue} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function parsePossibleJson(value: unknown): unknown {
+  if (typeof value !== "string") {
+    return value;
+  }
+
+  const trimmed = value.trim();
+
+  if (!((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]")))) {
+    return value;
+  }
+
+  try {
+    return JSON.parse(trimmed);
+  } catch {
+    return value;
+  }
+}
+
+function formatSimpleValue(value: unknown): string {
+  const parsed = parsePossibleJson(value);
+
+  if (parsed === null || parsed === undefined || parsed === "") {
+    return "—";
+  }
+
+  if (typeof parsed === "boolean") {
+    return parsed ? "Yes" : "No";
+  }
+
+  if (Array.isArray(parsed)) {
+    return parsed.map((item) => formatSimpleValue(item)).join(", ");
+  }
+
+  if (typeof parsed === "object") {
+    return Object.entries(parsed as Record<string, unknown>)
+      .map(([key, nestedValue]) => `${formatFieldLabel(key)}: ${formatSimpleValue(nestedValue)}`)
+      .join(" • ");
+  }
+
+  return String(parsed);
+}
+
+function formatFieldLabel(key: string) {
+  const labels: Record<string, string> = {
+    vin: "VIN",
+    trade_vin: "Trade-In VIN",
+    stock_number: "Stock Number",
+    full_name: "Full Name",
+    preferred_contact_method: "Preferred Contact Method",
+    preferred_date: "Preferred Date",
+    preferred_time: "Preferred Time",
+    appointment_type: "Appointment Type",
+    vehicle_of_interest: "Vehicle of Interest",
+    selected_vehicle: "Selected Vehicle",
+    selected_vehicles: "Selected Vehicles",
+    selectedVehicles: "Selected Vehicles",
+    vehicle_preferences: "Vehicle Preferences",
+    customer_wish_list: "Customer Wish List",
+    customer_wishlist: "Customer Wish List",
+    customerWishList: "Customer Wish List",
+    wishlist: "Customer Wish List",
+    credit_band: "Credit Range",
+    desired_payment: "Desired Payment",
+    estimated_payoff: "Estimated Payoff",
+    year_make_model: "Year, Make and Model",
+    trade_year: "Trade-In Year",
+    trade_make: "Trade-In Make",
+    trade_model: "Trade-In Model",
+    trade_trim: "Trade-In Trim",
+    trade_mileage: "Trade-In Mileage",
+    trade_condition: "Trade-In Condition",
+    references: "References",
+    reference: "Reference",
+    current_address: "Current Address",
+    currentAddress: "Current Address",
+    mailing_address: "Mailing Address",
+    mailingAddress: "Mailing Address",
+    current_employer: "Current Employer",
+    current_employer_1: "Current Employer 1",
+    currentEmployer: "Current Employer",
+    currentEmployer1: "Current Employer 1",
+    employer_name: "Employer Name",
+    employer_phone: "Employer Phone",
+    employer_address: "Employer Address",
+    employment_length: "Length of Employment",
+    monthly_income: "Monthly Income",
+    annual_income: "Annual Income",
+    first_name: "First Name",
+    last_name: "Last Name",
+    postal_code: "Postal Code",
+    zip_code: "ZIP Code",
+    relationship: "Relationship",
+    phone_number: "Phone Number",
+  };
+
+  if (labels[key]) return labels[key];
+
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1 $2")
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
 }
 
 function ModalSection({
@@ -854,10 +899,8 @@ function ModalSection({
     <section>
       <div className="mb-3 flex items-center gap-2">
         <Icon className="size-4 text-primary" />
-
-        <h3 className="text-sm font-semibold text-foreground">{title}</h3>
+        <h3 className="text-sm font-semibold">{title}</h3>
       </div>
-
       {children}
     </section>
   );
@@ -867,14 +910,14 @@ function DetailGrid({ children }: { children: React.ReactNode }) {
   return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>;
 }
 
-function DetailItem({ label, value, type }: { label: string; value?: string | null; type?: "email" | "phone" }) {
-  const displayValue = value && value.trim() ? value.trim() : "Not provided";
+function SimpleDetailItem({ label, value, type }: { label: string; value?: string | null; type?: "email" | "phone" }) {
+  const hasValue = Boolean(value) && value !== "—" && value !== "Not provided";
 
-  let content: React.ReactNode = displayValue;
+  let content: React.ReactNode = value || "Not provided";
 
   if (value && type === "email") {
     content = (
-      <a href={`mailto:${value}`} className="break-words text-primary hover:underline">
+      <a href={`mailto:${value}`} className="text-primary hover:underline">
         {value}
       </a>
     );
@@ -882,112 +925,62 @@ function DetailItem({ label, value, type }: { label: string; value?: string | nu
 
   if (value && type === "phone") {
     content = (
-      <a href={`tel:${value}`} className="break-words text-primary hover:underline">
+      <a href={`tel:${value}`} className="text-primary hover:underline">
         {value}
       </a>
     );
   }
 
   return (
-    <div className="min-w-0 rounded-lg border border-border bg-background p-3">
+    <div className="rounded-lg border border-border p-3">
       <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-
-      <div className={`mt-1 break-words text-sm ${value ? "text-foreground" : "text-muted-foreground"}`}>{content}</div>
+      <div className={`mt-1 break-words text-sm ${hasValue ? "text-foreground" : "text-muted-foreground"}`}>
+        {content}
+      </div>
     </div>
   );
 }
 
-function formatFieldLabel(key: string) {
-  const specialLabels: Record<string, string> = {
-    vin: "VIN",
-    trade_vin: "Trade-In VIN",
-    stock_number: "Stock Number",
-    full_name: "Full Name",
-    preferred_contact_method: "Preferred Contact Method",
-    preferred_date: "Preferred Date",
-    preferred_time: "Preferred Time",
-    appointment_type: "Appointment Type",
-    vehicle_of_interest: "Vehicle of Interest",
-    selected_vehicle: "Selected Vehicle",
-    vehicle_preferences: "Vehicle Preferences",
-    credit_band: "Credit Range",
-    desired_payment: "Desired Payment",
-    estimated_payoff: "Estimated Payoff",
-    year_make_model: "Year, Make and Model",
-    trade_year: "Trade-In Year",
-    trade_make: "Trade-In Make",
-    trade_model: "Trade-In Model",
-    trade_trim: "Trade-In Trim",
-    trade_mileage: "Trade-In Mileage",
-    trade_condition: "Trade-In Condition",
-  };
-
-  if (specialLabels[key]) {
-    return specialLabels[key];
-  }
-
-  return key
-    .replace(/([a-z])([A-Z])/g, "$1 $2")
-    .replaceAll("_", " ")
-    .replaceAll("-", " ")
-    .replace(/\b\w/g, (character) => character.toUpperCase());
+function SectionHeader({ title, count, icon: Icon }: { title: string; count: number; icon: typeof Users }) {
+  return (
+    <div className="border-b border-border bg-muted/30 p-4">
+      <div className="flex items-center gap-3">
+        <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
+          <Icon className="size-5" />
+        </div>
+        <div>
+          <h2 className="font-semibold">{title}</h2>
+          <p className="text-xs text-muted-foreground">
+            {count} {count === 1 ? "account" : "accounts"}
+          </p>
+        </div>
+      </div>
+    </div>
+  );
 }
 
-function formatDetailValue(value: unknown): string {
-  if (value === null || value === undefined || value === "") {
-    return "Not provided";
-  }
-
-  if (typeof value === "boolean") {
-    return value ? "Yes" : "No";
-  }
-
-  if (Array.isArray(value)) {
-    return value.map((item) => formatDetailValue(item)).join(", ");
-  }
-
-  if (typeof value === "object") {
-    return Object.entries(value as Record<string, unknown>)
-      .map(([key, nestedValue]) => `${formatFieldLabel(key)}: ${formatDetailValue(nestedValue)}`)
-      .join(" • ");
-  }
-
-  return String(value);
+function EmptyAccounts({ icon: Icon, title, description }: { icon: typeof Users; title: string; description: string }) {
+  return (
+    <div className="p-8 text-center">
+      <Icon className="mx-auto size-9 text-muted-foreground/60" />
+      <p className="mt-3 font-medium">{title}</p>
+      <p className="mt-1 text-sm text-muted-foreground">{description}</p>
+    </div>
+  );
 }
 
 function LoadingState() {
   return (
-    <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-[minmax(250px,0.7fr)_minmax(0,2.3fr)]">
-      <div className="overflow-hidden rounded-xl border border-border bg-background">
-        <div className="h-20 animate-pulse border-b border-border bg-muted/60" />
-
-        <div className="space-y-4 p-4">
-          {Array.from({ length: 3 }).map((_, index) => (
-            <div key={index} className="space-y-3">
-              <div className="flex items-center gap-3">
-                <div className="size-11 animate-pulse rounded-full bg-muted" />
-
-                <div className="flex-1 space-y-2">
-                  <div className="h-4 w-2/3 animate-pulse rounded bg-muted" />
-                  <div className="h-3 w-1/2 animate-pulse rounded bg-muted" />
-                </div>
-              </div>
-
-              <div className="h-10 animate-pulse rounded bg-muted/70" />
-            </div>
-          ))}
+    <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(250px,0.7fr)_minmax(0,2.3fr)]">
+      {[3, 6].map((count) => (
+        <div key={count} className="rounded-xl border border-border p-4">
+          <div className="space-y-3">
+            {Array.from({ length: count }).map((_, index) => (
+              <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
+            ))}
+          </div>
         </div>
-      </div>
-
-      <div className="overflow-hidden rounded-xl border border-border bg-background">
-        <div className="h-20 animate-pulse border-b border-border bg-muted/60" />
-
-        <div className="space-y-3 p-4">
-          {Array.from({ length: 6 }).map((_, index) => (
-            <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
-          ))}
-        </div>
-      </div>
+      ))}
     </div>
   );
 }
@@ -1005,29 +998,26 @@ function AccountAvatar({
   admin?: boolean;
   small?: boolean;
 }) {
-  const sizeClassName = small ? "size-10" : "size-11";
+  const size = small ? "size-10" : "size-11";
 
   if (avatarUrl) {
     return (
       <img
         src={avatarUrl}
         alt={name}
-        className={`${sizeClassName} shrink-0 rounded-full border border-border object-cover`}
+        className={`${size} shrink-0 rounded-full border border-border object-cover`}
         loading="lazy"
       />
     );
   }
 
-  const initial = (name.slice(0, 1) || fallbackLetter).toUpperCase();
-
   return (
     <div
-      className={`flex ${sizeClassName} shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
+      className={`flex ${size} shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
         admin ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
       }`}
-      aria-hidden="true"
     >
-      {initial}
+      {(name.slice(0, 1) || fallbackLetter).toUpperCase()}
     </div>
   );
 }
@@ -1043,11 +1033,8 @@ function AccountDetail({
 }) {
   return (
     <div className="flex min-w-0 items-center gap-2 text-xs text-muted-foreground">
-      <Icon className="size-3.5 shrink-0" aria-hidden="true" />
-
-      <span className="truncate" title={value || undefined}>
-        {value || fallback}
-      </span>
+      <Icon className="size-3.5 shrink-0" />
+      <span className="truncate">{value || fallback}</span>
     </div>
   );
 }
