@@ -198,8 +198,8 @@ function AdminDashboard() {
                   <thead className="bg-muted/50 text-muted-foreground">
                     <tr>
                       <th className="whitespace-nowrap px-4 py-3 font-medium sm:px-5">Customer</th>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium">Type</th>
-                      <th className="whitespace-nowrap px-4 py-3 font-medium">Status</th>
+                      <th className="whitespace-nowrap px-4 py-3 font-medium">Phone</th>
+                      <th className="whitespace-nowrap px-4 py-3 font-medium">Role</th>
                       <th className="whitespace-nowrap px-4 py-3 font-medium">Date</th>
                     </tr>
                   </thead>
@@ -209,20 +209,19 @@ function AdminDashboard() {
                       <tr key={lead.id} className="border-t border-border">
                         <td className="px-4 py-3 sm:px-5">
                           <div className="min-w-[180px]">
-                            <p className="font-medium text-foreground">
-                              {lead.full_name || lead.name || "Unnamed customer"}
-                            </p>
+                            <p className="font-medium text-foreground">{lead.name || "Unnamed customer"}</p>
                             <p className="truncate text-xs text-muted-foreground">{lead.email || "No email"}</p>
                           </div>
                         </td>
 
-                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{lead.type || "Inquiry"}</td>
+                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{lead.phone || "—"}</td>
 
                         <td className="whitespace-nowrap px-4 py-3">
-                          <Badge variant={lead.status === "completed" ? "default" : "secondary"} className="capitalize">
-                            {lead.status || "new"}
+                          <Badge variant={lead.role === "owner" ? "default" : "secondary"} className="capitalize">
+                            {lead.role || "customer"}
                           </Badge>
                         </td>
+
 
                         <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
                           {lead.created_at ? formatDate(lead.created_at) : "—"}
