@@ -5,9 +5,9 @@ import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
-import { listInventory } from "@/lib/admin-inventory.functions";
-import { listLeads } from "@/lib/admin-leads.functions";
-import { listBlogPosts } from "@/lib/admin-blog.functions";
+import { listLegacyInventoryRows } from "@/lib/legacy-inventory.functions";
+import { listCustomers } from "@/lib/admin-customers.functions";
+import { listLegacyPosts } from "@/lib/legacy-blog.functions";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/")({
