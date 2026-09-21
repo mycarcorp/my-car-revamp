@@ -209,7 +209,7 @@ function AdminDashboard() {
                       <tr key={lead.id} className="border-t border-border">
                         <td className="px-4 py-3 sm:px-5">
                           <div className="min-w-[180px]">
-                            <p className="font-medium text-foreground">{lead.name || "Unnamed customer"}</p>
+                            <p className="font-medium text-foreground">{lead.full_name || "Unnamed customer"}</p>
                             <p className="truncate text-xs text-muted-foreground">{lead.email || "No email"}</p>
                           </div>
                         </td>
