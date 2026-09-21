@@ -444,9 +444,6 @@ function LeadsSection({ accessToken }: { accessToken: string }) {
       <div className="flex flex-col gap-4 border-b border-border bg-muted/30 p-4 lg:flex-row lg:items-center lg:justify-between">
         <div>
           <h2 className="text-base font-semibold text-foreground">Opportunities</h2>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Everyone who submitted a form: financing, sell or trade, appointments and inquiries.
-          </p>
         </div>
 
         <div className="relative w-full lg:max-w-sm">
