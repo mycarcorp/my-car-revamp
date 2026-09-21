@@ -1,14 +1,14 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, BookOpenText, CarFront, Users } from "lucide-react";
+import { ArrowRight, CheckCircle2, Clock3, Eye, FileText, ShieldCheck, Sparkles, Users } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
-import { supabase } from "@/integrations/supabase/app-client";
 import { useAuth } from "@/hooks/useAuth";
-import { formatDate, formatUsd } from "@/lib/format";
-import { listLegacyPosts } from "@/lib/legacy-blog.functions";
-import { listLegacyInventoryRows } from "@/lib/legacy-inventory.functions";
+import { listInventory } from "@/lib/admin-inventory.functions";
+import { listLeads } from "@/lib/admin-leads.functions";
+import { listBlogPosts } from "@/lib/admin-blog.functions";
+import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/")({
   component: AdminDashboard,
@@ -18,219 +18,341 @@ function AdminDashboard() {
   const { session } = useAuth();
   const accessToken = session?.access_token ?? "";
 
-  const { data: vehicles = [], isLoading: vehiclesLoading } = useQuery({
-    queryKey: ["admin", "dashboard", "vehicles"],
+  const { data: inventoryData, isLoading: inventoryLoading } = useQuery({
+    queryKey: ["admin", "inventory", "dashboard"],
     enabled: Boolean(accessToken),
-    refetchInterval: 5000,
-    refetchIntervalInBackground: true,
-    queryFn: async () => {
-      return listLegacyInventoryRows({ data: { accessToken } });
-    },
+    queryFn: () =>
+      listInventory({
+        data: {
+          accessToken,
+          limit: 200,
+          offset: 0,
+        },
+      }),
   });
 
-  const { data: leads = [], isLoading: leadsLoading } = useQuery({
-    queryKey: ["admin", "dashboard", "leads"],
-    queryFn: async () => {
-      const { data, error } = await supabase
-        .from("leads")
-        .select("id, full_name, email, created_at, status")
-        .order("created_at", { ascending: false })
-        .limit(8);
-      if (error) throw error;
-      return data ?? [];
-    },
-  });
-
-  const { data: blogPosts = [], isLoading: blogLoading } = useQuery({
-    queryKey: ["admin", "dashboard", "blogPosts", accessToken],
+  const { data: leadsData, isLoading: leadsLoading } = useQuery({
+    queryKey: ["admin", "leads", "dashboard"],
     enabled: Boolean(accessToken),
-    queryFn: () => listLegacyPosts({ data: { accessToken } }),
+    queryFn: () =>
+      listLeads({
+        data: {
+          accessToken,
+          limit: 8,
+        },
+      }),
   });
 
-  const activeVehicles = vehicles.filter((vehicle) => vehicle.status !== "sold" && vehicle.status !== "draft").length;
+  const { data: blogPosts, isLoading: blogLoading } = useQuery({
+    queryKey: ["admin", "blog", "dashboard"],
+    enabled: Boolean(accessToken),
+    queryFn: () =>
+      listBlogPosts({
+        data: {
+          accessToken,
+        },
+      }),
+  });
+
+  const vehicles = inventoryData?.vehicles ?? [];
+  const leads = leadsData?.leads ?? [];
+  const posts = blogPosts ?? [];
+
+  const activeVehicles = vehicles.filter((vehicle) => vehicle.status === "active").length;
+
   const soldVehicles = vehicles.filter((vehicle) => vehicle.status === "sold").length;
-  const publishedPosts = blogPosts.filter((post) => post.status === "published").length;
-  const draftPosts = blogPosts.filter((post) => post.status !== "published").length;
+
+  const publishedPosts = posts.filter((post) => post.status === "published").length;
+
+  const draftPosts = posts.filter((post) => post.status === "draft").length;
+
   const newThisWeek = leads.filter((lead) => {
-    const createdAt = new Date(lead.created_at).getTime();
-    const diffDays = (Date.now() - createdAt) / (1000 * 60 * 60 * 24);
-    return diffDays <= 7;
+    if (!lead.created_at) return false;
+
+    const createdAt = new Date(lead.created_at);
+    const sevenDaysAgo = new Date();
+
+    sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
+
+    return createdAt >= sevenDaysAgo;
   }).length;
 
   const stats = [
-    { label: "Active Cars", value: String(activeVehicles), accent: "text-emerald-600" },
-    { label: "Sold", value: String(soldVehicles), accent: "text-slate-600" },
-    { label: "Blog Posts", value: String(publishedPosts), accent: "text-blue-600" },
-    { label: "Drafts", value: String(draftPosts), accent: "text-amber-600" },
-    { label: "Customers", value: String(leads.length), accent: "text-violet-600" },
-    { label: "New This Week", value: String(newThisWeek), accent: "text-rose-600" },
+    {
+      label: "Active Cars",
+      value: activeVehicles,
+      icon: CheckCircle2,
+      iconClassName: "text-emerald-600",
+      iconBackgroundClassName: "bg-emerald-100",
+      to: "/admin/inventory" as const,
+      actionLabel: "View inventory",
+    },
+    {
+      label: "Sold",
+      value: soldVehicles,
+      icon: ShieldCheck,
+      iconClassName: "text-blue-600",
+      iconBackgroundClassName: "bg-blue-100",
+      to: "/admin/inventory" as const,
+      actionLabel: "View sold vehicles",
+    },
+    {
+      label: "Blog Posts",
+      value: publishedPosts,
+      icon: FileText,
+      iconClassName: "text-violet-600",
+      iconBackgroundClassName: "bg-violet-100",
+      to: "/admin/blog" as const,
+      actionLabel: "View blog posts",
+    },
+    {
+      label: "Drafts",
+      value: draftPosts,
+      icon: Clock3,
+      iconClassName: "text-amber-600",
+      iconBackgroundClassName: "bg-amber-100",
+      to: "/admin/blog" as const,
+      actionLabel: "View blog drafts",
+    },
+    {
+      label: "Customers",
+      value: leads.length,
+      icon: Users,
+      iconClassName: "text-cyan-600",
+      iconBackgroundClassName: "bg-cyan-100",
+      to: "/admin/customers" as const,
+      actionLabel: "View customers",
+    },
+    {
+      label: "New This Week",
+      value: newThisWeek,
+      icon: Sparkles,
+      iconClassName: "text-pink-600",
+      iconBackgroundClassName: "bg-pink-100",
+      to: "/admin/customers" as const,
+      actionLabel: "View new customers",
+    },
   ];
 
-  const recentVehicles = vehicles.slice(0, 5);
-  const recentBlogPosts = blogPosts.slice(0, 5);
+  const isLoading = inventoryLoading || leadsLoading || blogLoading;
 
   return (
     <div className="w-full">
-      <AdminPageHeader
-        title="Dashboard"
-        actions={
-          <>
-            <Button asChild size="sm">
-              <Link to="/admin/inventory">Add car</Link>
-            </Button>
+      <AdminPageHeader title="Dashboard" />
+
+      <main className="space-y-6 p-4 sm:p-6">
+        <section>
+          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-6">
+            {stats.map((stat) => {
+              const Icon = stat.icon;
+
+              return (
+                <Link
+                  key={stat.label}
+                  to={stat.to}
+                  aria-label={stat.actionLabel}
+                  className="group min-w-0 rounded-xl border border-border bg-background p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:translate-y-0"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <div className="min-w-0">
+                      <p className="truncate text-sm font-medium text-muted-foreground">{stat.label}</p>
+
+                      <p className="mt-2 text-2xl font-semibold text-foreground">{isLoading ? "—" : stat.value}</p>
+                    </div>
+
+                    <div
+                      className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${stat.iconBackgroundClassName}`}
+                    >
+                      <Icon className={`size-5 ${stat.iconClassName}`} aria-hidden="true" />
+                    </div>
+                  </div>
+
+                  <div className="mt-4 flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors group-hover:text-primary">
+                    <span>{stat.actionLabel}</span>
+                    <ArrowRight
+                      className="size-3.5 transition-transform group-hover:translate-x-1"
+                      aria-hidden="true"
+                    />
+                  </div>
+                </Link>
+              );
+            })}
+          </div>
+        </section>
+
+        <section className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
+          <div className="min-w-0 overflow-hidden rounded-xl border border-border bg-background">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+              <div>
+                <h2 className="font-semibold text-foreground">Recent leads</h2>
+                <p className="mt-1 text-sm text-muted-foreground">Your latest customer inquiries.</p>
+              </div>
+
+              <Button asChild variant="outline" size="sm">
+                <Link to="/admin/customers">
+                  View all
+                  <ArrowRight className="ml-2 size-4" />
+                </Link>
+              </Button>
+            </div>
+
+            {leadsLoading ? (
+              <div className="space-y-3 p-4 sm:p-5">
+                {Array.from({ length: 5 }).map((_, index) => (
+                  <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
+                ))}
+              </div>
+            ) : leads.length === 0 ? (
+              <div className="p-8 text-center sm:p-10">
+                <Users className="mx-auto size-8 text-muted-foreground" />
+                <p className="mt-3 font-medium text-foreground">No recent leads</p>
+                <p className="mt-1 text-sm text-muted-foreground">New customer inquiries will appear here.</p>
+              </div>
+            ) : (
+              <div className="overflow-x-auto">
+                <table className="min-w-full text-left text-sm">
+                  <thead className="bg-muted/50 text-muted-foreground">
+                    <tr>
+                      <th className="whitespace-nowrap px-4 py-3 font-medium sm:px-5">Customer</th>
+                      <th className="whitespace-nowrap px-4 py-3 font-medium">Type</th>
+                      <th className="whitespace-nowrap px-4 py-3 font-medium">Status</th>
+                      <th className="whitespace-nowrap px-4 py-3 font-medium">Date</th>
+                    </tr>
+                  </thead>
+
+                  <tbody>
+                    {leads.map((lead) => (
+                      <tr key={lead.id} className="border-t border-border">
+                        <td className="px-4 py-3 sm:px-5">
+                          <div className="min-w-[180px]">
+                            <p className="font-medium text-foreground">
+                              {lead.full_name || lead.name || "Unnamed customer"}
+                            </p>
+                            <p className="truncate text-xs text-muted-foreground">{lead.email || "No email"}</p>
+                          </div>
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">{lead.type || "Inquiry"}</td>
+
+                        <td className="whitespace-nowrap px-4 py-3">
+                          <Badge variant={lead.status === "completed" ? "default" : "secondary"} className="capitalize">
+                            {lead.status || "new"}
+                          </Badge>
+                        </td>
+
+                        <td className="whitespace-nowrap px-4 py-3 text-muted-foreground">
+                          {lead.created_at ? formatDate(lead.created_at) : "—"}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+
+          <div className="min-w-0 rounded-xl border border-border bg-background">
+            <div className="border-b border-border px-4 py-4 sm:px-5">
+              <h2 className="font-semibold text-foreground">Quick actions</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Common administration tasks.</p>
+            </div>
+
+            <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-1 sm:p-5">
+              <Button asChild className="h-auto justify-between gap-4 px-4 py-3">
+                <Link to="/admin/inventory">
+                  <span className="flex items-center gap-3">
+                    <CheckCircle2 className="size-5" />
+                    Manage inventory
+                  </span>
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+
+              <Button asChild variant="outline" className="h-auto justify-between gap-4 px-4 py-3">
+                <Link to="/admin/blog">
+                  <span className="flex items-center gap-3">
+                    <FileText className="size-5" />
+                    Manage blog
+                  </span>
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+
+              <Button asChild variant="outline" className="h-auto justify-between gap-4 px-4 py-3">
+                <Link to="/admin/customers">
+                  <span className="flex items-center gap-3">
+                    <Users className="size-5" />
+                    View customers
+                  </span>
+                  <ArrowRight className="size-4" />
+                </Link>
+              </Button>
+            </div>
+          </div>
+        </section>
+
+        <section className="overflow-hidden rounded-xl border border-border bg-background">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+            <div>
+              <h2 className="font-semibold text-foreground">Recent blog posts</h2>
+              <p className="mt-1 text-sm text-muted-foreground">Latest articles published or saved as drafts.</p>
+            </div>
+
             <Button asChild variant="outline" size="sm">
-              <Link to="/admin/blog/new">New post</Link>
-            </Button>
-          </>
-        }
-      />
-
-      <div className="p-6">
-        <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-6">
-        {stats.map((stat) => (
-          <div key={stat.label} className="rounded-xl border border-border bg-background p-4 shadow-sm">
-            <div className="flex items-center justify-between gap-3">
-              <p className="text-sm text-muted-foreground">{stat.label}</p>
-              <div className={`rounded-full bg-muted p-2 ${stat.accent}`}>
-                {stat.label.includes("Car") ? (
-                  <CarFront className="size-4" />
-                ) : stat.label.includes("Blog") || stat.label.includes("Draft") ? (
-                  <BookOpenText className="size-4" />
-                ) : (
-                  <Users className="size-4" />
-                )}
-              </div>
-            </div>
-            <p className="mt-4 text-3xl font-bold text-foreground">{stat.value}</p>
-          </div>
-        ))}
-      </div>
-
-        <div className="mt-8 grid gap-6">
-        <section className="rounded-xl border border-border bg-background p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Recent Car Listings</h2>
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/admin/inventory" className="inline-flex items-center gap-1">
-                View all <ArrowRight className="size-4" />
+              <Link to="/admin/blog">
+                View all
+                <ArrowRight className="ml-2 size-4" />
               </Link>
             </Button>
           </div>
 
-          {vehiclesLoading ? (
-            <div className="mt-4 space-y-3">
-              {Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
+          {blogLoading ? (
+            <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 sm:p-5">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="h-32 animate-pulse rounded-lg bg-muted" />
               ))}
             </div>
-          ) : recentVehicles.length === 0 ? (
-            <p className="mt-4 text-sm text-muted-foreground">No listings have been added yet.</p>
+          ) : posts.length === 0 ? (
+            <div className="p-8 text-center sm:p-10">
+              <FileText className="mx-auto size-8 text-muted-foreground" />
+              <p className="mt-3 font-medium text-foreground">No blog posts yet</p>
+              <p className="mt-1 text-sm text-muted-foreground">AutoSEO and manually created posts will appear here.</p>
+            </div>
           ) : (
-            <div className="mt-4 overflow-hidden rounded-lg border border-border">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="bg-muted/50 text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3 font-medium">Vehicle</th>
-                      <th className="px-4 py-3 font-medium">Price</th>
-                      <th className="px-4 py-3 font-medium">Miles</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentVehicles.map((vehicle) => (
-                      <tr key={vehicle.id} className="border-t border-border bg-background">
-                        <td className="px-4 py-3 align-top">
-                          <div className="font-medium text-foreground">
-                            {vehicle.year} {vehicle.make} {vehicle.model}
-                          </div>
-                          <div className="text-xs text-muted-foreground">
-                            {vehicle.trim ?? "No trim listed"}
-                          </div>
-                        </td>
-                        <td className="px-4 py-3 align-top font-medium text-foreground">
-                          {formatUsd(vehicle.price_cents)}
-                        </td>
-                        <td className="px-4 py-3 align-top text-muted-foreground">
-                          {vehicle.mileage ? `${vehicle.mileage.toLocaleString()} mi` : "—"}
-                        </td>
-                        <td className="px-4 py-3 align-top">
-                          <Badge
-                            variant={vehicle.status === "sold" ? "secondary" : "default"}
-                            className="capitalize"
-                          >
-                            {vehicle.status}
-                          </Badge>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+            <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 sm:p-5">
+              {posts.slice(0, 6).map((post) => (
+                <Link
+                  key={post.id}
+                  to="/admin/blog"
+                  className="group min-w-0 rounded-lg border border-border p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                >
+                  <div className="flex items-start justify-between gap-3">
+                    <Badge variant={post.status === "published" ? "default" : "secondary"} className="capitalize">
+                      {post.status || "draft"}
+                    </Badge>
+
+                    <Eye className="size-4 shrink-0 text-muted-foreground transition-colors group-hover:text-primary" />
+                  </div>
+
+                  <h3 className="mt-3 line-clamp-2 font-medium text-foreground">{post.title || "Untitled post"}</h3>
+
+                  <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">
+                    {post.meta_description || "No description available."}
+                  </p>
+
+                  <p className="mt-3 text-xs text-muted-foreground">
+                    {post.published_at
+                      ? formatDate(post.published_at)
+                      : post.created_at
+                        ? formatDate(post.created_at)
+                        : "No date"}
+                  </p>
+                </Link>
+              ))}
             </div>
           )}
         </section>
-
-        <section className="rounded-xl border border-border bg-background p-5 shadow-sm">
-          <div className="flex items-center justify-between gap-3">
-            <h2 className="text-lg font-semibold">Recent Blog Posts</h2>
-            <Button asChild variant="ghost" size="sm">
-              <Link to="/admin/blog" className="inline-flex items-center gap-1">
-                View all <ArrowRight className="size-4" />
-              </Link>
-            </Button>
-          </div>
-
-          {blogLoading || leadsLoading ? (
-            <div className="mt-4 space-y-3">
-              {Array.from({ length: 5 }).map((_, index) => (
-                <div key={index} className="h-14 animate-pulse rounded-lg bg-muted" />
-              ))}
-            </div>
-          ) : recentBlogPosts.length === 0 ? (
-            <p className="mt-4 text-sm text-muted-foreground">No blog posts have been created yet.</p>
-          ) : (
-            <div className="mt-4 overflow-hidden rounded-lg border border-border">
-              <div className="overflow-x-auto">
-                <table className="min-w-full text-left text-sm">
-                  <thead className="bg-muted/50 text-muted-foreground">
-                    <tr>
-                      <th className="px-4 py-3 font-medium">Title</th>
-                      <th className="px-4 py-3 font-medium">Category</th>
-                      <th className="px-4 py-3 font-medium">Status</th>
-                      <th className="px-4 py-3 font-medium">Date</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {recentBlogPosts.map((post) => (
-                      <tr key={post.id} className="border-t border-border bg-background">
-                        <td className="px-4 py-3 align-top font-medium text-foreground">
-                          {post.title}
-                        </td>
-                        <td className="px-4 py-3 align-top text-muted-foreground">
-                          {post.category || "—"}
-                        </td>
-                        <td className="px-4 py-3 align-top">
-                          <Badge
-                            variant={post.status === "published" ? "default" : "secondary"}
-                            className="capitalize"
-                          >
-                            {post.status}
-                          </Badge>
-                        </td>
-                        <td className="px-4 py-3 align-top text-muted-foreground">
-                          {post.published_at ? formatDate(post.published_at) : "—"}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </div>
-          )}
-        </section>
-        </div>
-      </div>
+      </main>
     </div>
   );
 }
