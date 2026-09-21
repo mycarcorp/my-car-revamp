@@ -7,6 +7,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
 import { listCustomers } from "@/lib/admin-customers.functions";
+import { listLeads, type AdminLeadRow } from "@/lib/admin-leads.functions";
 import { formatDate } from "@/lib/format";
 
 export const Route = createFileRoute("/admin/customers")({
@@ -114,6 +115,8 @@ function AdminCustomers() {
             </Badge>
           </div>
         </div>
+
+        <LeadsSection accessToken={accessToken} />
 
         {isLoading ? (
           <LoadingState />
@@ -368,6 +371,191 @@ function AdminCustomers() {
         )}
       </main>
     </div>
+  );
+}
+
+const LEAD_TYPES = [
+  { key: "all", label: "All opportunities" },
+  { key: "finance", label: "Financing" },
+  { key: "trade", label: "Sell / Trade" },
+  { key: "appointment", label: "Appointments" },
+  { key: "availability", label: "Vehicle inquiries" },
+  { key: "contact", label: "Contact" },
+] as const;
+
+const LEAD_LABELS: Record<string, string> = {
+  finance: "Financing",
+  trade: "Sell / Trade",
+  appointment: "Appointment",
+  availability: "Vehicle inquiry",
+  contact: "Contact",
+};
+
+function leadSummary(lead: AdminLeadRow): string {
+  const d = lead.details ?? {};
+  const pick = (key: string) => {
+    const value = d[key];
+    return value == null || value === "" ? null : String(value);
+  };
+
+  if (lead.lead_type === "appointment") {
+    const parts = [pick("appointment_type"), pick("preferred_date"), pick("preferred_time")].filter(Boolean);
+    return parts.join(" · ") || "Appointment request";
+  }
+  if (lead.lead_type === "finance") {
+    const parts = [pick("vehicle_of_interest"), pick("credit_band"), pick("desired_payment")].filter(Boolean);
+    return parts.join(" · ") || "Financing application";
+  }
+  if (lead.lead_type === "trade") {
+    const parts = [pick("intent"), pick("year_make_model"), pick("vin")].filter(Boolean);
+    return parts.join(" · ") || "Sell / trade request";
+  }
+  if (lead.lead_type === "availability") {
+    return pick("vehicle_of_interest") ?? pick("year_make_model") ?? "Vehicle availability check";
+  }
+  return lead.message?.slice(0, 120) || "Website message";
+}
+
+function LeadsSection({ accessToken }: { accessToken: string }) {
+  const [type, setType] = useState<string>("all");
+  const [search, setSearch] = useState("");
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["admin", "leads", "customers-page"],
+    enabled: Boolean(accessToken),
+    queryFn: () => listLeads({ data: { accessToken, limit: 1000 } }),
+  });
+
+  const leads = data ?? [];
+
+  const filtered = useMemo(() => {
+    const needle = search.trim().toLowerCase();
+    return leads.filter((lead) => {
+      if (type !== "all" && lead.lead_type !== type) return false;
+      if (!needle) return true;
+      const haystack = [lead.full_name, lead.email, lead.phone, lead.message, leadSummary(lead)]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase();
+      return haystack.includes(needle);
+    });
+  }, [leads, type, search]);
+
+  const countFor = (key: string) => (key === "all" ? leads.length : leads.filter((l) => l.lead_type === key).length);
+
+  return (
+    <section className="mb-6 overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+      <div className="flex flex-col gap-4 border-b border-border bg-muted/30 p-4 lg:flex-row lg:items-center lg:justify-between">
+        <div>
+          <h2 className="text-base font-semibold text-foreground">Opportunities</h2>
+          <p className="mt-1 text-sm text-muted-foreground">
+            Everyone who submitted a form: financing, sell or trade, appointments and inquiries.
+          </p>
+        </div>
+
+        <div className="relative w-full lg:max-w-sm">
+          <Search
+            className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground"
+            aria-hidden="true"
+          />
+          <Input
+            type="search"
+            className="pl-9"
+            placeholder="Search leads"
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            aria-label="Search opportunities"
+          />
+        </div>
+      </div>
+
+      <div className="flex flex-wrap gap-2 border-b border-border p-4">
+        {LEAD_TYPES.map((item) => (
+          <button
+            key={item.key}
+            type="button"
+            onClick={() => setType(item.key)}
+            aria-pressed={type === item.key}
+            className={`rounded-full border px-3 py-1.5 text-xs font-medium transition-colors ${
+              type === item.key
+                ? "border-primary bg-primary text-primary-foreground"
+                : "border-border bg-background text-muted-foreground hover:border-primary/40 hover:text-foreground"
+            }`}
+          >
+            {item.label} ({isLoading ? "…" : countFor(item.key)})
+          </button>
+        ))}
+      </div>
+
+      {isLoading ? (
+        <div className="space-y-3 p-4">
+          {Array.from({ length: 4 }).map((_, index) => (
+            <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
+          ))}
+        </div>
+      ) : error ? (
+        <div role="alert" className="p-6">
+          <p className="font-medium text-destructive">Couldn&apos;t load opportunities</p>
+          <p className="mt-1 text-sm text-muted-foreground">{(error as Error).message}</p>
+        </div>
+      ) : filtered.length === 0 ? (
+        <div className="p-10 text-center">
+          <Users className="mx-auto size-8 text-muted-foreground/60" />
+          <p className="mt-3 font-medium text-foreground">No submissions here yet</p>
+          <p className="mt-1 text-sm text-muted-foreground">New form submissions appear in this list automatically.</p>
+        </div>
+      ) : (
+        <div className="overflow-x-auto">
+          <table className="min-w-full text-left text-sm">
+            <thead className="bg-muted/40 text-muted-foreground">
+              <tr>
+                <th className="whitespace-nowrap px-4 py-3 font-medium">Customer</th>
+                <th className="whitespace-nowrap px-4 py-3 font-medium">Request</th>
+                <th className="whitespace-nowrap px-4 py-3 font-medium">Details</th>
+                <th className="whitespace-nowrap px-4 py-3 font-medium">Status</th>
+                <th className="whitespace-nowrap px-4 py-3 font-medium">Submitted</th>
+              </tr>
+            </thead>
+
+            <tbody>
+              {filtered.map((lead) => (
+                <tr key={lead.id} className="border-t border-border transition-colors hover:bg-muted/30">
+                  <td className="px-4 py-3 align-top">
+                    <div className="min-w-[190px]">
+                      <p className="font-medium text-foreground">{lead.full_name || "Unnamed customer"}</p>
+                      <p className="truncate text-xs text-muted-foreground">{lead.email || "No email"}</p>
+                      <p className="text-xs text-muted-foreground">{lead.phone || "No phone"}</p>
+                    </div>
+                  </td>
+
+                  <td className="whitespace-nowrap px-4 py-3 align-top">
+                    <Badge variant="secondary" className="capitalize">
+                      {LEAD_LABELS[lead.lead_type] ?? lead.lead_type}
+                    </Badge>
+                  </td>
+
+                  <td className="max-w-[340px] px-4 py-3 align-top text-muted-foreground">
+                    <span className="block truncate" title={leadSummary(lead)}>
+                      {leadSummary(lead)}
+                    </span>
+                  </td>
+
+                  <td className="whitespace-nowrap px-4 py-3 align-top">
+                    <Badge variant={lead.status === "won" ? "default" : "outline"} className="capitalize">
+                      {lead.status || "new"}
+                    </Badge>
+                  </td>
+
+                  <td className="whitespace-nowrap px-4 py-3 align-top text-muted-foreground">
+                    {lead.created_at ? formatDate(lead.created_at) : "—"}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+    </section>
   );
 }
 
