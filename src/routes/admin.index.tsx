@@ -308,7 +308,6 @@ function AdminDashboard() {
           <div className="min-w-0 rounded-xl border border-border bg-background">
             <div className="border-b border-border px-4 py-4 sm:px-5">
               <h2 className="font-semibold text-foreground">Quick actions</h2>
-              <p className="mt-1 text-sm text-muted-foreground">Common administration tasks.</p>
             </div>
 
             <div className="grid gap-3 p-4 sm:grid-cols-2 xl:grid-cols-1 sm:p-5">
