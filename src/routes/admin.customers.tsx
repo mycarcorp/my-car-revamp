@@ -132,7 +132,6 @@ function AdminCustomers() {
           >
             <Users className="size-4" />
             Customers
-            <Badge variant={pageTab === "customers" ? "default" : "secondary"}>{totalCustomers}</Badge>
           </button>
 
           <button
@@ -146,7 +145,6 @@ function AdminCustomers() {
           >
             <ShieldCheck className="size-4" />
             Admins
-            <Badge variant={pageTab === "admins" ? "default" : "secondary"}>{totalAdministrators}</Badge>
           </button>
         </div>
 
