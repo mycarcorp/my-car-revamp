@@ -50,7 +50,7 @@ function AdminDashboard() {
 
   const draftPosts = posts.filter((post) => post.status === "draft").length;
 
-  const newThisWeek = leads.filter((lead) => {
+  const newThisWeek = (customers ?? []).filter((lead) => {
     if (!lead.created_at) return false;
 
     const createdAt = new Date(lead.created_at);
