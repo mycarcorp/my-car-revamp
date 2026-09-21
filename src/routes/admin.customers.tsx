@@ -3,6 +3,7 @@ import { useQuery } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import {
   CalendarDays,
+  Check,
   ChevronRight,
   ClipboardList,
   Mail,
@@ -42,7 +43,7 @@ function AdminCustomers() {
   const accessToken = session?.access_token ?? "";
 
   const [pageTab, setPageTab] = useState<PageTab>("customers");
-  const [accountSearch, setAccountSearch] = useState("");
+  const [adminSearch, setAdminSearch] = useState("");
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin", "customers"],
@@ -55,49 +56,25 @@ function AdminCustomers() {
 
   const accounts = (data ?? []) as AccountProfile[];
 
-  const customerAccounts = useMemo(() => {
-    const needle = accountSearch.trim().toLowerCase();
-
-    return accounts.filter((account) => {
-      const roles = account.roles ?? [];
-
-      const hasCustomerRole = roles.some((role) => role.trim().toLowerCase() === "customer");
-
-      if (!hasCustomerRole) return false;
-      if (!needle) return true;
-
-      return [
-        account.full_name,
-        account.email,
-        account.phone,
-        account.legacy_user_id,
-        roles.join(" "),
-        account.created_at ? formatLongDate(account.created_at) : "",
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(needle);
-    });
-  }, [accounts, accountSearch]);
+  const customerAccounts = useMemo(
+    () => accounts.filter((account) => (account.roles ?? []).some((role) => role.trim().toLowerCase() === "customer")),
+    [accounts],
+  );
 
   const administrators = useMemo(() => {
-    const needle = accountSearch.trim().toLowerCase();
+    const needle = adminSearch.trim().toLowerCase();
 
     return accounts.filter((account) => {
-      const roles = account.roles ?? [];
+      const isAdmin = (account.roles ?? []).some((role) => role.trim().toLowerCase().includes("admin"));
 
-      const hasAdminRole = roles.some((role) => role.trim().toLowerCase().includes("admin"));
-
-      if (!hasAdminRole) return false;
+      if (!isAdmin) return false;
       if (!needle) return true;
 
       return [
         account.full_name,
         account.email,
         account.phone,
-        account.legacy_user_id,
-        roles.join(" "),
+        account.roles.join(" "),
         account.created_at ? formatLongDate(account.created_at) : "",
       ]
         .filter(Boolean)
@@ -105,15 +82,7 @@ function AdminCustomers() {
         .toLowerCase()
         .includes(needle);
     });
-  }, [accounts, accountSearch]);
-
-  const totalCustomers = accounts.filter((account) =>
-    (account.roles ?? []).some((role) => role.trim().toLowerCase() === "customer"),
-  ).length;
-
-  const totalAdministrators = accounts.filter((account) =>
-    (account.roles ?? []).some((role) => role.trim().toLowerCase().includes("admin")),
-  ).length;
+  }, [accounts, adminSearch]);
 
   return (
     <div className="w-full">
@@ -149,30 +118,14 @@ function AdminCustomers() {
         </div>
 
         {pageTab === "customers" ? (
-          <>
-            <LeadsSection accessToken={accessToken} accounts={customerAccounts} />
-
-            <AccountsSection
-              title="Registered Customers"
-              description="Website accounts assigned the customer role."
-              accounts={customerAccounts}
-              search={accountSearch}
-              onSearchChange={setAccountSearch}
-              isLoading={isLoading}
-              error={error}
-              admin={false}
-            />
-          </>
+          <LeadsSection accessToken={accessToken} accounts={customerAccounts} />
         ) : (
-          <AccountsSection
-            title="Administrators"
-            description="Website accounts assigned an administrator role."
+          <AdminAccountsSection
             accounts={administrators}
-            search={accountSearch}
-            onSearchChange={setAccountSearch}
+            search={adminSearch}
+            onSearchChange={setAdminSearch}
             isLoading={isLoading}
             error={error}
-            admin
           />
         )}
       </main>
@@ -215,17 +168,17 @@ function findAccountForLead(lead: AdminLeadRow, accounts: AccountProfile[]) {
   const leadEmail = normalizeEmail(lead.email);
 
   if (leadEmail) {
-    const emailMatch = accounts.find((account) => normalizeEmail(account.email) === leadEmail);
+    const match = accounts.find((account) => normalizeEmail(account.email) === leadEmail);
 
-    if (emailMatch) return emailMatch;
+    if (match) return match;
   }
 
   const leadPhone = normalizePhone(lead.phone);
 
   if (leadPhone) {
-    const phoneMatch = accounts.find((account) => normalizePhone(account.phone) === leadPhone);
+    const match = accounts.find((account) => normalizePhone(account.phone) === leadPhone);
 
-    if (phoneMatch) return phoneMatch;
+    if (match) return match;
   }
 
   const leadName = normalizeName(lead.full_name);
@@ -290,9 +243,7 @@ function getPreferredDate(lead: AdminLeadRow) {
     "date",
   ]);
 
-  if (value === null || value === undefined) return "—";
-
-  return formatLongDate(value);
+  return value == null ? "—" : formatLongDate(value);
 }
 
 function getPreferredTime(lead: AdminLeadRow) {
@@ -306,7 +257,7 @@ function getPreferredTime(lead: AdminLeadRow) {
     "time",
   ]);
 
-  return value === null || value === undefined ? "—" : formatSimpleValue(value);
+  return value == null ? "—" : formatSimpleValue(value);
 }
 
 function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts: AccountProfile[] }) {
@@ -335,13 +286,14 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
       if (!matchesLeadType(lead, type)) return false;
       if (!needle) return true;
 
-      const request = getLeadTypeLabel(lead);
-      const preferredDate = getPreferredDate(lead);
-      const preferredTime = getPreferredTime(lead);
-      const status = lead.status || "new";
-      const submitted = lead.created_at ? formatLongDate(lead.created_at) : "—";
-
-      return [lead.full_name, request, preferredDate, preferredTime, status, submitted]
+      return [
+        lead.full_name,
+        getLeadTypeLabel(lead),
+        getPreferredDate(lead),
+        getPreferredTime(lead),
+        lead.status || "new",
+        lead.created_at ? formatLongDate(lead.created_at) : "—",
+      ]
         .filter(Boolean)
         .join(" ")
         .toLowerCase()
@@ -397,11 +349,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
         </div>
 
         {isLoading ? (
-          <div className="space-y-3 p-4">
-            {Array.from({ length: 5 }).map((_, index) => (
-              <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
-            ))}
-          </div>
+          <RowsLoading />
         ) : error ? (
           <div role="alert" className="p-6">
             <p className="font-medium text-destructive">Couldn&apos;t load customer submissions</p>
@@ -424,12 +372,13 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
                     key={lead.id}
                     type="button"
                     onClick={() => setSelectedLead(lead)}
-                    className="flex w-full items-start justify-between gap-4 p-4 text-left transition-colors hover:bg-muted/40"
+                    className="flex w-full items-start justify-between gap-3 p-4 text-left transition-colors hover:bg-muted/40"
                   >
                     <div className="flex min-w-0 flex-1 gap-3">
                       <ProfileAvatar
                         avatarUrl={account?.avatar_url}
                         name={account?.full_name ?? lead.full_name ?? "Customer"}
+                        verified={Boolean(account)}
                         size="md"
                       />
 
@@ -441,9 +390,8 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
                         </div>
 
                         <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
-                          <MobileColumn label="Date" value={getPreferredDate(lead)} />
-
-                          <MobileColumn label="Time" value={getPreferredTime(lead)} />
+                          <MobileValue label="Date" value={getPreferredDate(lead)} />
+                          <MobileValue label="Time" value={getPreferredTime(lead)} />
 
                           <div>
                             <p className="text-muted-foreground">Status</p>
@@ -452,7 +400,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
                             </Badge>
                           </div>
 
-                          <MobileColumn
+                          <MobileValue
                             label="Submitted"
                             value={lead.created_at ? formatLongDate(lead.created_at) : "—"}
                           />
@@ -516,12 +464,11 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
                             <ProfileAvatar
                               avatarUrl={account?.avatar_url}
                               name={account?.full_name ?? lead.full_name ?? "Customer"}
+                              verified={Boolean(account)}
                               size="sm"
                             />
 
-                            <p className="truncate font-medium" title={lead.full_name || "Unnamed customer"}>
-                              {lead.full_name || "Unnamed customer"}
-                            </p>
+                            <p className="truncate font-medium">{lead.full_name || "Unnamed customer"}</p>
                           </div>
                         </td>
 
@@ -573,55 +520,39 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
   );
 }
 
-function MobileColumn({ label, value }: { label: string; value: string }) {
-  return (
-    <div>
-      <p className="text-muted-foreground">{label}</p>
-      <p className="mt-0.5 font-medium text-foreground">{value}</p>
-    </div>
-  );
-}
-
-function AccountsSection({
-  title,
-  description,
+function AdminAccountsSection({
   accounts,
   search,
   onSearchChange,
   isLoading,
   error,
-  admin,
 }: {
-  title: string;
-  description: string;
   accounts: AccountProfile[];
   search: string;
   onSearchChange: (value: string) => void;
   isLoading: boolean;
   error: unknown;
-  admin: boolean;
 }) {
   return (
     <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
       <div className="flex flex-col gap-4 border-b border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
         <div className="flex items-center gap-3">
           <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            {admin ? <ShieldCheck className="size-5" /> : <Users className="size-5" />}
+            <ShieldCheck className="size-5" />
           </div>
 
           <div>
-            <h2 className="font-semibold">{title}</h2>
-            <p className="text-sm text-muted-foreground">{description}</p>
+            <h2 className="font-semibold">Administrators</h2>
+            <p className="text-sm text-muted-foreground">Website accounts assigned an administrator role.</p>
           </div>
         </div>
 
         <div className="relative w-full sm:max-w-sm">
           <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-
           <Input
             type="search"
             className="pl-9"
-            placeholder={admin ? "Search administrators" : "Search registered customers"}
+            placeholder="Search administrators"
             value={search}
             onChange={(event) => onSearchChange(event.target.value)}
           />
@@ -629,29 +560,16 @@ function AccountsSection({
       </div>
 
       {isLoading ? (
-        <div className="space-y-3 p-4">
-          {Array.from({ length: 5 }).map((_, index) => (
-            <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
-          ))}
-        </div>
+        <RowsLoading />
       ) : error ? (
         <div role="alert" className="p-6">
-          <p className="font-medium text-destructive">Couldn&apos;t load accounts</p>
+          <p className="font-medium text-destructive">Couldn&apos;t load administrators</p>
           <p className="mt-1 text-sm text-muted-foreground">{(error as Error).message}</p>
         </div>
       ) : accounts.length === 0 ? (
         <div className="p-10 text-center">
-          {admin ? (
-            <ShieldCheck className="mx-auto size-9 text-muted-foreground/60" />
-          ) : (
-            <UserRound className="mx-auto size-9 text-muted-foreground/60" />
-          )}
-
-          <p className="mt-3 font-medium">
-            {search.trim()
-              ? `No matching ${admin ? "administrators" : "customers"}`
-              : `No ${admin ? "administrators" : "customers"} found`}
-          </p>
+          <ShieldCheck className="mx-auto size-9 text-muted-foreground/60" />
+          <p className="mt-3 font-medium">No administrators found</p>
         </div>
       ) : (
         <>
@@ -661,31 +579,18 @@ function AccountsSection({
                 <div className="flex items-start gap-3">
                   <ProfileAvatar
                     avatarUrl={account.avatar_url}
-                    name={account.full_name ?? account.email ?? (admin ? "Administrator" : "Customer")}
-                    admin={admin}
+                    name={account.full_name ?? account.email ?? "Administrator"}
+                    verified
+                    admin
                     size="md"
                   />
 
                   <div className="min-w-0">
-                    <p className="truncate font-medium">
-                      {account.full_name || (admin ? "Unnamed administrator" : "Unnamed customer")}
-                    </p>
+                    <p className="truncate font-medium">{account.full_name || "Unnamed administrator"}</p>
                     <p className="truncate text-sm text-muted-foreground">{account.email || "No email"}</p>
                     <p className="text-sm text-muted-foreground">{account.phone || "No phone"}</p>
                   </div>
                 </div>
-
-                <div className="mt-3 flex flex-wrap gap-1.5">
-                  {(account.roles ?? []).map((role) => (
-                    <Badge key={role} variant={admin ? "default" : "secondary"} className="capitalize">
-                      {role.replaceAll("_", " ")}
-                    </Badge>
-                  ))}
-                </div>
-
-                <p className="mt-3 text-xs text-muted-foreground">
-                  Joined: {account.created_at ? formatLongDate(account.created_at) : "—"}
-                </p>
               </article>
             ))}
           </div>
@@ -694,10 +599,10 @@ function AccountsSection({
             <table className="w-full min-w-[900px] table-fixed text-left text-sm">
               <colgroup>
                 <col className="w-[28%]" />
-                <col className="w-[25%]" />
-                <col className="w-[17%]" />
-                <col className="w-[15%]" />
-                <col className="w-[15%]" />
+                <col className="w-[27%]" />
+                <col className="w-[18%]" />
+                <col className="w-[14%]" />
+                <col className="w-[13%]" />
               </colgroup>
 
               <thead className="bg-muted/40 text-muted-foreground">
@@ -717,20 +622,13 @@ function AccountsSection({
                       <div className="flex min-w-0 items-center gap-3">
                         <ProfileAvatar
                           avatarUrl={account.avatar_url}
-                          name={account.full_name ?? account.email ?? (admin ? "Administrator" : "Customer")}
-                          admin={admin}
+                          name={account.full_name ?? account.email ?? "Administrator"}
+                          verified
+                          admin
                           size="sm"
                         />
 
-                        <div className="min-w-0">
-                          <p className="truncate font-medium">
-                            {account.full_name || (admin ? "Unnamed administrator" : "Unnamed customer")}
-                          </p>
-
-                          <p className="truncate text-xs text-muted-foreground">
-                            {account.legacy_user_id ? `Legacy ID: ${account.legacy_user_id}` : "Auth account"}
-                          </p>
-                        </div>
+                        <p className="truncate font-medium">{account.full_name || "Unnamed administrator"}</p>
                       </div>
                     </td>
 
@@ -739,13 +637,9 @@ function AccountsSection({
                     <td className="truncate px-4 py-3 text-muted-foreground">{account.phone || "—"}</td>
 
                     <td className="overflow-hidden px-4 py-3">
-                      <div className="flex flex-wrap gap-1.5">
+                      <div className="flex flex-wrap gap-1">
                         {(account.roles ?? []).map((role) => (
-                          <Badge
-                            key={role}
-                            variant={admin ? "default" : "secondary"}
-                            className="max-w-full truncate capitalize"
-                          >
+                          <Badge key={role} className="max-w-full truncate capitalize">
                             {role.replaceAll("_", " ")}
                           </Badge>
                         ))}
@@ -783,80 +677,119 @@ function LeadDetailsDialog({
     ([, value]) => value !== null && value !== undefined && value !== "",
   );
 
+  const selectedVehicleEntries = details.filter(([key]) => isSelectedVehicleKey(key));
+
+  const otherDetails = details.filter(([key]) => !isSelectedVehicleKey(key));
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] w-[calc(100%-2rem)] max-w-4xl overflow-hidden p-0">
-        <DialogHeader className="border-b border-border px-5 py-4 pr-12">
+      <DialogContent className="flex max-h-[92vh] w-[calc(100%-1.5rem)] max-w-5xl flex-col overflow-hidden p-0">
+        <DialogHeader className="shrink-0 border-b border-border bg-background px-5 py-4 pr-12 sm:px-6">
           <div className="flex items-center gap-3">
             <ProfileAvatar
               avatarUrl={account?.avatar_url}
               name={account?.full_name ?? lead.full_name ?? "Customer"}
+              verified={Boolean(account)}
               size="lg"
             />
 
-            <div className="min-w-0">
-              <DialogTitle className="truncate text-xl">{lead.full_name || "Customer submission"}</DialogTitle>
+            <div className="min-w-0 flex-1">
+              <div className="flex flex-wrap items-center gap-2">
+                <DialogTitle className="truncate text-lg sm:text-xl">
+                  {lead.full_name || "Customer submission"}
+                </DialogTitle>
 
-              <div className="mt-2 flex flex-wrap gap-2">
+                {account && (
+                  <span className="rounded-full bg-[#809c61]/15 px-2 py-0.5 text-[11px] font-medium text-[#61794a]">
+                    Registered
+                  </span>
+                )}
+              </div>
+
+              <div className="mt-1.5 flex flex-wrap gap-2">
                 <Badge variant="secondary">{getLeadTypeLabel(lead)}</Badge>
 
                 <Badge variant={lead.status === "won" ? "default" : "outline"} className="capitalize">
                   {lead.status || "new"}
                 </Badge>
+
+                <span className="self-center text-xs text-muted-foreground">
+                  {lead.created_at ? formatLongDate(lead.created_at) : "Date unavailable"}
+                </span>
               </div>
             </div>
           </div>
 
-          <DialogDescription>Complete information submitted through the website form.</DialogDescription>
+          <DialogDescription className="sr-only">Customer submission details</DialogDescription>
         </DialogHeader>
 
-        <div className="max-h-[calc(90vh-125px)] overflow-y-auto p-5">
-          <div className="space-y-6">
-            <ModalSection title="Customer Information" icon={UserRound}>
-              <DetailGrid>
-                <SimpleDetailItem label="Full Name" value={lead.full_name} />
-                <SimpleDetailItem label="Email" value={lead.email} type="email" />
-                <SimpleDetailItem label="Phone" value={lead.phone} type="phone" />
-                <SimpleDetailItem label="Request Type" value={getLeadTypeLabel(lead)} />
-              </DetailGrid>
-            </ModalSection>
+        <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
+          <div className="grid grid-cols-1 gap-5 p-4 sm:p-6 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <aside className="space-y-4 lg:sticky lg:top-0 lg:self-start">
+              <CompactPanel title="Contact" icon={UserRound}>
+                <ContactRow
+                  icon={Mail}
+                  label="Email"
+                  value={lead.email}
+                  href={lead.email ? `mailto:${lead.email}` : undefined}
+                />
 
-            <ModalSection title="Appointment Preference" icon={CalendarDays}>
-              <DetailGrid>
-                <SimpleDetailItem label="Preferred Date" value={getPreferredDate(lead)} />
-                <SimpleDetailItem label="Preferred Time" value={getPreferredTime(lead)} />
-              </DetailGrid>
-            </ModalSection>
+                <ContactRow
+                  icon={Phone}
+                  label="Phone"
+                  value={lead.phone}
+                  href={lead.phone ? `tel:${lead.phone}` : undefined}
+                />
+              </CompactPanel>
 
-            <ModalSection title="Submission Information" icon={CalendarDays}>
-              <DetailGrid>
-                <SimpleDetailItem label="Status" value={lead.status || "new"} />
-                <SimpleDetailItem label="Submitted" value={lead.created_at ? formatLongDate(lead.created_at) : null} />
-                <SimpleDetailItem label="Submission ID" value={String(lead.id)} />
-              </DetailGrid>
-            </ModalSection>
+              <CompactPanel title="Schedule" icon={CalendarDays}>
+                <CompactValue label="Preferred date" value={getPreferredDate(lead)} />
 
-            {lead.message && (
-              <ModalSection title="Customer Message" icon={Mail}>
-                <div className="rounded-lg border border-border bg-muted/20 p-4">
-                  <p className="whitespace-pre-wrap break-words text-sm leading-6">{lead.message}</p>
-                </div>
-              </ModalSection>
-            )}
+                <CompactValue label="Preferred time" value={getPreferredTime(lead)} />
+              </CompactPanel>
 
-            <ModalSection title="Form Details" icon={ClipboardList}>
-              {details.length > 0 ? (
-                <div className="grid grid-cols-1 gap-4">
-                  {details.map(([key, value]) => (
-                    <StructuredDetail key={key} label={formatFieldLabel(key)} value={value} />
-                  ))}
-                </div>
-              ) : (
-                <div className="rounded-lg border border-dashed border-border p-6 text-center text-sm text-muted-foreground">
-                  No additional form details were submitted.
-                </div>
+              <CompactPanel title="Submission" icon={ClipboardList}>
+                <CompactValue label="Status" value={capitalizeText(lead.status || "new")} />
+
+                <CompactValue label="Submitted" value={lead.created_at ? formatLongDate(lead.created_at) : "—"} />
+
+                <CompactValue label="Submission ID" value={String(lead.id)} />
+              </CompactPanel>
+            </aside>
+
+            <div className="min-w-0 space-y-5">
+              {selectedVehicleEntries.length > 0 && (
+                <ProfessionalSection title="Selected Vehicles" description="Vehicles selected by the customer.">
+                  <div className="space-y-3">
+                    {selectedVehicleEntries.map(([key, value]) => (
+                      <SelectedVehiclesDisplay key={key} value={value} />
+                    ))}
+                  </div>
+                </ProfessionalSection>
               )}
-            </ModalSection>
+
+              {lead.message && (
+                <ProfessionalSection title="Customer Message" description="Additional information from the customer.">
+                  <div className="rounded-lg border border-border bg-background p-4">
+                    <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{lead.message}</p>
+                  </div>
+                </ProfessionalSection>
+              )}
+
+              <ProfessionalSection title="Form Information" description="Complete information provided in the form.">
+                {otherDetails.length > 0 ? (
+                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+                    {otherDetails.map(([key, value]) => (
+                      <StructuredDetail key={key} label={formatFieldLabel(key)} value={value} />
+                    ))}
+                  </div>
+                ) : (
+                  <div className="rounded-lg border border-dashed border-border bg-background p-6 text-center text-sm text-muted-foreground">
+                    No additional form information was submitted.
+                  </div>
+                )}
+              </ProfessionalSection>
+            </div>
           </div>
         </div>
       </DialogContent>
@@ -867,27 +800,21 @@ function LeadDetailsDialog({
 function ProfileAvatar({
   avatarUrl,
   name,
+  verified = false,
   admin = false,
   size = "sm",
 }: {
   avatarUrl?: string | null;
   name: string;
+  verified?: boolean;
   admin?: boolean;
   size?: "sm" | "md" | "lg";
 }) {
   const sizeClass = size === "lg" ? "size-12" : size === "md" ? "size-11" : "size-9";
 
-  if (avatarUrl) {
-    return (
-      <img
-        src={avatarUrl}
-        alt={`${name} profile`}
-        className={`${sizeClass} shrink-0 rounded-full border border-border bg-muted object-cover`}
-        loading="lazy"
-        referrerPolicy="no-referrer"
-      />
-    );
-  }
+  const badgeSize = size === "lg" ? "size-[17px]" : size === "md" ? "size-4" : "size-[14px]";
+
+  const checkSize = size === "lg" ? "size-3" : "size-2.5";
 
   const initials =
     name
@@ -899,26 +826,323 @@ function ProfileAvatar({
       .toUpperCase() || "C";
 
   return (
-    <div
-      className={`flex ${sizeClass} shrink-0 items-center justify-center rounded-full border text-xs font-semibold ${
-        admin ? "border-primary/20 bg-primary text-primary-foreground" : "border-border bg-muted text-muted-foreground"
-      }`}
-      aria-label={`${name} profile placeholder`}
-    >
-      {initials}
+    <div className="relative shrink-0">
+      {avatarUrl ? (
+        <img
+          src={avatarUrl}
+          alt={`${name} profile`}
+          className={`${sizeClass} rounded-full border border-border bg-muted object-cover`}
+          loading="lazy"
+          referrerPolicy="no-referrer"
+        />
+      ) : (
+        <div
+          className={`flex ${sizeClass} items-center justify-center rounded-full border text-xs font-semibold ${
+            admin
+              ? "border-primary/20 bg-primary text-primary-foreground"
+              : "border-border bg-muted text-muted-foreground"
+          }`}
+          aria-label={`${name} profile placeholder`}
+        >
+          {initials}
+        </div>
+      )}
+
+      {verified && (
+        <span
+          title="Registered account"
+          aria-label="Registered account"
+          className={`absolute -bottom-0.5 -left-0.5 flex ${badgeSize} items-center justify-center rounded-full border-2 border-background bg-[#809c61] text-white shadow-sm`}
+        >
+          <Check className={checkSize} strokeWidth={3.5} />
+        </span>
+      )}
+    </div>
+  );
+}
+
+function SelectedVehiclesDisplay({ value }: { value: unknown }) {
+  const parsed = parsePossibleJson(value);
+  const vehicles = Array.isArray(parsed) ? parsed : [parsed];
+
+  if (
+    vehicles.length === 0 ||
+    vehicles.every((vehicle) => vehicle === null || vehicle === undefined || vehicle === "")
+  ) {
+    return <p className="text-sm text-muted-foreground">No selected vehicle information.</p>;
+  }
+
+  return (
+    <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
+      {vehicles.map((vehicle, index) => (
+        <VehicleCard key={index} vehicle={vehicle} index={index} />
+      ))}
+    </div>
+  );
+}
+
+function VehicleCard({ vehicle, index }: { vehicle: unknown; index: number }) {
+  const parsed = parsePossibleJson(vehicle);
+  const imageUrl = findVehicleImage(parsed);
+
+  const objectValue =
+    parsed && typeof parsed === "object" && !Array.isArray(parsed) ? (parsed as Record<string, unknown>) : null;
+
+  const displayValue = objectValue ? removeImageFields(objectValue) : parsed;
+
+  const title = objectValue ? findVehicleTitle(objectValue) : `Selected Vehicle ${index + 1}`;
+
+  return (
+    <div className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+      {imageUrl ? (
+        <div className="aspect-[16/9] w-full overflow-hidden border-b border-border bg-muted">
+          <img
+            src={imageUrl}
+            alt={title}
+            className="h-full w-full object-cover"
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={(event) => {
+              event.currentTarget.parentElement?.classList.add("hidden");
+            }}
+          />
+        </div>
+      ) : (
+        <div className="flex aspect-[16/7] items-center justify-center border-b border-border bg-muted/50">
+          <span className="text-xs text-muted-foreground">Vehicle image unavailable</span>
+        </div>
+      )}
+
+      <div className="p-4">
+        <p className="mb-3 font-semibold text-foreground">{title}</p>
+
+        {objectValue ? (
+          <ObjectValue value={displayValue as Record<string, unknown>} />
+        ) : (
+          <ReadableValue value={displayValue} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function findVehicleImage(value: unknown): string | null {
+  const parsed = parsePossibleJson(value);
+
+  if (typeof parsed === "string") {
+    return isImageUrl(parsed) ? parsed : null;
+  }
+
+  if (Array.isArray(parsed)) {
+    for (const item of parsed) {
+      const found = findVehicleImage(item);
+      if (found) return found;
+    }
+
+    return null;
+  }
+
+  if (!parsed || typeof parsed !== "object") {
+    return null;
+  }
+
+  const record = parsed as Record<string, unknown>;
+
+  const directKeys = [
+    "image_url",
+    "imageUrl",
+    "image",
+    "photo_url",
+    "photoUrl",
+    "photo",
+    "featured_image",
+    "featuredImage",
+    "primary_image",
+    "primaryImage",
+    "thumbnail",
+    "thumbnail_url",
+    "thumbnailUrl",
+    "main_image",
+    "mainImage",
+  ];
+
+  for (const key of directKeys) {
+    const candidate = record[key];
+
+    if (typeof candidate === "string" && isImageUrl(candidate)) {
+      return candidate;
+    }
+  }
+
+  const collectionKeys = ["images", "photos", "vehicle_images", "vehicleImages"];
+
+  for (const key of collectionKeys) {
+    const collection = record[key];
+
+    if (collection) {
+      const found = findVehicleImage(collection);
+      if (found) return found;
+    }
+  }
+
+  return null;
+}
+
+function isImageUrl(value: string) {
+  const normalized = value.trim().toLowerCase();
+
+  return normalized.startsWith("https://") || normalized.startsWith("http://") || normalized.startsWith("data:image/");
+}
+
+function findVehicleTitle(vehicle: Record<string, unknown>) {
+  const directTitleKeys = ["title", "vehicle_name", "vehicleName", "name", "year_make_model", "yearMakeModel"];
+
+  for (const key of directTitleKeys) {
+    const value = vehicle[key];
+
+    if (typeof value === "string" && value.trim()) {
+      return value;
+    }
+  }
+
+  const titleParts = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
+    .filter((value) => value !== null && value !== undefined && value !== "")
+    .map(String);
+
+  return titleParts.join(" ") || "Selected Vehicle";
+}
+
+function removeImageFields(value: Record<string, unknown>) {
+  const imageKeys = new Set([
+    "image_url",
+    "imageUrl",
+    "image",
+    "photo_url",
+    "photoUrl",
+    "photo",
+    "featured_image",
+    "featuredImage",
+    "primary_image",
+    "primaryImage",
+    "thumbnail",
+    "thumbnail_url",
+    "thumbnailUrl",
+    "main_image",
+    "mainImage",
+    "images",
+    "photos",
+    "vehicle_images",
+    "vehicleImages",
+  ]);
+
+  return Object.fromEntries(Object.entries(value).filter(([key]) => !imageKeys.has(key)));
+}
+
+function CompactPanel({
+  title,
+  icon: Icon,
+  children,
+}: {
+  title: string;
+  icon: typeof UserRound;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+      <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
+        <Icon className="size-4 text-primary" />
+        <h3 className="text-sm font-semibold">{title}</h3>
+      </div>
+
+      <div className="space-y-3 p-4">{children}</div>
+    </section>
+  );
+}
+
+function ProfessionalSection({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string;
+  children: React.ReactNode;
+}) {
+  return (
+    <section>
+      <div className="mb-3">
+        <h3 className="font-semibold text-foreground">{title}</h3>
+
+        {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
+      </div>
+
+      {children}
+    </section>
+  );
+}
+
+function ContactRow({
+  icon: Icon,
+  label,
+  value,
+  href,
+}: {
+  icon: typeof Mail;
+  label: string;
+  value?: string | null;
+  href?: string;
+}) {
+  return (
+    <div className="flex gap-3">
+      <div className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-lg bg-muted text-muted-foreground">
+        <Icon className="size-4" />
+      </div>
+
+      <div className="min-w-0">
+        <p className="text-xs text-muted-foreground">{label}</p>
+
+        {href && value ? (
+          <a href={href} className="block truncate text-sm font-medium text-primary hover:underline">
+            {value}
+          </a>
+        ) : (
+          <p className="truncate text-sm font-medium">{value || "Not provided"}</p>
+        )}
+      </div>
+    </div>
+  );
+}
+
+function CompactValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-start justify-between gap-3">
+      <span className="text-xs text-muted-foreground">{label}</span>
+      <span className="text-right text-sm font-medium">{value}</span>
+    </div>
+  );
+}
+
+function MobileValue({ label, value }: { label: string; value: string }) {
+  return (
+    <div>
+      <p className="text-muted-foreground">{label}</p>
+      <p className="mt-0.5 font-medium text-foreground">{value}</p>
     </div>
   );
 }
 
 function StructuredDetail({ label, value }: { label: string; value: unknown }) {
+  const parsed = parsePossibleJson(value);
+  const complex = parsed !== null && typeof parsed === "object";
+
   return (
-    <div className="overflow-hidden rounded-xl border border-border bg-background">
-      <div className="border-b border-border bg-muted/30 px-4 py-3">
+    <div className={`overflow-hidden rounded-xl border border-border bg-background ${complex ? "xl:col-span-2" : ""}`}>
+      <div className="border-b border-border bg-muted/30 px-4 py-2.5">
         <p className="text-sm font-semibold">{label}</p>
       </div>
 
       <div className="p-4">
-        <ReadableValue value={parsePossibleJson(value)} />
+        <ReadableValue value={parsed} />
       </div>
     </div>
   );
@@ -945,10 +1169,11 @@ function ReadableValue({ value }: { value: unknown }) {
     }
 
     return (
-      <div className="space-y-3">
+      <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
         {parsed.map((item, index) => (
           <div key={index} className="rounded-lg border border-border bg-muted/10 p-3">
             <p className="mb-2 text-xs font-semibold uppercase tracking-wide text-muted-foreground">Item {index + 1}</p>
+
             <ReadableValue value={item} />
           </div>
         ))}
@@ -966,21 +1191,45 @@ function ReadableValue({ value }: { value: unknown }) {
 function ObjectValue({ value }: { value: Record<string, unknown> }) {
   const entries = Object.entries(value).filter(([, item]) => item !== null && item !== undefined && item !== "");
 
+  if (entries.length === 0) {
+    return <p className="text-sm text-muted-foreground">No information provided</p>;
+  }
+
   return (
-    <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">
+    <div className="grid grid-cols-1 gap-x-5 gap-y-3 sm:grid-cols-2">
       {entries.map(([key, item]) => {
         const parsed = parsePossibleJson(item);
         const complex = parsed !== null && typeof parsed === "object";
 
         return (
-          <div key={key} className={`rounded-lg border border-border p-3 ${complex ? "sm:col-span-2" : ""}`}>
-            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{formatFieldLabel(key)}</p>
-            <div className="mt-1.5">
+          <div
+            key={key}
+            className={
+              complex
+                ? "rounded-lg border border-border bg-muted/10 p-3 sm:col-span-2"
+                : "border-b border-border/70 pb-2 last:border-0"
+            }
+          >
+            <p className="text-[11px] font-medium uppercase tracking-wide text-muted-foreground">
+              {formatFieldLabel(key)}
+            </p>
+
+            <div className="mt-1">
               <ReadableValue value={parsed} />
             </div>
           </div>
         );
       })}
+    </div>
+  );
+}
+
+function RowsLoading() {
+  return (
+    <div className="space-y-3 p-4">
+      {Array.from({ length: 5 }).map((_, index) => (
+        <div key={index} className="h-16 animate-pulse rounded-lg bg-muted" />
+      ))}
     </div>
   );
 }
@@ -1054,6 +1303,19 @@ function formatLongDate(value: unknown): string {
   }).format(date);
 }
 
+function capitalizeText(value: string) {
+  return value
+    .replaceAll("_", " ")
+    .replaceAll("-", " ")
+    .replace(/\b\w/g, (character) => character.toUpperCase());
+}
+
+function isSelectedVehicleKey(key: string) {
+  const normalized = key.replace(/([a-z])([A-Z])/g, "$1_$2").toLowerCase();
+
+  return normalized === "selected_vehicle" || normalized === "selected_vehicles";
+}
+
 function formatFieldLabel(key: string) {
   const labels: Record<string, string> = {
     vin: "VIN",
@@ -1114,61 +1376,4 @@ function formatFieldLabel(key: string) {
     .replaceAll("_", " ")
     .replaceAll("-", " ")
     .replace(/\b\w/g, (character) => character.toUpperCase());
-}
-
-function ModalSection({
-  title,
-  icon: Icon,
-  children,
-}: {
-  title: string;
-  icon: typeof UserRound;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <div className="mb-3 flex items-center gap-2">
-        <Icon className="size-4 text-primary" />
-        <h3 className="text-sm font-semibold">{title}</h3>
-      </div>
-
-      {children}
-    </section>
-  );
-}
-
-function DetailGrid({ children }: { children: React.ReactNode }) {
-  return <div className="grid grid-cols-1 gap-3 sm:grid-cols-2">{children}</div>;
-}
-
-function SimpleDetailItem({ label, value, type }: { label: string; value?: string | null; type?: "email" | "phone" }) {
-  const hasValue = Boolean(value) && value !== "—" && value !== "Not provided";
-
-  let content: React.ReactNode = value || "Not provided";
-
-  if (value && type === "email") {
-    content = (
-      <a href={`mailto:${value}`} className="text-primary hover:underline">
-        {value}
-      </a>
-    );
-  }
-
-  if (value && type === "phone") {
-    content = (
-      <a href={`tel:${value}`} className="text-primary hover:underline">
-        {value}
-      </a>
-    );
-  }
-
-  return (
-    <div className="rounded-lg border border-border p-3">
-      <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
-
-      <div className={`mt-1 break-words text-sm ${hasValue ? "text-foreground" : "text-muted-foreground"}`}>
-        {content}
-      </div>
-    </div>
-  );
 }
