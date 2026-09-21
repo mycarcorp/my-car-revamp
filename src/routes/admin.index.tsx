@@ -18,47 +18,31 @@ function AdminDashboard() {
   const { session } = useAuth();
   const accessToken = session?.access_token ?? "";
 
-  const { data: inventoryData, isLoading: inventoryLoading } = useQuery({
+  const { data: inventoryRows, isLoading: inventoryLoading } = useQuery({
     queryKey: ["admin", "inventory", "dashboard"],
     enabled: Boolean(accessToken),
-    queryFn: () =>
-      listInventory({
-        data: {
-          accessToken,
-          limit: 200,
-          offset: 0,
-        },
-      }),
+    queryFn: () => listLegacyInventoryRows({ data: { accessToken } }),
   });
 
-  const { data: leadsData, isLoading: leadsLoading } = useQuery({
-    queryKey: ["admin", "leads", "dashboard"],
+  const { data: customers, isLoading: leadsLoading } = useQuery({
+    queryKey: ["admin", "customers", "dashboard"],
     enabled: Boolean(accessToken),
-    queryFn: () =>
-      listLeads({
-        data: {
-          accessToken,
-          limit: 8,
-        },
-      }),
+    queryFn: () => listCustomers({ data: { accessToken } }),
   });
 
   const { data: blogPosts, isLoading: blogLoading } = useQuery({
     queryKey: ["admin", "blog", "dashboard"],
     enabled: Boolean(accessToken),
-    queryFn: () =>
-      listBlogPosts({
-        data: {
-          accessToken,
-        },
-      }),
+    queryFn: () => listLegacyPosts({ data: { accessToken } }),
   });
 
-  const vehicles = inventoryData?.vehicles ?? [];
-  const leads = leadsData?.leads ?? [];
+  const vehicles = inventoryRows ?? [];
+  const leads = (customers ?? []).slice(0, 8);
   const posts = blogPosts ?? [];
 
-  const activeVehicles = vehicles.filter((vehicle) => vehicle.status === "active").length;
+  const activeVehicles = vehicles.filter(
+    (vehicle) => vehicle.status === "available" || vehicle.status === "pending",
+  ).length;
 
   const soldVehicles = vehicles.filter((vehicle) => vehicle.status === "sold").length;
 
