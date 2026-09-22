@@ -215,7 +215,17 @@ function AdminDashboard() {
         <section className="overflow-hidden rounded-xl border border-border bg-background">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
             <div>
-              <h2 className="font-semibold text-foreground">Leadss overview</h2>
+              <h2 className="font-semibold text-foreground">Leads overview</h2>
+              <div className="mt-1 flex items-center gap-2 text-xs text-muted-foreground">
+                <span
+                  className={`size-1.5 rounded-full transition-colors duration-300 ${
+                    showTodayCounts ? "bg-[#F49923]" : "bg-muted-foreground/40"
+                  }`}
+                />
+                <span className="transition-colors duration-300">
+                  {showTodayCounts ? "Showing today’s activity" : "Showing overall totals"}
+                </span>
+              </div>
             </div>
 
             <Button asChild variant="outline" size="sm">
@@ -229,6 +239,7 @@ function AdminDashboard() {
           <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-6 sm:p-5">
             {leadOverview.map((item) => {
               const Icon = item.icon;
+              const hasTodayLeads = showTodayCounts && item.value > 0;
 
               if (item.key === "today") {
                 return (
@@ -237,19 +248,48 @@ function AdminDashboard() {
                     type="button"
                     aria-pressed={showTodayCounts}
                     onClick={() => setShowTodayCounts((current) => !current)}
-                    className={`group rounded-lg border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
-                      showTodayCounts ? "border-[#D25B4C]/60 bg-[#D25B4C]/5" : "border-border hover:border-primary/40"
+                    className={`group rounded-lg border p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F49923]/40 ${
+                      showTodayCounts
+                        ? hasTodayLeads
+                          ? "border-[#F49923]/60 bg-[#F49923]/[0.07] shadow-sm"
+                          : "border-[#F49923]/35 bg-[#F49923]/[0.03]"
+                        : "border-border hover:border-primary/40"
                     }`}
                   >
-                    <div className={`flex size-9 items-center justify-center rounded-lg ${item.className}`}>
+                    <div
+                      className={`flex size-9 items-center justify-center rounded-lg transition-colors duration-300 ${
+                        hasTodayLeads ? "bg-[#F49923]/15 text-[#F49923]" : item.className
+                      }`}
+                    >
                       <Icon className="size-4.5" aria-hidden="true" />
                     </div>
 
-                    <p className="mt-3 text-2xl font-semibold text-foreground">{leadsLoading ? "—" : item.value}</p>
+                    <p
+                      className={`mt-3 text-2xl font-semibold transition-colors duration-300 ${
+                        hasTodayLeads ? "text-[#F49923]" : "text-foreground"
+                      }`}
+                    >
+                      <span
+                        key={`${showTodayCounts}-${item.value}`}
+                        className="inline-block animate-in fade-in zoom-in-95 duration-300"
+                      >
+                        {leadsLoading ? "—" : item.value}
+                      </span>
+                    </p>
 
                     <div className="mt-1 flex items-center justify-between gap-2">
-                      <p className="text-sm text-muted-foreground">{item.label}</p>
-                      <span className="text-xs font-medium text-primary">
+                      <p
+                        className={`text-sm transition-colors duration-300 ${
+                          hasTodayLeads ? "font-medium text-[#F49923]" : "text-muted-foreground"
+                        }`}
+                      >
+                        {item.label}
+                      </p>
+                      <span
+                        className={`text-xs font-medium transition-colors duration-300 ${
+                          showTodayCounts ? "text-[#F49923]" : "text-primary"
+                        }`}
+                      >
                         {showTodayCounts ? "Back" : "View today"}
                       </span>
                     </div>
@@ -261,15 +301,40 @@ function AdminDashboard() {
                 <Link
                   key={item.key}
                   to="/admin/customers"
-                  className="group rounded-lg border border-border p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  className={`group rounded-lg border p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 ${
+                    hasTodayLeads
+                      ? "border-[#F49923]/60 bg-[#F49923]/[0.07] shadow-sm focus-visible:ring-[#F49923]/40"
+                      : "border-border hover:border-primary/40 focus-visible:ring-primary"
+                  }`}
                 >
-                  <div className={`flex size-9 items-center justify-center rounded-lg ${item.className}`}>
+                  <div
+                    className={`flex size-9 items-center justify-center rounded-lg transition-colors duration-300 ${
+                      hasTodayLeads ? "bg-[#F49923]/15 text-[#F49923]" : item.className
+                    }`}
+                  >
                     <Icon className="size-4.5" aria-hidden="true" />
                   </div>
 
-                  <p className="mt-3 text-2xl font-semibold text-foreground">{leadsLoading ? "—" : item.value}</p>
+                  <p
+                    className={`mt-3 text-2xl font-semibold transition-colors duration-300 ${
+                      hasTodayLeads ? "text-[#F49923]" : "text-foreground"
+                    }`}
+                  >
+                    <span
+                      key={`${showTodayCounts}-${item.value}`}
+                      className="inline-block animate-in fade-in zoom-in-95 duration-300"
+                    >
+                      {leadsLoading ? "—" : item.value}
+                    </span>
+                  </p>
 
-                  <p className="mt-1 text-sm text-muted-foreground">{item.label}</p>
+                  <p
+                    className={`mt-1 text-sm transition-colors duration-300 ${
+                      hasTodayLeads ? "font-medium text-[#F49923]" : "text-muted-foreground"
+                    }`}
+                  >
+                    {item.label}
+                  </p>
                 </Link>
               );
             })}
