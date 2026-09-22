@@ -1,6 +1,16 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { BriefcaseBusiness, Pencil, Plus, Search, ShieldCheck, Trash2, X } from "lucide-react";
+import {
+  BriefcaseBusiness,
+  ChevronDown,
+  GripVertical,
+  Pencil,
+  Plus,
+  Search,
+  ShieldCheck,
+  Trash2,
+  X,
+} from "lucide-react";
 import { toast } from "sonner";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -14,17 +24,12 @@ import {
 } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import {
   deletePosition,
   listPositions,
+  reorderPositions,
   savePosition,
   setUserPosition,
   setUserRole,
@@ -64,8 +69,13 @@ export function AdminTeamSection({
   onSearchChange: (value: string) => void;
 }) {
   const queryClient = useQueryClient();
+  const positionMenuRef = useRef<HTMLDivElement>(null);
   const [roleFilter, setRoleFilter] = useState<RoleFilter>("admin");
-  const [editing, setEditing] = useState<AdminPosition | "new" | null>(null);
+  const [editing, setEditing] = useState<AdminPosition | null>(null);
+  const [positionMenuOpen, setPositionMenuOpen] = useState(false);
+  const [newPositionName, setNewPositionName] = useState("");
+  const [orderedPositions, setOrderedPositions] = useState<AdminPosition[]>([]);
+  const [draggedPositionId, setDraggedPositionId] = useState<number | null>(null);
 
   const positionsQuery = useQuery({
     queryKey: ["admin", "positions"],
@@ -73,11 +83,22 @@ export function AdminTeamSection({
     queryFn: () => listPositions({ data: { accessToken } }),
   });
 
-  const positions = (positionsQuery.data ?? []) as AdminPosition[];
-  const positionsById = useMemo(
-    () => new Map(positions.map((position) => [position.id, position])),
-    [positions],
-  );
+  const positions = orderedPositions;
+
+  useEffect(() => {
+    setOrderedPositions((positionsQuery.data ?? []) as AdminPosition[]);
+  }, [positionsQuery.data]);
+
+  useEffect(() => {
+    if (!positionMenuOpen) return;
+    const closeWhenOutside = (event: MouseEvent) => {
+      if (!positionMenuRef.current?.contains(event.target as Node)) setPositionMenuOpen(false);
+    };
+    document.addEventListener("mousedown", closeWhenOutside);
+    return () => document.removeEventListener("mousedown", closeWhenOutside);
+  }, [positionMenuOpen]);
+
+  const positionsById = useMemo(() => new Map(positions.map((position) => [position.id, position])), [positions]);
 
   const refreshAccounts = () => queryClient.invalidateQueries({ queryKey: ["admin", "customers"] });
   const refreshPositions = () => queryClient.invalidateQueries({ queryKey: ["admin", "positions"] });
@@ -102,6 +123,19 @@ export function AdminTeamSection({
     onError: (mutationError: Error) => toast.error(mutationError.message),
   });
 
+  const addPositionMutation = useMutation({
+    mutationFn: (name: string) =>
+      savePosition({
+        data: { accessToken, id: null, name, description: null, responsibilities: [] },
+      }),
+    onSuccess: () => {
+      setNewPositionName("");
+      toast.success("Position added");
+      void refreshPositions();
+    },
+    onError: (mutationError: Error) => toast.error(mutationError.message),
+  });
+
   const deleteMutation = useMutation({
     mutationFn: (id: number) => deletePosition({ data: { accessToken, id } }),
     onSuccess: () => {
@@ -112,17 +146,26 @@ export function AdminTeamSection({
     onError: (mutationError: Error) => toast.error(mutationError.message),
   });
 
+  const reorderMutation = useMutation({
+    mutationFn: (positionIds: number[]) => reorderPositions({ data: { accessToken, positionIds } }),
+    onSuccess: () => {
+      toast.success("Position hierarchy updated");
+      void refreshPositions();
+    },
+    onError: (mutationError: Error) => {
+      toast.error(mutationError.message);
+      void refreshPositions();
+    },
+  });
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-
     return accounts.filter((account) => {
       const admin = isAdminAccount(account);
       if (roleFilter === "admin" && !admin) return false;
       if (roleFilter === "customer" && admin) return false;
       if (!needle) return true;
-
       const position = account.position_id ? positionsById.get(account.position_id)?.name : "";
-
       return [account.full_name, account.email, account.phone, account.roles.join(" "), position]
         .filter(Boolean)
         .join(" ")
@@ -131,121 +174,168 @@ export function AdminTeamSection({
     });
   }, [accounts, roleFilter, search, positionsById]);
 
+  const trimmedPositionName = newPositionName.trim();
+  const positionAlreadyExists = positions.some(
+    (position) => position.name.trim().toLowerCase() === trimmedPositionName.toLowerCase(),
+  );
+  const canAddPosition = Boolean(trimmedPositionName) && !positionAlreadyExists;
+
+  const movePosition = (targetId: number) => {
+    if (draggedPositionId === null || draggedPositionId === targetId) return;
+    const fromIndex = positions.findIndex((item) => item.id === draggedPositionId);
+    const toIndex = positions.findIndex((item) => item.id === targetId);
+    if (fromIndex < 0 || toIndex < 0) return;
+    const next = [...positions];
+    const [moved] = next.splice(fromIndex, 1);
+    next.splice(toIndex, 0, moved);
+    setOrderedPositions(next);
+    setDraggedPositionId(null);
+    reorderMutation.mutate(next.map((item) => item.id));
+  };
+
   return (
-    <div className="space-y-6">
-      <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-          <div className="flex items-center gap-3">
-            <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-              <BriefcaseBusiness className="size-5" />
-            </div>
-
-            <div>
-              <h2 className="font-semibold">Positions &amp; responsibilities</h2>
-              <p className="text-sm text-muted-foreground">
-                Create the roles your team can be assigned to, and what each one covers.
-              </p>
-            </div>
-          </div>
-
-          <Button type="button" onClick={() => setEditing("new")}>
-            <Plus className="mr-2 size-4" />
-            Add position
-          </Button>
-        </div>
-
-        {positionsQuery.isLoading ? (
-          <p className="p-6 text-sm text-muted-foreground">Loading positions…</p>
-        ) : positionsQuery.error ? (
-          <div role="alert" className="p-6">
-            <p className="font-medium text-destructive">Couldn&apos;t load positions</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              {(positionsQuery.error as Error).message}
-            </p>
-          </div>
-        ) : positions.length === 0 ? (
-          <div className="p-10 text-center">
-            <BriefcaseBusiness className="mx-auto size-9 text-muted-foreground/60" />
-            <p className="mt-3 font-medium">No positions yet</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Add one to start assigning responsibilities.
-            </p>
-          </div>
-        ) : (
-          <ul className="divide-y divide-border">
-            {positions.map((position) => (
-              <li key={position.id} className="flex flex-col gap-3 p-4 sm:flex-row sm:items-start">
-                <div className="min-w-0 flex-1">
-                  <p className="font-medium">{position.name}</p>
-                  {position.description ? (
-                    <p className="mt-0.5 text-sm text-muted-foreground">{position.description}</p>
-                  ) : null}
-
-                  {position.responsibilities.length > 0 ? (
-                    <ul className="mt-2 flex flex-wrap gap-1">
-                      {position.responsibilities.map((item) => (
-                        <li key={item}>
-                          <Badge variant="secondary" className="max-w-full whitespace-normal text-left">
-                            {item}
-                          </Badge>
-                        </li>
-                      ))}
-                    </ul>
-                  ) : (
-                    <p className="mt-2 text-sm text-muted-foreground">No responsibilities listed.</p>
-                  )}
-                </div>
-
-                <div className="flex shrink-0 gap-2 sm:justify-end">
-                  <Button type="button" variant="outline" size="sm" onClick={() => setEditing(position)}>
-                    <Pencil className="mr-2 size-4" />
-                    Edit
-                  </Button>
-
-                  <Button
-                    type="button"
-                    variant="outline"
-                    size="sm"
-                    className="text-destructive"
-                    disabled={deleteMutation.isPending}
-                    onClick={() => {
-                      if (
-                        window.confirm(
-                          `Delete “${position.name}”? Anyone assigned to it will have no position.`,
-                        )
-                      ) {
-                        deleteMutation.mutate(position.id);
-                      }
-                    }}
-                  >
-                    <Trash2 className="mr-2 size-4" />
-                    Delete
-                  </Button>
-                </div>
-              </li>
-            ))}
-          </ul>
-        )}
-      </section>
-
-      <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
-        <div className="flex flex-col gap-4 border-b border-border bg-muted/30 p-4 lg:flex-row lg:items-center lg:justify-between">
+    <div>
+      <section className="overflow-visible rounded-xl border border-border bg-background shadow-sm">
+        <div className="flex flex-col gap-4 rounded-t-xl border-b border-border bg-muted/30 p-4 xl:flex-row xl:items-center xl:justify-between">
           <div className="flex items-center gap-3">
             <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
               <ShieldCheck className="size-5" />
             </div>
-
             <div>
               <h2 className="font-semibold">Team access</h2>
               <p className="text-sm text-muted-foreground">
-                Set who is an admin and which position they hold.
+                Manage account access, team positions, and position hierarchy.
               </p>
             </div>
           </div>
 
-          <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap sm:items-center xl:justify-end">
+            <div ref={positionMenuRef} className="relative">
+              <Button
+                type="button"
+                variant="outline"
+                className="w-full justify-between gap-2 sm:w-48"
+                onClick={() => setPositionMenuOpen((open) => !open)}
+                aria-expanded={positionMenuOpen}
+              >
+                <span className="flex items-center gap-2">
+                  <BriefcaseBusiness className="size-4" />
+                  Positions ({positions.length})
+                </span>
+                <ChevronDown className={`size-4 transition-transform ${positionMenuOpen ? "rotate-180" : ""}`} />
+              </Button>
+
+              {positionMenuOpen ? (
+                <div className="absolute right-0 z-50 mt-2 w-[min(24rem,calc(100vw-3rem))] rounded-xl border border-border bg-popover p-2 text-popover-foreground shadow-xl">
+                  <div className="border-b border-border p-2">
+                    <p className="text-sm font-medium">Position hierarchy</p>
+                    <p className="mt-0.5 text-xs text-muted-foreground">
+                      Drag positions to reorder them. The top position is highest.
+                    </p>
+                    <div className="mt-3 flex gap-2">
+                      <Input
+                        value={newPositionName}
+                        onChange={(event) => setNewPositionName(event.target.value)}
+                        onKeyDown={(event) => {
+                          if (event.key === "Enter" && canAddPosition) {
+                            event.preventDefault();
+                            addPositionMutation.mutate(trimmedPositionName);
+                          }
+                        }}
+                        placeholder="Type a new position"
+                        aria-label="New position name"
+                      />
+                      <Button
+                        type="button"
+                        size="icon"
+                        aria-label="Add position"
+                        title={positionAlreadyExists ? "This position already exists" : "Add position"}
+                        disabled={!canAddPosition || addPositionMutation.isPending}
+                        onClick={() => addPositionMutation.mutate(trimmedPositionName)}
+                      >
+                        <Plus className="size-4" />
+                      </Button>
+                    </div>
+                    {positionAlreadyExists ? (
+                      <p className="mt-1.5 text-xs text-destructive">That position already exists.</p>
+                    ) : null}
+                  </div>
+
+                  <div className="max-h-80 overflow-y-auto py-1">
+                    {positionsQuery.isLoading ? (
+                      <p className="p-3 text-sm text-muted-foreground">Loading positions…</p>
+                    ) : positionsQuery.error ? (
+                      <p className="p-3 text-sm text-destructive">{(positionsQuery.error as Error).message}</p>
+                    ) : positions.length === 0 ? (
+                      <p className="p-3 text-sm text-muted-foreground">No positions yet.</p>
+                    ) : (
+                      positions.map((position, index) => (
+                        <div
+                          key={position.id}
+                          draggable={!reorderMutation.isPending}
+                          onDragStart={() => setDraggedPositionId(position.id)}
+                          onDragEnd={() => setDraggedPositionId(null)}
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            movePosition(position.id);
+                          }}
+                          className={`group flex items-center gap-2 rounded-lg px-2 py-2 hover:bg-muted/70 ${
+                            draggedPositionId === position.id ? "opacity-50" : ""
+                          }`}
+                        >
+                          <button
+                            type="button"
+                            className="cursor-grab touch-none text-muted-foreground active:cursor-grabbing"
+                            aria-label={`Drag ${position.name}`}
+                            title="Drag to reorder"
+                          >
+                            <GripVertical className="size-4" />
+                          </button>
+                          <span className="flex size-6 shrink-0 items-center justify-center rounded-md bg-muted text-xs font-medium text-muted-foreground">
+                            {index + 1}
+                          </span>
+                          <div className="min-w-0 flex-1">
+                            <p className="truncate text-sm font-medium">{position.name}</p>
+                            <p className="truncate text-xs text-muted-foreground">
+                              {position.description || `${position.responsibilities.length} responsibilities`}
+                            </p>
+                          </div>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8"
+                            aria-label={`Edit ${position.name}`}
+                            onClick={() => setEditing(position)}
+                          >
+                            <Pencil className="size-3.5" />
+                          </Button>
+                          <Button
+                            type="button"
+                            variant="ghost"
+                            size="icon"
+                            className="size-8 text-destructive hover:text-destructive"
+                            aria-label={`Delete ${position.name}`}
+                            disabled={deleteMutation.isPending}
+                            onClick={() => {
+                              if (window.confirm(`Delete “${position.name}”? Assigned users will have no position.`)) {
+                                deleteMutation.mutate(position.id);
+                              }
+                            }}
+                          >
+                            <Trash2 className="size-3.5" />
+                          </Button>
+                        </div>
+                      ))
+                    )}
+                  </div>
+                </div>
+              ) : null}
+            </div>
+
             <Select value={roleFilter} onValueChange={(value) => setRoleFilter(value as RoleFilter)}>
-              <SelectTrigger className="w-full sm:w-44">
+              <SelectTrigger className="w-full sm:w-40">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
@@ -281,8 +371,16 @@ export function AdminTeamSection({
             <p className="mt-3 font-medium">No accounts found</p>
           </div>
         ) : (
-          <div className="overflow-x-auto">
-            <table className="w-full min-w-[900px] text-left text-sm">
+          <div className="overflow-x-auto rounded-b-xl">
+            <table className="w-full min-w-[900px] table-fixed text-left text-sm">
+              <colgroup>
+                <col className="w-[18%]" />
+                <col className="w-[22%]" />
+                <col className="w-[14%]" />
+                <col className="w-[18%]" />
+                <col className="w-[18%]" />
+                <col className="w-[10%]" />
+              </colgroup>
               <thead className="bg-muted/40 text-muted-foreground">
                 <tr>
                   <th className="px-4 py-3 font-medium">Name</th>
@@ -293,36 +391,38 @@ export function AdminTeamSection({
                   <th className="px-4 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
-
               <tbody>
                 {filtered.map((account) => {
                   const admin = isAdminAccount(account);
                   const userId = Number(account.legacy_user_id ?? account.id);
-                  const position = account.position_id
-                    ? positionsById.get(account.position_id)
-                    : undefined;
-
+                  const position = account.position_id ? positionsById.get(account.position_id) : undefined;
                   return (
                     <tr key={account.id} className="border-t border-border align-top hover:bg-muted/30">
                       <td className="px-4 py-3">
-                        <p className="font-medium">{account.full_name || "Unnamed account"}</p>
-                        <p className="text-xs text-muted-foreground">{account.phone || "No phone"}</p>
+                        <div className="flex items-center gap-3">
+                          {account.avatar_url ? (
+                            <img src={account.avatar_url} alt="" className="size-9 rounded-full object-cover" />
+                          ) : (
+                            <div className="flex size-9 items-center justify-center rounded-full bg-muted text-xs font-semibold text-muted-foreground">
+                              {(account.full_name || account.email || "A").slice(0, 1).toUpperCase()}
+                            </div>
+                          )}
+                          <div className="min-w-0">
+                            <p className="truncate font-medium">{account.full_name || "Unnamed account"}</p>
+                            <p className="truncate text-xs text-muted-foreground">{account.phone || "No phone"}</p>
+                          </div>
+                        </div>
                       </td>
-
-                      <td className="px-4 py-3 text-muted-foreground">{account.email || "—"}</td>
-
+                      <td className="truncate px-4 py-3 text-muted-foreground">{account.email || "—"}</td>
                       <td className="px-4 py-3">
                         <Select
                           value={admin ? "admin" : "customer"}
                           disabled={roleMutation.isPending}
                           onValueChange={(value) =>
-                            roleMutation.mutate({
-                              userId,
-                              role: value === "admin" ? "admin" : "customer",
-                            })
+                            roleMutation.mutate({ userId, role: value === "admin" ? "admin" : "customer" })
                           }
                         >
-                          <SelectTrigger className="w-36">
+                          <SelectTrigger className="w-full">
                             <SelectValue />
                           </SelectTrigger>
                           <SelectContent>
@@ -331,19 +431,15 @@ export function AdminTeamSection({
                           </SelectContent>
                         </Select>
                       </td>
-
                       <td className="px-4 py-3">
                         <Select
                           value={account.position_id ? String(account.position_id) : "none"}
                           disabled={!admin || positionMutation.isPending}
                           onValueChange={(value) =>
-                            positionMutation.mutate({
-                              userId,
-                              positionId: value === "none" ? null : Number(value),
-                            })
+                            positionMutation.mutate({ userId, positionId: value === "none" ? null : Number(value) })
                           }
                         >
-                          <SelectTrigger className="w-48">
+                          <SelectTrigger className="w-full">
                             <SelectValue placeholder="No position" />
                           </SelectTrigger>
                           <SelectContent>
@@ -356,9 +452,8 @@ export function AdminTeamSection({
                           </SelectContent>
                         </Select>
                       </td>
-
                       <td className="px-4 py-3">
-                        {position && position.responsibilities.length > 0 ? (
+                        {position?.responsibilities.length ? (
                           <div className="flex max-w-xs flex-wrap gap-1">
                             {position.responsibilities.map((item) => (
                               <Badge key={item} variant="secondary" className="whitespace-normal text-left">
@@ -370,32 +465,30 @@ export function AdminTeamSection({
                           <span className="text-muted-foreground">—</span>
                         )}
                       </td>
-
                       <td className="px-4 py-3">
-                        <div className="flex flex-wrap gap-2">
+                        <div className="flex gap-1">
                           {admin ? (
                             <Button
                               type="button"
-                              variant="outline"
-                              size="sm"
+                              variant="ghost"
+                              size="icon"
+                              title="Remove admin"
                               disabled={roleMutation.isPending}
                               onClick={() => roleMutation.mutate({ userId, role: "customer" })}
                             >
-                              <X className="mr-2 size-4" />
-                              Remove admin
+                              <X className="size-4" />
                             </Button>
                           ) : null}
-
                           {account.position_id ? (
                             <Button
                               type="button"
-                              variant="outline"
-                              size="sm"
+                              variant="ghost"
+                              size="icon"
+                              title="Remove position"
                               disabled={positionMutation.isPending}
                               onClick={() => positionMutation.mutate({ userId, positionId: null })}
                             >
-                              <X className="mr-2 size-4" />
-                              Remove position
+                              <BriefcaseBusiness className="size-4" />
                             </Button>
                           ) : null}
                         </div>
@@ -411,7 +504,7 @@ export function AdminTeamSection({
 
       <PositionDialog
         accessToken={accessToken}
-        position={editing === "new" ? null : editing}
+        position={editing}
         open={editing !== null}
         onOpenChange={(open) => {
           if (!open) setEditing(null);
@@ -441,16 +534,13 @@ function PositionDialog({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [responsibilities, setResponsibilities] = useState("");
-  const [seeded, setSeeded] = useState<string>("");
 
-  const key = `${open ? "open" : "closed"}:${position?.id ?? "new"}`;
-  if (open && seeded !== key) {
-    setSeeded(key);
+  useEffect(() => {
+    if (!open) return;
     setName(position?.name ?? "");
     setDescription(position?.description ?? "");
     setResponsibilities((position?.responsibilities ?? []).join("\n"));
-  }
-  if (!open && seeded !== key) setSeeded(key);
+  }, [open, position]);
 
   const saveMutation = useMutation({
     mutationFn: () =>
@@ -467,33 +557,24 @@ function PositionDialog({
         },
       }),
     onSuccess: () => {
-      toast.success(position ? "Position updated" : "Position added");
+      toast.success("Position updated");
       onSaved();
     },
-    onError: (error: Error) => toast.error(error.message),
+    onError: (mutationError: Error) => toast.error(mutationError.message),
   });
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="max-w-lg">
         <DialogHeader>
-          <DialogTitle>{position ? "Edit position" : "Add position"}</DialogTitle>
-          <DialogDescription>
-            Name the position and list its responsibilities, one per line.
-          </DialogDescription>
+          <DialogTitle>Edit position</DialogTitle>
+          <DialogDescription>Update the position name and responsibilities.</DialogDescription>
         </DialogHeader>
-
         <div className="space-y-4">
           <div className="space-y-2">
             <Label htmlFor="position-name">Position name</Label>
-            <Input
-              id="position-name"
-              value={name}
-              onChange={(event) => setName(event.target.value)}
-              placeholder="Sales manager"
-            />
+            <Input id="position-name" value={name} onChange={(event) => setName(event.target.value)} />
           </div>
-
           <div className="space-y-2">
             <Label htmlFor="position-description">Description</Label>
             <Input
@@ -503,7 +584,6 @@ function PositionDialog({
               placeholder="Optional short summary"
             />
           </div>
-
           <div className="space-y-2">
             <Label htmlFor="position-responsibilities">Responsibilities</Label>
             <Textarea
@@ -515,17 +595,12 @@ function PositionDialog({
             />
           </div>
         </div>
-
         <DialogFooter>
           <Button type="button" variant="outline" onClick={() => onOpenChange(false)}>
             Cancel
           </Button>
-          <Button
-            type="button"
-            disabled={saveMutation.isPending || !name.trim()}
-            onClick={() => saveMutation.mutate()}
-          >
-            {saveMutation.isPending ? "Saving…" : position ? "Save changes" : "Add position"}
+          <Button type="button" disabled={saveMutation.isPending || !name.trim()} onClick={() => saveMutation.mutate()}>
+            {saveMutation.isPending ? "Saving…" : "Save changes"}
           </Button>
         </DialogFooter>
       </DialogContent>
