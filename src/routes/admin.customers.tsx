@@ -232,7 +232,7 @@ function leadDateKey(lead: AdminLeadRow) {
 }
 
 function formatSelectedCalendarDate(dateKey: string) {
-  const [year, month, day] = dateKey.split("-").map(Number);
+  const [year = 1970, month = 1, day = 1] = dateKey.split("-").map(Number);
 
   return new Intl.DateTimeFormat("en-US", {
     month: "short",
@@ -453,7 +453,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
               type="button"
               onClick={() => {
                 if (selectedCalendarDate) {
-                  const [year, month] = selectedCalendarDate.split("-").map(Number);
+                  const [year = 1970, month = 1] = selectedCalendarDate.split("-").map(Number);
                   setCalendarMonth(new Date(year, month - 1, 1));
                 }
 
