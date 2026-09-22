@@ -20,6 +20,7 @@ import {
   Users,
 } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminTeamSection } from "@/components/admin/AdminTeamSection";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,7 @@ type AccountProfile = {
   legacy_user_id: string | null;
   created_at: string | null;
   roles: string[];
+  position_id: number | null;
 };
 
 function AdminCustomers() {
@@ -67,28 +69,6 @@ function AdminCustomers() {
     [accounts],
   );
 
-  const administrators = useMemo(() => {
-    const needle = adminSearch.trim().toLowerCase();
-
-    return accounts.filter((account) => {
-      const isAdmin = (account.roles ?? []).some((role) => role.trim().toLowerCase().includes("admin"));
-
-      if (!isAdmin) return false;
-      if (!needle) return true;
-
-      return [
-        account.full_name,
-        account.email,
-        account.phone,
-        account.roles.join(" "),
-        account.created_at ? formatLongDate(account.created_at) : "",
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(needle);
-    });
-  }, [accounts, adminSearch]);
 
   return (
     <div className="w-full">
@@ -126,8 +106,9 @@ function AdminCustomers() {
         {pageTab === "customers" ? (
           <LeadsSection accessToken={accessToken} accounts={customerAccounts} />
         ) : (
-          <AdminAccountsSection
-            accounts={administrators}
+          <AdminTeamSection
+            accounts={accounts}
+            accessToken={accessToken}
             search={adminSearch}
             onSearchChange={setAdminSearch}
             isLoading={isLoading}
