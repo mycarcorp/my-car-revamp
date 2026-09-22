@@ -11,8 +11,6 @@ import {
   HandCoins,
   MessageSquare,
   Repeat2,
-  ShieldCheck,
-  Sparkles,
   Users,
 } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -20,7 +18,6 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/hooks/useAuth";
 import { listLegacyInventoryRows } from "@/lib/legacy-inventory.functions";
-import { listCustomers } from "@/lib/admin-customers.functions";
 import { listLeads } from "@/lib/admin-leads.functions";
 import { listLegacyPosts } from "@/lib/legacy-blog.functions";
 import { formatDate } from "@/lib/format";
@@ -56,16 +53,6 @@ function startOfDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
-function startOfWeek(date: Date) {
-  const start = startOfDay(date);
-  const day = start.getDay();
-  const daysSinceMonday = day === 0 ? 6 : day - 1;
-
-  start.setDate(start.getDate() - daysSinceMonday);
-
-  return start;
-}
-
 function AdminDashboard() {
   const { session } = useAuth();
   const accessToken = session?.access_token ?? "";
@@ -74,12 +61,6 @@ function AdminDashboard() {
     queryKey: ["admin", "inventory", "dashboard"],
     enabled: Boolean(accessToken),
     queryFn: () => listLegacyInventoryRows({ data: { accessToken } }),
-  });
-
-  const { data: customers, isLoading: customersLoading } = useQuery({
-    queryKey: ["admin", "customers", "dashboard"],
-    enabled: Boolean(accessToken),
-    queryFn: () => listCustomers({ data: { accessToken } }),
   });
 
   const { data: leadRows, isLoading: leadsLoading } = useQuery({
@@ -95,43 +76,19 @@ function AdminDashboard() {
   });
 
   const vehicles = inventoryRows ?? [];
-  const accounts = customers ?? [];
   const leads = leadRows ?? [];
   const posts = blogPosts ?? [];
 
   const activeVehicles = vehicles.filter((v) => v.status === "available" || v.status === "pending").length;
-  const soldVehicles = vehicles.filter((v) => v.status === "sold").length;
-  const publishedPosts = posts.filter((p) => p.status === "published").length;
-  const draftPosts = posts.filter((p) => p.status !== "published").length;
-
   const now = new Date();
   const todayStart = startOfDay(now);
   const tomorrowStart = new Date(todayStart);
   tomorrowStart.setDate(tomorrowStart.getDate() + 1);
 
-  const weekStart = startOfWeek(now);
-  const nextWeekStart = new Date(weekStart);
-  nextWeekStart.setDate(nextWeekStart.getDate() + 7);
-
-  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
-  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
   const leadsToday = leads.filter((lead) => {
     const createdAt = getValidDate(lead.created_at);
 
     return createdAt && createdAt >= todayStart && createdAt < tomorrowStart;
-  }).length;
-
-  const leadsThisWeek = leads.filter((lead) => {
-    const createdAt = getValidDate(lead.created_at);
-
-    return createdAt && createdAt >= weekStart && createdAt < nextWeekStart;
-  }).length;
-
-  const leadsThisMonth = leads.filter((lead) => {
-    const createdAt = getValidDate(lead.created_at);
-
-    return createdAt && createdAt >= monthStart && createdAt < nextMonthStart;
   }).length;
 
   const leadsByType = (type: string) => leads.filter((lead) => lead.lead_type === type).length;
@@ -141,85 +98,31 @@ function AdminDashboard() {
       label: "Active cars",
       value: activeVehicles,
       icon: CheckCircle2,
-      iconClassName: "text-emerald-600",
-      iconBackgroundClassName: "bg-emerald-100",
+      iconClassName: "text-[#809C61]",
+      iconBackgroundClassName: "bg-[#809C61]/12",
       to: "/admin/inventory" as const,
       actionLabel: "View inventory",
-    },
-    {
-      label: "Sold",
-      value: soldVehicles,
-      icon: ShieldCheck,
-      iconClassName: "text-blue-600",
-      iconBackgroundClassName: "bg-blue-100",
-      to: "/admin/inventory" as const,
-      actionLabel: "View sold vehicles",
-    },
-    {
-      label: "Total leads",
-      value: leads.length,
-      icon: Sparkles,
-      iconClassName: "text-pink-600",
-      iconBackgroundClassName: "bg-pink-100",
-      to: "/admin/customers" as const,
-      actionLabel: "View all customers",
     },
     {
       label: "Leads today",
       value: leadsToday,
       icon: Clock3,
-      iconClassName: "text-amber-600",
-      iconBackgroundClassName: "bg-amber-100",
+      iconClassName: "text-[#D25B4C]",
+      iconBackgroundClassName: "bg-[#D25B4C]/12",
       to: "/admin/customers" as const,
       actionLabel: "View today's leads",
-    },
-    {
-      label: "Leads this week",
-      value: leadsThisWeek,
-      icon: Sparkles,
-      iconClassName: "text-orange-600",
-      iconBackgroundClassName: "bg-orange-100",
-      to: "/admin/customers" as const,
-      actionLabel: "View this week's leads",
-    },
-    {
-      label: "Leads this month",
-      value: leadsThisMonth,
-      icon: CalendarCheck,
-      iconClassName: "text-indigo-600",
-      iconBackgroundClassName: "bg-indigo-100",
-      to: "/admin/customers" as const,
-      actionLabel: "View this month's leads",
-    },
-    {
-      label: "Customers",
-      value: accounts.length,
-      icon: Users,
-      iconClassName: "text-cyan-600",
-      iconBackgroundClassName: "bg-cyan-100",
-      to: "/admin/customers" as const,
-      actionLabel: "View customers",
-    },
-    {
-      label: "Blog posts",
-      value: publishedPosts,
-      icon: FileText,
-      iconClassName: "text-violet-600",
-      iconBackgroundClassName: "bg-violet-100",
-      to: "/admin/blog" as const,
-      actionLabel: `View blog (${draftPosts} draft${draftPosts === 1 ? "" : "s"})`,
     },
   ];
 
   const leadOverview = [
-    { type: "finance", icon: HandCoins, className: "text-emerald-600 bg-emerald-100" },
-    { type: "trade", icon: Repeat2, className: "text-amber-600 bg-amber-100" },
-    { type: "appointment", icon: CalendarCheck, className: "text-blue-600 bg-blue-100" },
-    { type: "availability", icon: Car, className: "text-violet-600 bg-violet-100" },
-    { type: "contact", icon: MessageSquare, className: "text-cyan-600 bg-cyan-100" },
+    { type: "finance", icon: HandCoins, className: "text-[#809C61] bg-[#809C61]/12" },
+    { type: "trade", icon: Repeat2, className: "text-[#EDBA2B] bg-[#EDBA2B]/12" },
+    { type: "appointment", icon: CalendarCheck, className: "text-[#D25B4C] bg-[#D25B4C]/12" },
+    { type: "availability", icon: Car, className: "text-[#809C61] bg-[#809C61]/12" },
+    { type: "contact", icon: MessageSquare, className: "text-[#EDBA2B] bg-[#EDBA2B]/12" },
   ];
 
-  const isLoading = inventoryLoading || customersLoading || leadsLoading || blogLoading;
+  const isLoading = inventoryLoading || leadsLoading;
   const recentLeads = leads.slice(0, 8);
 
   return (
@@ -228,7 +131,7 @@ function AdminDashboard() {
 
       <main className="space-y-6 p-4 sm:p-6">
         <section>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
+          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
             {stats.map((stat) => {
               const Icon = stat.icon;
 
