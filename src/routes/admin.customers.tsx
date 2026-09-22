@@ -6,6 +6,7 @@ import {
   CalendarCheck,
   Car,
   Check,
+  ChevronLeft,
   ChevronRight,
   ClipboardList,
   Clock3,
@@ -131,16 +132,7 @@ const LEAD_TYPES = [
 
 type LeadFilterType = (typeof LEAD_TYPES)[number]["key"];
 
-const DATE_FILTERS = [
-  { key: "all", label: "All time" },
-  { key: "today", label: "Today" },
-  { key: "last_7_days", label: "Last 7 days" },
-  { key: "this_month", label: "This month" },
-  { key: "last_30_days", label: "Last 30 days" },
-  { key: "this_year", label: "This year" },
-] as const;
-
-type DateFilterType = (typeof DATE_FILTERS)[number]["key"];
+type DateFilterType = "all" | "today";
 
 const LEAD_LABELS: Record<string, string> = {
   finance: "Financing",
@@ -227,6 +219,30 @@ function startOfLocalDay(date: Date) {
   return new Date(date.getFullYear(), date.getMonth(), date.getDate());
 }
 
+function toLocalDateKey(date: Date) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+
+  return `${year}-${month}-${day}`;
+}
+
+function leadDateKey(lead: AdminLeadRow) {
+  const date = getLeadCreatedDate(lead);
+
+  return date ? toLocalDateKey(date) : null;
+}
+
+function formatSelectedCalendarDate(dateKey: string) {
+  const [year, month, day] = dateKey.split("-").map(Number);
+
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+  }).format(new Date(year, month - 1, day));
+}
+
 function matchesDateFilter(lead: AdminLeadRow, selectedDate: DateFilterType, now = new Date()) {
   if (selectedDate === "all") return true;
 
@@ -236,38 +252,10 @@ function matchesDateFilter(lead: AdminLeadRow, selectedDate: DateFilterType, now
 
   const today = startOfLocalDay(now);
 
-  if (selectedDate === "today") {
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
+  const tomorrow = new Date(today);
+  tomorrow.setDate(tomorrow.getDate() + 1);
 
-    return createdAt >= today && createdAt < tomorrow;
-  }
-
-  if (selectedDate === "last_7_days") {
-    const start = new Date(today);
-    start.setDate(start.getDate() - 6);
-
-    return createdAt >= start;
-  }
-
-  if (selectedDate === "this_month") {
-    const start = new Date(now.getFullYear(), now.getMonth(), 1);
-    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
-
-    return createdAt >= start && createdAt < end;
-  }
-
-  if (selectedDate === "last_30_days") {
-    const start = new Date(today);
-    start.setDate(start.getDate() - 29);
-
-    return createdAt >= start;
-  }
-
-  const start = new Date(now.getFullYear(), 0, 1);
-  const end = new Date(now.getFullYear() + 1, 0, 1);
-
-  return createdAt >= start && createdAt < end;
+  return createdAt >= today && createdAt < tomorrow;
 }
 
 function getFirstDetail(lead: AdminLeadRow, keys: string[]): unknown {
@@ -315,6 +303,13 @@ function getPreferredTime(lead: AdminLeadRow) {
 function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts: AccountProfile[] }) {
   const [type, setType] = useState<LeadFilterType>("all");
   const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
+  const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
+  const [calendarOpen, setCalendarOpen] = useState(false);
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
   const [search, setSearch] = useState("");
   const [selectedLead, setSelectedLead] = useState<AdminLeadRow | null>(null);
 
@@ -343,7 +338,11 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
 
     return leads.filter((lead) => {
       if (!matchesLeadType(lead, type)) return false;
-      if (!matchesDateFilter(lead, dateFilter)) return false;
+      if (selectedCalendarDate) {
+        if (leadDateKey(lead) !== selectedCalendarDate) return false;
+      } else if (!matchesDateFilter(lead, dateFilter)) {
+        return false;
+      }
       if (!needle) return true;
 
       return [
@@ -359,12 +358,16 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
         .toLowerCase()
         .includes(needle);
     });
-  }, [leads, type, dateFilter, search]);
+  }, [leads, type, dateFilter, selectedCalendarDate, search]);
 
   const countFor = (key: LeadFilterType) => leads.filter((lead) => matchesLeadType(lead, key)).length;
 
   const activeOverviewKey =
-    type === "all" && dateFilter === "today" ? "today" : dateFilter === "all" && type !== "all" ? type : null;
+    !selectedCalendarDate && type === "all" && dateFilter === "today"
+      ? "today"
+      : !selectedCalendarDate && dateFilter === "all" && type !== "all"
+        ? type
+        : null;
 
   const overviewFilters = [
     {
@@ -424,6 +427,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
 
       setType("all");
       setDateFilter(isAlreadyActive ? "all" : "today");
+      setSelectedCalendarDate(null);
       return;
     }
 
@@ -431,6 +435,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
 
     setType(isAlreadyActive ? "all" : key);
     setDateFilter("all");
+    setSelectedCalendarDate(null);
   }
 
   return (
@@ -446,24 +451,28 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
           </div>
 
           <div className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-2xl lg:justify-end">
-            <div className="relative w-full sm:w-48">
-              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+            <button
+              type="button"
+              onClick={() => {
+                if (selectedCalendarDate) {
+                  const [year, month] = selectedCalendarDate.split("-").map(Number);
+                  setCalendarMonth(new Date(year, month - 1, 1));
+                }
 
-              <select
-                aria-label="Filter leads by date"
-                value={dateFilter}
-                onChange={(event) => setDateFilter(event.target.value as DateFilterType)}
-                className="h-10 w-full cursor-pointer appearance-none rounded-md border border-input bg-background pl-9 pr-8 text-sm text-foreground shadow-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
-              >
-                {DATE_FILTERS.map((option) => (
-                  <option key={option.key} value={option.key}>
-                    {option.label}
-                  </option>
-                ))}
-              </select>
-
-              <ChevronRight className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 rotate-90 text-muted-foreground" />
-            </div>
+                setCalendarOpen(true);
+              }}
+              className={`flex h-10 w-full items-center justify-between gap-3 rounded-md border bg-background px-3 text-sm shadow-sm transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-56 ${
+                selectedCalendarDate ? "border-primary text-foreground" : "border-input text-muted-foreground"
+              }`}
+            >
+              <span className="flex min-w-0 items-center gap-2">
+                <CalendarDays className="size-4 shrink-0" />
+                <span className="truncate">
+                  {selectedCalendarDate ? formatSelectedCalendarDate(selectedCalendarDate) : "Filter by calendar"}
+                </span>
+              </span>
+              <ChevronRight className="size-4 shrink-0 rotate-90" />
+            </button>
 
             <div className="relative w-full sm:min-w-0 sm:flex-1 lg:max-w-md">
               <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -486,12 +495,13 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
               <p className="mt-1 text-sm text-muted-foreground">Select a card to filter the customer submissions.</p>
             </div>
 
-            {activeOverviewKey ? (
+            {activeOverviewKey || selectedCalendarDate ? (
               <button
                 type="button"
                 onClick={() => {
                   setType("all");
                   setDateFilter("all");
+                  setSelectedCalendarDate(null);
                 }}
                 className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
               >
@@ -694,6 +704,25 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
         )}
       </section>
 
+      <LeadCalendarDialog
+        open={calendarOpen}
+        onOpenChange={setCalendarOpen}
+        leads={leads}
+        month={calendarMonth}
+        onMonthChange={setCalendarMonth}
+        selectedDate={selectedCalendarDate}
+        onSelectDate={(dateKey) => {
+          setSelectedCalendarDate(dateKey);
+          setDateFilter("all");
+          setCalendarOpen(false);
+        }}
+        onClearDate={() => {
+          setSelectedCalendarDate(null);
+          setDateFilter("all");
+          setCalendarOpen(false);
+        }}
+      />
+
       <LeadDetailsDialog
         lead={selectedLead}
         account={selectedLead ? findAccountForLead(selectedLead, accounts) : undefined}
@@ -703,6 +732,169 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
         }}
       />
     </>
+  );
+}
+
+function LeadCalendarDialog({
+  open,
+  onOpenChange,
+  leads,
+  month,
+  onMonthChange,
+  selectedDate,
+  onSelectDate,
+  onClearDate,
+}: {
+  open: boolean;
+  onOpenChange: (open: boolean) => void;
+  leads: AdminLeadRow[];
+  month: Date;
+  onMonthChange: (month: Date) => void;
+  selectedDate: string | null;
+  onSelectDate: (dateKey: string) => void;
+  onClearDate: () => void;
+}) {
+  const year = month.getFullYear();
+  const monthIndex = month.getMonth();
+  const firstDayOffset = new Date(year, monthIndex, 1).getDay();
+  const daysInMonth = new Date(year, monthIndex + 1, 0).getDate();
+  const todayKey = toLocalDateKey(new Date());
+
+  const countsByDate = useMemo(() => {
+    const counts = new Map<string, number>();
+
+    leads.forEach((lead) => {
+      const key = leadDateKey(lead);
+      if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+    });
+
+    return counts;
+  }, [leads]);
+
+  const monthPrefix = `${year}-${String(monthIndex + 1).padStart(2, "0")}-`;
+  const monthTotal = Array.from(countsByDate.entries()).reduce(
+    (total, [dateKey, count]) => (dateKey.startsWith(monthPrefix) ? total + count : total),
+    0,
+  );
+
+  const cells: Array<number | null> = [
+    ...Array.from({ length: firstDayOffset }, () => null),
+    ...Array.from({ length: daysInMonth }, (_, index) => index + 1),
+  ];
+
+  while (cells.length % 7 !== 0) cells.push(null);
+
+  return (
+    <Dialog open={open} onOpenChange={onOpenChange}>
+      <DialogContent className="w-[calc(100%-1.5rem)] max-w-xl p-0">
+        <DialogHeader className="border-b border-border px-5 py-4 pr-12">
+          <DialogTitle>Filter leads by date</DialogTitle>
+          <DialogDescription>
+            Select a day to show its submissions. Days with leads display their total.
+          </DialogDescription>
+        </DialogHeader>
+
+        <div className="p-4 sm:p-5">
+          <div className="flex items-center justify-between gap-3">
+            <button
+              type="button"
+              onClick={() => onMonthChange(new Date(year, monthIndex - 1, 1))}
+              aria-label="Previous month"
+              className="flex size-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ChevronLeft className="size-4" />
+            </button>
+
+            <div className="text-center">
+              <p className="font-semibold text-foreground">
+                {new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(month)}
+              </p>
+              <p className="mt-0.5 text-xs text-muted-foreground">
+                {monthTotal.toLocaleString()} {monthTotal === 1 ? "lead" : "leads"} this month
+              </p>
+            </div>
+
+            <button
+              type="button"
+              onClick={() => onMonthChange(new Date(year, monthIndex + 1, 1))}
+              aria-label="Next month"
+              className="flex size-9 items-center justify-center rounded-md border border-border text-muted-foreground transition-colors hover:bg-muted hover:text-foreground"
+            >
+              <ChevronRight className="size-4" />
+            </button>
+          </div>
+
+          <div className="mt-5 grid grid-cols-7 gap-1 text-center text-xs font-medium text-muted-foreground">
+            {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((day) => (
+              <div key={day} className="py-2">
+                {day}
+              </div>
+            ))}
+          </div>
+
+          <div className="grid grid-cols-7 gap-1">
+            {cells.map((day, index) => {
+              if (day === null) return <div key={`empty-${index}`} className="aspect-square" />;
+
+              const dateKey = toLocalDateKey(new Date(year, monthIndex, day));
+              const count = countsByDate.get(dateKey) ?? 0;
+              const selected = selectedDate === dateKey;
+              const today = todayKey === dateKey;
+
+              return (
+                <button
+                  key={dateKey}
+                  type="button"
+                  onClick={() => onSelectDate(dateKey)}
+                  aria-label={`${formatSelectedCalendarDate(dateKey)}${count ? `, ${count} leads` : ", no leads"}`}
+                  className={`flex aspect-square min-h-11 flex-col items-center justify-center rounded-lg border text-sm transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                    selected
+                      ? "border-primary bg-primary text-primary-foreground"
+                      : count > 0
+                        ? "border-[#809C61]/40 bg-[#809C61]/10 text-foreground hover:bg-[#809C61]/20"
+                        : "border-transparent text-muted-foreground hover:bg-muted"
+                  } ${today && !selected ? "ring-1 ring-[#EDBA2B]" : ""}`}
+                >
+                  <span className="font-medium">{day}</span>
+                  {count > 0 ? (
+                    <span
+                      className={`mt-0.5 rounded-full px-1.5 text-[10px] font-semibold leading-4 ${
+                        selected ? "bg-primary-foreground/20 text-primary-foreground" : "bg-[#809C61] text-white"
+                      }`}
+                    >
+                      {count}
+                    </span>
+                  ) : null}
+                </button>
+              );
+            })}
+          </div>
+
+          <div className="mt-5 flex flex-wrap items-center justify-between gap-3 border-t border-border pt-4">
+            <button
+              type="button"
+              onClick={() => {
+                const today = new Date();
+                onMonthChange(new Date(today.getFullYear(), today.getMonth(), 1));
+              }}
+              className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+            >
+              Go to current month
+            </button>
+
+            {selectedDate ? (
+              <button
+                type="button"
+                onClick={onClearDate}
+                className="rounded-md border border-border px-3 py-2 text-sm font-medium transition-colors hover:bg-muted"
+              >
+                Clear date filter
+              </button>
+            ) : null}
+          </div>
+        </div>
+      </DialogContent>
+    </Dialog>
   );
 }
 
