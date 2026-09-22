@@ -8,7 +8,6 @@ import {
   Check,
   ChevronLeft,
   ChevronRight,
-  ClipboardList,
   Clock3,
   HandCoins,
   Mail,
@@ -17,7 +16,6 @@ import {
   Repeat2,
   Search,
   ShieldCheck,
-  UserRound,
   Users,
 } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -931,126 +929,348 @@ function LeadDetailsDialog({
   if (!lead) return null;
 
   const details = Object.entries(lead.details ?? {}).filter(
-    ([, value]) => value !== null && value !== undefined && value !== "",
+    ([key, value]) => value !== null && value !== undefined && value !== "" && !isHiddenModalField(key),
   );
 
   const selectedVehicleEntries = details.filter(([key]) => isSelectedVehicleKey(key));
-
   const otherDetails = details.filter(([key]) => !isSelectedVehicleKey(key));
+  const detailSections = organizeLeadDetails(lead, otherDetails);
+  const preferredContact = getFirstDetail(lead, ["preferred_contact_method", "preferredContactMethod"]);
+  const preferredDate = getPreferredDate(lead);
+  const preferredTime = getPreferredTime(lead);
+  const hasSchedule = preferredDate !== "—" || preferredTime !== "—";
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <DialogContent className="flex max-h-[92vh] w-[calc(100%-1.5rem)] max-w-5xl flex-col overflow-hidden p-0">
         <DialogHeader className="shrink-0 border-b border-border bg-background px-5 py-4 pr-12 sm:px-6">
-          <div className="flex items-center gap-3">
-            <ProfileAvatar
-              avatarUrl={account?.avatar_url}
-              name={account?.full_name ?? lead.full_name ?? "Customer"}
-              verified={Boolean(account)}
-              size="lg"
-            />
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <DialogTitle className="text-lg sm:text-xl">{getLeadTypeLabel(lead)} Request</DialogTitle>
+              <DialogDescription className="mt-1">
+                Review the customer and submitted form information.
+              </DialogDescription>
+            </div>
 
-            <div className="min-w-0 flex-1">
-              <div className="flex flex-wrap items-center gap-2">
-                <DialogTitle className="truncate text-lg sm:text-xl">
-                  {lead.full_name || "Customer submission"}
-                </DialogTitle>
-
-                {account && (
-                  <span className="rounded-full bg-[#809c61]/15 px-2 py-0.5 text-[11px] font-medium text-[#61794a]">
-                    Registered
-                  </span>
-                )}
-              </div>
-
-              <div className="mt-1.5 flex flex-wrap gap-2">
-                <Badge variant="secondary">{getLeadTypeLabel(lead)}</Badge>
-
-                <Badge variant={lead.status === "won" ? "default" : "outline"} className="capitalize">
-                  {lead.status || "new"}
-                </Badge>
-
-                <span className="self-center text-xs text-muted-foreground">
-                  {lead.created_at ? formatLongDate(lead.created_at) : "Date unavailable"}
-                </span>
-              </div>
+            <div className="flex items-center gap-2">
+              <Badge variant="secondary">{getLeadTypeLabel(lead)}</Badge>
+              <Badge variant={lead.status === "won" ? "default" : "outline"} className="capitalize">
+                {lead.status || "new"}
+              </Badge>
             </div>
           </div>
-
-          <DialogDescription className="sr-only">Customer submission details</DialogDescription>
         </DialogHeader>
 
-        <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20">
-          <div className="grid grid-cols-1 gap-5 p-4 sm:p-6 lg:grid-cols-[280px_minmax(0,1fr)]">
-            <aside className="space-y-4 lg:sticky lg:top-0 lg:self-start">
-              <CompactPanel title="Contact" icon={UserRound}>
-                <ContactRow
-                  icon={Mail}
-                  label="Email"
-                  value={lead.email}
-                  href={lead.email ? `mailto:${lead.email}` : undefined}
-                />
+        <div className="min-h-0 flex-1 overflow-y-auto bg-muted/20 p-4 sm:p-6">
+          <div className="mx-auto grid max-w-[1100px] grid-cols-1 gap-5 lg:grid-cols-[280px_minmax(0,1fr)]">
+            <aside className="lg:sticky lg:top-0 lg:self-start">
+              <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+                <div className="flex flex-col items-center border-b border-border bg-muted/20 px-5 py-6 text-center">
+                  <ProfileAvatar
+                    avatarUrl={account?.avatar_url}
+                    name={account?.full_name ?? lead.full_name ?? "Customer"}
+                    verified={Boolean(account)}
+                    size="xl"
+                  />
 
-                <ContactRow
-                  icon={Phone}
-                  label="Phone"
-                  value={lead.phone}
-                  href={lead.phone ? `tel:${lead.phone}` : undefined}
-                />
-              </CompactPanel>
+                  <h3 className="mt-4 max-w-full break-words text-lg font-semibold text-foreground">
+                    {lead.full_name || "Unnamed customer"}
+                  </h3>
 
-              <CompactPanel title="Schedule" icon={CalendarDays}>
-                <CompactValue label="Preferred date" value={getPreferredDate(lead)} />
+                  {account ? (
+                    <span className="mt-2 rounded-full bg-[#809c61]/15 px-2.5 py-1 text-[11px] font-medium text-[#61794a]">
+                      Registered customer
+                    </span>
+                  ) : (
+                    <span className="mt-2 text-xs text-muted-foreground">Guest submission</span>
+                  )}
+                </div>
 
-                <CompactValue label="Preferred time" value={getPreferredTime(lead)} />
-              </CompactPanel>
+                <div className="space-y-5 p-4">
+                  <div className="space-y-3">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Contact information
+                    </p>
+                    <ContactRow
+                      icon={Mail}
+                      label="Email"
+                      value={lead.email}
+                      href={lead.email ? `mailto:${lead.email}` : undefined}
+                    />
 
-              <CompactPanel title="Submission" icon={ClipboardList}>
-                <CompactValue label="Status" value={capitalizeText(lead.status || "new")} />
+                    <ContactRow
+                      icon={Phone}
+                      label="Phone"
+                      value={lead.phone}
+                      href={lead.phone ? `tel:${lead.phone}` : undefined}
+                    />
+                  </div>
 
-                <CompactValue label="Submitted" value={lead.created_at ? formatLongDate(lead.created_at) : "—"} />
+                  <div className="border-t border-border pt-4">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Personal information
+                    </p>
+                    <div className="space-y-3">
+                      <CompactValue
+                        label="Preferred contact"
+                        value={preferredContact ? formatSimpleValue(preferredContact) : "Not provided"}
+                      />
+                      <CompactValue label="Status" value={capitalizeText(lead.status || "new")} />
+                      <CompactValue label="Submitted" value={lead.created_at ? formatLongDate(lead.created_at) : "—"} />
+                    </div>
+                  </div>
 
-                <CompactValue label="Submission ID" value={String(lead.id)} />
-              </CompactPanel>
+                  {hasSchedule ? (
+                    <div className="border-t border-border pt-4">
+                      <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                        Preferred schedule
+                      </p>
+                      <div className="space-y-3">
+                        <CompactValue label="Date" value={preferredDate} />
+                        <CompactValue label="Time" value={preferredTime} />
+                      </div>
+                    </div>
+                  ) : null}
+                </div>
+              </section>
             </aside>
 
             <div className="min-w-0 space-y-5">
               {selectedVehicleEntries.length > 0 && (
-                <ProfessionalSection title="Selected Vehicles">
+                <FormSectionCard
+                  title={lead.lead_type === "trade" ? "Vehicle the Customer Wants" : "Selected Vehicle"}
+                  description="Vehicle selected by the customer."
+                >
                   <div className="space-y-3">
                     {selectedVehicleEntries.map(([key, value]) => (
                       <SelectedVehiclesDisplay key={key} value={value} />
                     ))}
                   </div>
-                </ProfessionalSection>
+                </FormSectionCard>
               )}
 
-              {lead.message && (
-                <ProfessionalSection title="Customer Message">
-                  <div className="rounded-lg border border-border bg-background p-4">
-                    <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{lead.message}</p>
-                  </div>
-                </ProfessionalSection>
-              )}
+              {detailSections.map((section) => (
+                <FormSectionCard key={section.title} title={section.title} description={section.description}>
+                  <OrganizedDetailGrid entries={section.entries} />
+                </FormSectionCard>
+              ))}
 
-              <ProfessionalSection title="Form Information">
-                {otherDetails.length > 0 ? (
-                  <div className="grid grid-cols-1 gap-3 xl:grid-cols-2">
-                    {otherDetails.map(([key, value]) => (
-                      <StructuredDetail key={key} label={formatFieldLabel(key)} value={value} />
-                    ))}
-                  </div>
-                ) : (
-                  <div className="rounded-lg border border-dashed border-border bg-background p-6 text-center text-sm text-muted-foreground">
-                    No additional form information was submitted.
-                  </div>
-                )}
-              </ProfessionalSection>
+              {lead.message ? (
+                <FormSectionCard title="Customer Message">
+                  <p className="whitespace-pre-wrap break-words text-sm leading-6 text-foreground">{lead.message}</p>
+                </FormSectionCard>
+              ) : null}
+
+              {selectedVehicleEntries.length === 0 && detailSections.length === 0 && !lead.message ? (
+                <div className="rounded-xl border border-dashed border-border bg-background p-8 text-center text-sm text-muted-foreground">
+                  No additional form information was submitted.
+                </div>
+              ) : null}
             </div>
           </div>
         </div>
       </DialogContent>
     </Dialog>
+  );
+}
+
+type LeadDetailEntry = [string, unknown];
+
+type LeadDetailSection = {
+  title: string;
+  description: string | undefined;
+  entries: LeadDetailEntry[];
+};
+
+function normalizeDetailKey(key: string) {
+  return key
+    .replace(/([a-z])([A-Z])/g, "$1_$2")
+    .replace(/[-\s]+/g, "_")
+    .toLowerCase();
+}
+
+function isHiddenModalField(key: string) {
+  const normalized = normalizeDetailKey(key);
+  return new Set([
+    "id",
+    "submission_id",
+    "submissionid",
+    "lead_id",
+    "created_at",
+    "updated_at",
+    "received_at",
+    "status",
+    "lead_type",
+    "form_type",
+    "source",
+    "full_name",
+    "first_name",
+    "last_name",
+    "email",
+    "phone",
+    "phone_number",
+    "message",
+    "preferred_contact_method",
+    "preferred_date",
+    "preferred_time",
+    "appointment_date",
+    "appointment_time",
+  ]).has(normalized);
+}
+
+function detailSectionFor(lead: AdminLeadRow, key: string) {
+  const normalized = normalizeDetailKey(key);
+  const requestType = getLeadTypeLabel(lead).toLowerCase();
+
+  if (/(reference|co_signer|cosigner)/.test(normalized)) return "References";
+  if (/(address|city|state|province|postal|zip|residence)/.test(normalized)) return "Address Information";
+  if (/(employer|employment|occupation|job_|income|salary|work_)/.test(normalized)) return "Employment & Income";
+
+  if (/(wish|preference|desired_vehicle|vehicle_wanted|looking_for)/.test(normalized)) {
+    return "Vehicle the Customer Wants";
+  }
+
+  if (requestType === "sell") {
+    if (/(vehicle|year|make|model|trim|vin|mileage|condition|payoff|ownership|title)/.test(normalized)) {
+      return "Vehicle to Sell";
+    }
+    return "Sell Request Details";
+  }
+
+  if (requestType === "trade") {
+    if (/(trade|year|make|model|trim|vin|mileage|condition|payoff|ownership|title)/.test(normalized)) {
+      return "Trade-In Vehicle";
+    }
+    return "Trade Request Details";
+  }
+
+  if (requestType === "financing") {
+    if (/(vehicle|stock|year|make|model|trim|vin)/.test(normalized)) return "Vehicle Information";
+    if (/(credit|payment|down_|loan|finance|bank|rent|mortgage|monthly|annual)/.test(normalized)) {
+      return "Financing Information";
+    }
+    return "Applicant Information";
+  }
+
+  if (requestType.includes("appointment")) {
+    if (/(vehicle|stock|year|make|model|trim|vin)/.test(normalized)) return "Vehicle Information";
+    return "Appointment Details";
+  }
+
+  if (requestType.includes("availability")) {
+    if (/(vehicle|stock|year|make|model|trim|vin)/.test(normalized)) return "Vehicle Inquiry";
+    return "Availability Request";
+  }
+
+  if (requestType === "contact") return "Contact Request";
+  return "Additional Information";
+}
+
+function sectionDescription(title: string) {
+  const descriptions: Record<string, string> = {
+    "Applicant Information": "Personal information supplied with the financing application.",
+    "Address Information": "Current and mailing address details.",
+    "Employment & Income": "Employment and income information supplied by the applicant.",
+    References: "Personal or professional references supplied with the application.",
+    "Financing Information": "Requested financing, credit, and payment information.",
+    "Vehicle Information": "Vehicle connected to this request.",
+    "Vehicle to Sell": "Information about the vehicle the customer wants to sell.",
+    "Trade-In Vehicle": "Information about the vehicle offered for trade-in.",
+    "Vehicle the Customer Wants": "Preferences for the customer’s next vehicle.",
+    "Appointment Details": "Information submitted with the visit request.",
+    "Vehicle Inquiry": "Vehicle the customer asked about.",
+    "Availability Request": "Details submitted with the availability request.",
+    "Contact Request": "Additional information submitted through the contact form.",
+  };
+  return descriptions[title];
+}
+
+function organizeLeadDetails(lead: AdminLeadRow, entries: LeadDetailEntry[]): LeadDetailSection[] {
+  const groups = new Map<string, LeadDetailEntry[]>();
+
+  for (const entry of entries) {
+    const title = detailSectionFor(lead, entry[0]);
+    const existing = groups.get(title) ?? [];
+    existing.push(entry);
+    groups.set(title, existing);
+  }
+
+  const preferredOrder = [
+    "Applicant Information",
+    "Vehicle Information",
+    "Vehicle to Sell",
+    "Trade-In Vehicle",
+    "Vehicle the Customer Wants",
+    "Financing Information",
+    "Address Information",
+    "Employment & Income",
+    "References",
+    "Appointment Details",
+    "Vehicle Inquiry",
+    "Availability Request",
+    "Contact Request",
+    "Sell Request Details",
+    "Trade Request Details",
+    "Additional Information",
+  ];
+
+  return [...groups.entries()]
+    .sort(([first], [second]) => {
+      const firstIndex = preferredOrder.indexOf(first);
+      const secondIndex = preferredOrder.indexOf(second);
+      return (firstIndex < 0 ? 999 : firstIndex) - (secondIndex < 0 ? 999 : secondIndex);
+    })
+    .map(([title, sectionEntries]) => ({
+      title,
+      description: sectionDescription(title),
+      entries: sectionEntries,
+    }));
+}
+
+function FormSectionCard({
+  title,
+  description,
+  children,
+}: {
+  title: string;
+  description?: string | undefined;
+  children: React.ReactNode;
+}) {
+  return (
+    <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
+      <div className="border-b border-border bg-muted/20 px-4 py-3 sm:px-5">
+        <h3 className="font-semibold text-foreground">{title}</h3>
+        {description ? <p className="mt-0.5 text-xs text-muted-foreground">{description}</p> : null}
+      </div>
+      <div className="p-4 sm:p-5">{children}</div>
+    </section>
+  );
+}
+
+function OrganizedDetailGrid({ entries }: { entries: LeadDetailEntry[] }) {
+  return (
+    <div className="grid grid-cols-1 gap-x-6 gap-y-4 sm:grid-cols-2">
+      {entries.map(([key, value]) => {
+        const parsed = parsePossibleJson(value);
+        const complex = parsed !== null && typeof parsed === "object";
+
+        return (
+          <div
+            key={key}
+            className={
+              complex
+                ? "rounded-lg border border-border bg-muted/10 p-4 sm:col-span-2"
+                : "min-w-0 border-b border-border/70 pb-3"
+            }
+          >
+            <p className="text-xs font-medium text-muted-foreground">{formatFieldLabel(key)}</p>
+            <div className="mt-1.5 text-foreground">
+              <ReadableValue value={parsed} />
+            </div>
+          </div>
+        );
+      })}
+    </div>
   );
 }
 
@@ -1065,13 +1285,13 @@ function ProfileAvatar({
   name: string;
   verified?: boolean | undefined;
   admin?: boolean | undefined;
-  size?: "sm" | "md" | "lg" | undefined;
+  size?: "sm" | "md" | "lg" | "xl" | undefined;
 }) {
-  const sizeClass = size === "lg" ? "size-12" : size === "md" ? "size-11" : "size-9";
+  const sizeClass = size === "xl" ? "size-24" : size === "lg" ? "size-12" : size === "md" ? "size-11" : "size-9";
 
-  const badgeSize = size === "lg" ? "size-[17px]" : size === "md" ? "size-4" : "size-[14px]";
+  const badgeSize = size === "xl" ? "size-6" : size === "lg" ? "size-[17px]" : size === "md" ? "size-4" : "size-[14px]";
 
-  const checkSize = size === "lg" ? "size-3" : "size-2.5";
+  const checkSize = size === "xl" ? "size-4" : size === "lg" ? "size-3" : "size-2.5";
 
   const initials =
     name
@@ -1295,49 +1515,6 @@ function removeImageFields(value: Record<string, unknown>) {
   return Object.fromEntries(Object.entries(value).filter(([key]) => !imageKeys.has(key)));
 }
 
-function CompactPanel({
-  title,
-  icon: Icon,
-  children,
-}: {
-  title: string;
-  icon: typeof UserRound;
-  children: React.ReactNode;
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
-      <div className="flex items-center gap-2 border-b border-border bg-muted/30 px-4 py-3">
-        <Icon className="size-4 text-primary" />
-        <h3 className="text-sm font-semibold">{title}</h3>
-      </div>
-
-      <div className="space-y-3 p-4">{children}</div>
-    </section>
-  );
-}
-
-function ProfessionalSection({
-  title,
-  description,
-  children,
-}: {
-  title: string;
-  description?: string;
-  children: React.ReactNode;
-}) {
-  return (
-    <section>
-      <div className="mb-3">
-        <h3 className="font-semibold text-foreground">{title}</h3>
-
-        {description && <p className="mt-0.5 text-sm text-muted-foreground">{description}</p>}
-      </div>
-
-      {children}
-    </section>
-  );
-}
-
 function ContactRow({
   icon: Icon,
   label,
@@ -1384,23 +1561,6 @@ function MobileValue({ label, value }: { label: string; value: string }) {
     <div>
       <p className="text-muted-foreground">{label}</p>
       <p className="mt-0.5 font-medium text-foreground">{value}</p>
-    </div>
-  );
-}
-
-function StructuredDetail({ label, value }: { label: string; value: unknown }) {
-  const parsed = parsePossibleJson(value);
-  const complex = parsed !== null && typeof parsed === "object";
-
-  return (
-    <div className={`overflow-hidden rounded-xl border border-border bg-background ${complex ? "xl:col-span-2" : ""}`}>
-      <div className="border-b border-border bg-muted/30 px-4 py-2.5">
-        <p className="text-sm font-semibold">{label}</p>
-      </div>
-
-      <div className="p-4">
-        <ReadableValue value={parsed} />
-      </div>
     </div>
   );
 }
