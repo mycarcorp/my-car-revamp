@@ -293,6 +293,7 @@ export type Database = {
       }
       service_areas: {
         Row: {
+          active: boolean
           body: string | null
           created_at: string
           id: string
@@ -304,6 +305,7 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          active?: boolean
           body?: string | null
           created_at?: string
           id?: string
@@ -315,6 +317,7 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          active?: boolean
           body?: string | null
           created_at?: string
           id?: string
