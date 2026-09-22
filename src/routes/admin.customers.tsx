@@ -521,21 +521,40 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
                   type="button"
                   onClick={() => selectOverviewFilter(item.key)}
                   aria-pressed={active}
-                  className={`group rounded-lg border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                  className={`group rounded-lg border p-4 text-left transition-[background-color,border-color,box-shadow,transform] duration-300 ease-out hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F49923]/40 ${
                     active
-                      ? "border-primary bg-primary/[0.04] ring-1 ring-primary"
+                      ? "border-[#F49923] bg-[#F49923] text-black shadow-sm"
                       : "border-border bg-background hover:border-primary/40"
                   }`}
                 >
-                  <div className={`flex size-9 items-center justify-center rounded-lg ${item.className}`}>
+                  <div
+                    className={`flex size-9 items-center justify-center rounded-lg transition-colors duration-300 ${
+                      active ? "bg-black/10 text-black" : item.className
+                    }`}
+                  >
                     <Icon className="size-[18px]" aria-hidden="true" />
                   </div>
 
-                  <p className="mt-3 text-2xl font-semibold text-foreground">
-                    {isLoading ? "—" : item.value.toLocaleString()}
+                  <p
+                    className={`mt-3 text-2xl font-semibold transition-colors duration-300 ${
+                      active ? "text-black" : "text-foreground"
+                    }`}
+                  >
+                    <span
+                      key={`${active}-${item.value}`}
+                      className="inline-block animate-in fade-in zoom-in-95 duration-300"
+                    >
+                      {isLoading ? "—" : item.value.toLocaleString()}
+                    </span>
                   </p>
 
-                  <p className="mt-1 line-clamp-2 text-sm text-muted-foreground">{item.label}</p>
+                  <p
+                    className={`mt-1 line-clamp-2 text-sm transition-colors duration-300 ${
+                      active ? "font-medium text-black" : "text-muted-foreground"
+                    }`}
+                  >
+                    {item.label}
+                  </p>
                 </button>
               );
             })}
