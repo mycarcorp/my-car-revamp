@@ -145,6 +145,17 @@ const LEAD_TYPES = [
 
 type LeadFilterType = (typeof LEAD_TYPES)[number]["key"];
 
+const DATE_FILTERS = [
+  { key: "all", label: "All time" },
+  { key: "today", label: "Today" },
+  { key: "last_7_days", label: "Last 7 days" },
+  { key: "this_month", label: "This month" },
+  { key: "last_30_days", label: "Last 30 days" },
+  { key: "this_year", label: "This year" },
+] as const;
+
+type DateFilterType = (typeof DATE_FILTERS)[number]["key"];
+
 const LEAD_LABELS: Record<string, string> = {
   finance: "Financing",
   appointment: "Appointment",
@@ -218,6 +229,61 @@ function matchesLeadType(lead: AdminLeadRow, selectedType: LeadFilterType) {
   return lead.lead_type === selectedType;
 }
 
+function getLeadCreatedDate(lead: AdminLeadRow) {
+  if (!lead.created_at) return null;
+
+  const date = new Date(lead.created_at);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function startOfLocalDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function matchesDateFilter(lead: AdminLeadRow, selectedDate: DateFilterType, now = new Date()) {
+  if (selectedDate === "all") return true;
+
+  const createdAt = getLeadCreatedDate(lead);
+
+  if (!createdAt) return false;
+
+  const today = startOfLocalDay(now);
+
+  if (selectedDate === "today") {
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    return createdAt >= today && createdAt < tomorrow;
+  }
+
+  if (selectedDate === "last_7_days") {
+    const start = new Date(today);
+    start.setDate(start.getDate() - 6);
+
+    return createdAt >= start;
+  }
+
+  if (selectedDate === "this_month") {
+    const start = new Date(now.getFullYear(), now.getMonth(), 1);
+    const end = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+    return createdAt >= start && createdAt < end;
+  }
+
+  if (selectedDate === "last_30_days") {
+    const start = new Date(today);
+    start.setDate(start.getDate() - 29);
+
+    return createdAt >= start;
+  }
+
+  const start = new Date(now.getFullYear(), 0, 1);
+  const end = new Date(now.getFullYear() + 1, 0, 1);
+
+  return createdAt >= start && createdAt < end;
+}
+
 function getFirstDetail(lead: AdminLeadRow, keys: string[]): unknown {
   const details = lead.details ?? {};
 
@@ -262,6 +328,7 @@ function getPreferredTime(lead: AdminLeadRow) {
 
 function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts: AccountProfile[] }) {
   const [type, setType] = useState<LeadFilterType>("all");
+  const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
   const [search, setSearch] = useState("");
   const [selectedLead, setSelectedLead] = useState<AdminLeadRow | null>(null);
 
@@ -279,11 +346,22 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
 
   const leads = data ?? [];
 
+  const leadStats = useMemo(() => {
+    const now = new Date();
+
+    return {
+      total: leads.length,
+      today: leads.filter((lead) => matchesDateFilter(lead, "today", now)).length,
+      month: leads.filter((lead) => matchesDateFilter(lead, "this_month", now)).length,
+    };
+  }, [leads]);
+
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
 
     return leads.filter((lead) => {
       if (!matchesLeadType(lead, type)) return false;
+      if (!matchesDateFilter(lead, dateFilter)) return false;
       if (!needle) return true;
 
       return [
@@ -299,9 +377,10 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
         .toLowerCase()
         .includes(needle);
     });
-  }, [leads, type, search]);
+  }, [leads, type, dateFilter, search]);
 
-  const countFor = (key: LeadFilterType) => leads.filter((lead) => matchesLeadType(lead, key)).length;
+  const countFor = (key: LeadFilterType) =>
+    leads.filter((lead) => matchesLeadType(lead, key) && matchesDateFilter(lead, dateFilter)).length;
 
   return (
     <>
@@ -315,17 +394,60 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
             <h2 className="font-semibold">Customer Submissions</h2>
           </div>
 
-          <div className="relative w-full lg:max-w-md">
-            <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <div className="flex w-full flex-col gap-2 sm:flex-row lg:max-w-2xl lg:justify-end">
+            <div className="relative w-full sm:w-48">
+              <CalendarDays className="pointer-events-none absolute left-3 top-1/2 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
 
-            <Input
-              type="search"
-              className="pl-9"
-              placeholder="Search name, request, date, time or status"
-              value={search}
-              onChange={(event) => setSearch(event.target.value)}
-            />
+              <select
+                aria-label="Filter leads by date"
+                value={dateFilter}
+                onChange={(event) => setDateFilter(event.target.value as DateFilterType)}
+                className="h-10 w-full cursor-pointer appearance-none rounded-md border border-input bg-background pl-9 pr-8 text-sm text-foreground shadow-sm outline-none transition-colors focus-visible:ring-2 focus-visible:ring-ring"
+              >
+                {DATE_FILTERS.map((option) => (
+                  <option key={option.key} value={option.key}>
+                    {option.label}
+                  </option>
+                ))}
+              </select>
+
+              <ChevronRight className="pointer-events-none absolute right-3 top-1/2 size-4 -translate-y-1/2 rotate-90 text-muted-foreground" />
+            </div>
+
+            <div className="relative w-full sm:min-w-0 sm:flex-1 lg:max-w-md">
+              <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+
+              <Input
+                type="search"
+                className="pl-9"
+                placeholder="Search name, request, date, time or status"
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+              />
+            </div>
           </div>
+        </div>
+
+        <div className="grid gap-3 border-b border-border p-4 sm:grid-cols-3">
+          <LeadStatCard
+            label="Total leads"
+            value={leadStats.total}
+            helper="All submissions received"
+            loading={isLoading}
+          />
+          <LeadStatCard
+            label="Received today"
+            value={leadStats.today}
+            helper={formatLongDate(new Date())}
+            loading={isLoading}
+            accent
+          />
+          <LeadStatCard
+            label="Received this month"
+            value={leadStats.month}
+            helper={new Intl.DateTimeFormat("en-US", { month: "long", year: "numeric" }).format(new Date())}
+            loading={isLoading}
+          />
         </div>
 
         <div className="overflow-x-auto border-b border-border">
@@ -359,7 +481,9 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
           <div className="p-10 text-center">
             <Users className="mx-auto size-8 text-muted-foreground/60" />
             <p className="mt-3 font-medium">No customer submissions found</p>
-            <p className="mt-1 text-sm text-muted-foreground">Try changing the selected tab or search term.</p>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Try changing the request type, calendar filter, or search term.
+            </p>
           </div>
         ) : (
           <>
@@ -517,6 +641,48 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
         }}
       />
     </>
+  );
+}
+
+function LeadStatCard({
+  label,
+  value,
+  helper,
+  loading,
+  accent = false,
+}: {
+  label: string;
+  value: number;
+  helper: string;
+  loading: boolean;
+  accent?: boolean;
+}) {
+  return (
+    <div
+      className={`rounded-xl border p-4 ${
+        accent ? "border-[#809c61]/35 bg-[#809c61]/10" : "border-border bg-background"
+      }`}
+    >
+      <div className="flex items-start justify-between gap-3">
+        <div>
+          <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+          {loading ? (
+            <div className="mt-2 h-8 w-14 animate-pulse rounded bg-muted" />
+          ) : (
+            <p className="mt-1 text-3xl font-semibold tracking-tight text-foreground">{value.toLocaleString()}</p>
+          )}
+          <p className="mt-1 text-xs text-muted-foreground">{helper}</p>
+        </div>
+
+        <div
+          className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${
+            accent ? "bg-[#809c61] text-white" : "bg-muted text-muted-foreground"
+          }`}
+        >
+          <ClipboardList className="size-4" />
+        </div>
+      </div>
+    </div>
   );
 }
 
