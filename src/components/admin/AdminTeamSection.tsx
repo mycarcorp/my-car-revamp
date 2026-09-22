@@ -210,6 +210,7 @@ export function AdminTeamSection({
     if (fromIndex < 0 || toIndex < 0) return;
     const next = [...positions];
     const [moved] = next.splice(fromIndex, 1);
+    if (!moved) return;
     next.splice(toIndex, 0, moved);
     setOrderedPositions(next);
     setDraggedPositionId(null);
