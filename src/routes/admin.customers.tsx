@@ -20,6 +20,7 @@ import {
   Users,
 } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
+import { AdminTeamSection } from "@/components/admin/AdminTeamSection";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -42,6 +43,7 @@ type AccountProfile = {
   legacy_user_id: string | null;
   created_at: string | null;
   roles: string[];
+  position_id: number | null;
 };
 
 function AdminCustomers() {
@@ -66,29 +68,6 @@ function AdminCustomers() {
     () => accounts.filter((account) => (account.roles ?? []).some((role) => role.trim().toLowerCase() === "customer")),
     [accounts],
   );
-
-  const administrators = useMemo(() => {
-    const needle = adminSearch.trim().toLowerCase();
-
-    return accounts.filter((account) => {
-      const isAdmin = (account.roles ?? []).some((role) => role.trim().toLowerCase().includes("admin"));
-
-      if (!isAdmin) return false;
-      if (!needle) return true;
-
-      return [
-        account.full_name,
-        account.email,
-        account.phone,
-        account.roles.join(" "),
-        account.created_at ? formatLongDate(account.created_at) : "",
-      ]
-        .filter(Boolean)
-        .join(" ")
-        .toLowerCase()
-        .includes(needle);
-    });
-  }, [accounts, adminSearch]);
 
   return (
     <div className="w-full">
@@ -126,8 +105,9 @@ function AdminCustomers() {
         {pageTab === "customers" ? (
           <LeadsSection accessToken={accessToken} accounts={customerAccounts} />
         ) : (
-          <AdminAccountsSection
-            accounts={administrators}
+          <AdminTeamSection
+            accounts={accounts}
+            accessToken={accessToken}
             search={adminSearch}
             onSearchChange={setAdminSearch}
             isLoading={isLoading}
@@ -208,7 +188,7 @@ function findAccountForLead(lead: AdminLeadRow, accounts: AccountProfile[]) {
 }
 
 function getTradeIntent(lead: AdminLeadRow) {
-  const intent = lead.details?.intent;
+  const intent = lead.details?.["intent"];
 
   return typeof intent === "string" ? intent.trim().toLowerCase() : "";
 }
@@ -726,146 +706,6 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
   );
 }
 
-function AdminAccountsSection({
-  accounts,
-  search,
-  onSearchChange,
-  isLoading,
-  error,
-}: {
-  accounts: AccountProfile[];
-  search: string;
-  onSearchChange: (value: string) => void;
-  isLoading: boolean;
-  error: unknown;
-}) {
-  return (
-    <section className="overflow-hidden rounded-xl border border-border bg-background shadow-sm">
-      <div className="flex flex-col gap-4 border-b border-border bg-muted/30 p-4 sm:flex-row sm:items-center sm:justify-between">
-        <div className="flex items-center gap-3">
-          <div className="flex size-10 items-center justify-center rounded-lg bg-primary/10 text-primary">
-            <ShieldCheck className="size-5" />
-          </div>
-
-          <div>
-            <h2 className="font-semibold">Administrators</h2>
-            <p className="text-sm text-muted-foreground">Website accounts assigned an administrator role.</p>
-          </div>
-        </div>
-
-        <div className="relative w-full sm:max-w-sm">
-          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
-          <Input
-            type="search"
-            className="pl-9"
-            placeholder="Search administrators"
-            value={search}
-            onChange={(event) => onSearchChange(event.target.value)}
-          />
-        </div>
-      </div>
-
-      {isLoading ? (
-        <RowsLoading />
-      ) : error ? (
-        <div role="alert" className="p-6">
-          <p className="font-medium text-destructive">Couldn&apos;t load administrators</p>
-          <p className="mt-1 text-sm text-muted-foreground">{(error as Error).message}</p>
-        </div>
-      ) : accounts.length === 0 ? (
-        <div className="p-10 text-center">
-          <ShieldCheck className="mx-auto size-9 text-muted-foreground/60" />
-          <p className="mt-3 font-medium">No administrators found</p>
-        </div>
-      ) : (
-        <>
-          <div className="divide-y divide-border md:hidden">
-            {accounts.map((account) => (
-              <article key={account.id} className="p-4">
-                <div className="flex items-start gap-3">
-                  <ProfileAvatar
-                    avatarUrl={account.avatar_url}
-                    name={account.full_name ?? account.email ?? "Administrator"}
-                    verified
-                    admin
-                    size="md"
-                  />
-
-                  <div className="min-w-0">
-                    <p className="truncate font-medium">{account.full_name || "Unnamed administrator"}</p>
-                    <p className="truncate text-sm text-muted-foreground">{account.email || "No email"}</p>
-                    <p className="text-sm text-muted-foreground">{account.phone || "No phone"}</p>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-
-          <div className="hidden overflow-x-auto md:block">
-            <table className="w-full min-w-[900px] table-fixed text-left text-sm">
-              <colgroup>
-                <col className="w-[28%]" />
-                <col className="w-[27%]" />
-                <col className="w-[18%]" />
-                <col className="w-[14%]" />
-                <col className="w-[13%]" />
-              </colgroup>
-
-              <thead className="bg-muted/40 text-muted-foreground">
-                <tr>
-                  <th className="px-4 py-3 font-medium">Name</th>
-                  <th className="px-4 py-3 font-medium">Email</th>
-                  <th className="px-4 py-3 font-medium">Phone</th>
-                  <th className="px-4 py-3 font-medium">Role</th>
-                  <th className="px-4 py-3 font-medium">Joined</th>
-                </tr>
-              </thead>
-
-              <tbody>
-                {accounts.map((account) => (
-                  <tr key={account.id} className="border-t border-border hover:bg-muted/30">
-                    <td className="px-4 py-3">
-                      <div className="flex min-w-0 items-center gap-3">
-                        <ProfileAvatar
-                          avatarUrl={account.avatar_url}
-                          name={account.full_name ?? account.email ?? "Administrator"}
-                          verified
-                          admin
-                          size="sm"
-                        />
-
-                        <p className="truncate font-medium">{account.full_name || "Unnamed administrator"}</p>
-                      </div>
-                    </td>
-
-                    <td className="truncate px-4 py-3 text-muted-foreground">{account.email || "—"}</td>
-
-                    <td className="truncate px-4 py-3 text-muted-foreground">{account.phone || "—"}</td>
-
-                    <td className="overflow-hidden px-4 py-3">
-                      <div className="flex flex-wrap gap-1">
-                        {(account.roles ?? []).map((role) => (
-                          <Badge key={role} className="max-w-full truncate capitalize">
-                            {role.replaceAll("_", " ")}
-                          </Badge>
-                        ))}
-                      </div>
-                    </td>
-
-                    <td className="truncate px-4 py-3 text-muted-foreground">
-                      {account.created_at ? formatLongDate(account.created_at) : "—"}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
-        </>
-      )}
-    </section>
-  );
-}
-
 function LeadDetailsDialog({
   lead,
   account,
@@ -873,7 +713,7 @@ function LeadDetailsDialog({
   onOpenChange,
 }: {
   lead: AdminLeadRow | null;
-  account?: AccountProfile;
+  account?: AccountProfile | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -1010,11 +850,11 @@ function ProfileAvatar({
   admin = false,
   size = "sm",
 }: {
-  avatarUrl?: string | null;
+  avatarUrl?: string | null | undefined;
   name: string;
-  verified?: boolean;
-  admin?: boolean;
-  size?: "sm" | "md" | "lg";
+  verified?: boolean | undefined;
+  admin?: boolean | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
 }) {
   const sizeClass = size === "lg" ? "size-12" : size === "md" ? "size-11" : "size-9";
 
@@ -1211,7 +1051,7 @@ function findVehicleTitle(vehicle: Record<string, unknown>) {
     }
   }
 
-  const titleParts = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
+  const titleParts = [vehicle["year"], vehicle["make"], vehicle["model"], vehicle["trim"]]
     .filter((value) => value !== null && value !== undefined && value !== "")
     .map(String);
 
@@ -1295,8 +1135,8 @@ function ContactRow({
 }: {
   icon: typeof Mail;
   label: string;
-  value?: string | null;
-  href?: string;
+  value?: string | null | undefined;
+  href?: string | undefined;
 }) {
   return (
     <div className="flex gap-3">
