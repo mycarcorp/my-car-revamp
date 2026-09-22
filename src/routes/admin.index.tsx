@@ -44,6 +44,28 @@ const LEAD_LABELS: Record<string, string> = {
   contact: "Contact",
 };
 
+function getValidDate(value: string | null | undefined) {
+  if (!value) return null;
+
+  const date = new Date(value);
+
+  return Number.isNaN(date.getTime()) ? null : date;
+}
+
+function startOfDay(date: Date) {
+  return new Date(date.getFullYear(), date.getMonth(), date.getDate());
+}
+
+function startOfWeek(date: Date) {
+  const start = startOfDay(date);
+  const day = start.getDay();
+  const daysSinceMonday = day === 0 ? 6 : day - 1;
+
+  start.setDate(start.getDate() - daysSinceMonday);
+
+  return start;
+}
+
 function AdminDashboard() {
   const { session } = useAuth();
   const accessToken = session?.access_token ?? "";
@@ -82,9 +104,35 @@ function AdminDashboard() {
   const publishedPosts = posts.filter((p) => p.status === "published").length;
   const draftPosts = posts.filter((p) => p.status !== "published").length;
 
-  const sevenDaysAgo = new Date();
-  sevenDaysAgo.setDate(sevenDaysAgo.getDate() - 7);
-  const newLeadsThisWeek = leads.filter((lead) => lead.created_at && new Date(lead.created_at) >= sevenDaysAgo).length;
+  const now = new Date();
+  const todayStart = startOfDay(now);
+  const tomorrowStart = new Date(todayStart);
+  tomorrowStart.setDate(tomorrowStart.getDate() + 1);
+
+  const weekStart = startOfWeek(now);
+  const nextWeekStart = new Date(weekStart);
+  nextWeekStart.setDate(nextWeekStart.getDate() + 7);
+
+  const monthStart = new Date(now.getFullYear(), now.getMonth(), 1);
+  const nextMonthStart = new Date(now.getFullYear(), now.getMonth() + 1, 1);
+
+  const leadsToday = leads.filter((lead) => {
+    const createdAt = getValidDate(lead.created_at);
+
+    return createdAt && createdAt >= todayStart && createdAt < tomorrowStart;
+  }).length;
+
+  const leadsThisWeek = leads.filter((lead) => {
+    const createdAt = getValidDate(lead.created_at);
+
+    return createdAt && createdAt >= weekStart && createdAt < nextWeekStart;
+  }).length;
+
+  const leadsThisMonth = leads.filter((lead) => {
+    const createdAt = getValidDate(lead.created_at);
+
+    return createdAt && createdAt >= monthStart && createdAt < nextMonthStart;
+  }).length;
 
   const leadsByType = (type: string) => leads.filter((lead) => lead.lead_type === type).length;
 
@@ -114,16 +162,34 @@ function AdminDashboard() {
       iconClassName: "text-pink-600",
       iconBackgroundClassName: "bg-pink-100",
       to: "/admin/customers" as const,
-      actionLabel: "View opportunities",
+      actionLabel: "View all customers",
     },
     {
-      label: "New this week",
-      value: newLeadsThisWeek,
+      label: "Leads today",
+      value: leadsToday,
       icon: Clock3,
       iconClassName: "text-amber-600",
       iconBackgroundClassName: "bg-amber-100",
       to: "/admin/customers" as const,
-      actionLabel: "View recent leads",
+      actionLabel: "View today's leads",
+    },
+    {
+      label: "Leads this week",
+      value: leadsThisWeek,
+      icon: Sparkles,
+      iconClassName: "text-orange-600",
+      iconBackgroundClassName: "bg-orange-100",
+      to: "/admin/customers" as const,
+      actionLabel: "View this week's leads",
+    },
+    {
+      label: "Leads this month",
+      value: leadsThisMonth,
+      icon: CalendarCheck,
+      iconClassName: "text-indigo-600",
+      iconBackgroundClassName: "bg-indigo-100",
+      to: "/admin/customers" as const,
+      actionLabel: "View this month's leads",
     },
     {
       label: "Customers",
@@ -162,7 +228,7 @@ function AdminDashboard() {
 
       <main className="space-y-6 p-4 sm:p-6">
         <section>
-          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-3 2xl:grid-cols-6">
+          <div className="grid grid-cols-2 gap-3 sm:gap-4 lg:grid-cols-4">
             {stats.map((stat) => {
               const Icon = stat.icon;
 
