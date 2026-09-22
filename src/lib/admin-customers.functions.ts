@@ -10,6 +10,7 @@ export type AdminCustomerRow = {
   updated_at: string | null;
   legacy_user_id: number | null;
   roles: string[];
+  position_id: number | null;
 };
 
 export const listCustomers = createServerFn({ method: "POST" })
@@ -27,7 +28,7 @@ export const listCustomers = createServerFn({ method: "POST" })
     if (!url || !key) throw new Error("Legacy customer database credentials are not configured.");
 
     const response = await fetch(
-      `${url}/rest/v1/mc_users?select=id,name,email,phone,avatar,role,created_at,updated_at&order=created_at.desc`,
+      `${url}/rest/v1/mc_users?select=*&order=created_at.desc`,
       {
         headers: {
           apikey: key,
@@ -47,6 +48,7 @@ export const listCustomers = createServerFn({ method: "POST" })
       phone: string | null;
       avatar: string | null;
       role: string | null;
+      position_id?: number | null;
       created_at: string | null;
       updated_at: string | null;
     }>;
@@ -61,5 +63,6 @@ export const listCustomers = createServerFn({ method: "POST" })
       updated_at: user.updated_at,
       legacy_user_id: user.id,
       roles: user.role ? [user.role] : [],
+      position_id: user.position_id ?? null,
     }));
   });
