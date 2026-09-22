@@ -261,6 +261,13 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{ slug: s
 
   await upsertRow(row);
 
+  // A new or changed article means the cached sitemap is stale.
+  try {
+    (await import("./sitemap-cache.server")).invalidateSitemapCache();
+  } catch {
+    /* sitemap cache is best-effort */
+  }
+
   return { slug };
 }
 
