@@ -261,14 +261,37 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{ slug: s
 
   await upsertRow(row);
 
+  // A new or changed article means the cached sitemap is stale.
+  try {
+    (await import("./sitemap-cache.server")).invalidateSitemapCache();
+  } catch {
+    /* sitemap cache is best-effort */
+  }
+
   return { slug };
 }
 
+type SitemapRow = {
+  slug: string;
+  updated_at: string | null;
+  published_at: string | null;
+  status?: string | null;
+};
+
+/** Published articles only (drafts and unpublished rows stay out of the sitemap). */
 export async function sitemapUrls(): Promise<Array<{ slug: string; lastmod: string | null }>> {
-  const rows = (await rest("blog_posts?select=slug,updated_at,published_at")) as Array<{
-    slug: string;
-    updated_at: string | null;
-    published_at: string | null;
-  }>;
-  return (rows ?? []).map((r) => ({ slug: r.slug, lastmod: r.updated_at ?? r.published_at }));
+  let rows: SitemapRow[] = [];
+  try {
+    rows = (await rest(
+      "blog_posts?select=slug,updated_at,published_at,status&or=(status.is.null,status.eq.published)&published_at=not.is.null",
+    )) as SitemapRow[];
+  } catch {
+    // Table without the optional status column.
+    rows = (await rest(
+      "blog_posts?select=slug,updated_at,published_at&published_at=not.is.null",
+    )) as SitemapRow[];
+  }
+  return (rows ?? [])
+    .filter((r) => r.slug)
+    .map((r) => ({ slug: r.slug, lastmod: r.updated_at ?? r.published_at }));
 }

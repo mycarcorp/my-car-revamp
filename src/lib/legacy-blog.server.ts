@@ -219,6 +219,7 @@ export async function createPost(input: BlogInput): Promise<LegacyBlogPost> {
     prefer: "return=representation",
     body,
   })) as LegacyBlogPost[];
+  (await import("./sitemap-cache.server")).invalidateSitemapCache();
   return rows[0]!;
 }
 
@@ -243,11 +244,13 @@ export async function updatePost(id: number, input: BlogInput): Promise<LegacyBl
     prefer: "return=representation",
     body,
   })) as LegacyBlogPost[];
+  (await import("./sitemap-cache.server")).invalidateSitemapCache();
   return rows[0]!;
 }
 
 export async function deletePost(id: number): Promise<void> {
   await rest(`mc_blog?id=eq.${id}`, { method: "DELETE", profile: "mycarco_db" });
+  (await import("./sitemap-cache.server")).invalidateSitemapCache();
 }
 
 export async function setFeaturedPost(id: number): Promise<void> {
