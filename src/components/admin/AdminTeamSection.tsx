@@ -37,7 +37,7 @@ export type TeamAccount = {
   email: string | null;
   phone: string | null;
   avatar_url: string | null;
-  legacy_user_id: number | null;
+  legacy_user_id: string | number | null;
   created_at: string | null;
   roles: string[];
   position_id: number | null;
@@ -297,7 +297,7 @@ export function AdminTeamSection({
               <tbody>
                 {filtered.map((account) => {
                   const admin = isAdminAccount(account);
-                  const userId = account.legacy_user_id ?? Number(account.id);
+                  const userId = Number(account.legacy_user_id ?? account.id);
                   const position = account.position_id
                     ? positionsById.get(account.position_id)
                     : undefined;
