@@ -248,17 +248,17 @@ function AdminDashboard() {
                     type="button"
                     aria-pressed={showTodayCounts}
                     onClick={() => setShowTodayCounts((current) => !current)}
-                    className={`group rounded-lg border p-4 text-left transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F49923]/40 ${
+                    className={`group rounded-lg border p-4 text-left transition-[background-color,border-color,box-shadow,transform] duration-300 ease-out hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F49923]/40 ${
                       showTodayCounts
                         ? hasTodayLeads
-                          ? "border-[#F49923]/60 bg-[#F49923]/[0.07] shadow-sm"
-                          : "border-[#F49923]/35 bg-[#F49923]/[0.03]"
+                          ? "border-[#F49923] bg-[#F49923] shadow-sm"
+                          : "border-border bg-background"
                         : "border-border hover:border-primary/40"
                     }`}
                   >
                     <div
                       className={`flex size-9 items-center justify-center rounded-lg transition-colors duration-300 ${
-                        hasTodayLeads ? "bg-[#F49923]/15 text-[#F49923]" : item.className
+                        hasTodayLeads ? "bg-black/10 text-black" : item.className
                       }`}
                     >
                       <Icon className="size-4.5" aria-hidden="true" />
@@ -266,7 +266,7 @@ function AdminDashboard() {
 
                     <p
                       className={`mt-3 text-2xl font-semibold transition-colors duration-300 ${
-                        hasTodayLeads ? "text-[#F49923]" : "text-foreground"
+                        hasTodayLeads ? "text-black" : "text-foreground"
                       }`}
                     >
                       <span
@@ -280,14 +280,14 @@ function AdminDashboard() {
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <p
                         className={`text-sm transition-colors duration-300 ${
-                          hasTodayLeads ? "font-medium text-[#F49923]" : "text-muted-foreground"
+                          hasTodayLeads ? "font-medium text-black" : "text-muted-foreground"
                         }`}
                       >
                         {item.label}
                       </p>
                       <span
                         className={`text-xs font-medium transition-colors duration-300 ${
-                          showTodayCounts ? "text-[#F49923]" : "text-primary"
+                          hasTodayLeads ? "text-black/70" : showTodayCounts ? "text-foreground" : "text-primary"
                         }`}
                       >
                         {showTodayCounts ? "Back" : "View today"}
@@ -301,15 +301,15 @@ function AdminDashboard() {
                 <Link
                   key={item.key}
                   to="/admin/customers"
-                  className={`group rounded-lg border p-4 transition-all duration-300 hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 ${
+                  className={`group rounded-lg border p-4 transition-[background-color,border-color,box-shadow,transform] duration-300 ease-out hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 ${
                     hasTodayLeads
-                      ? "border-[#F49923]/60 bg-[#F49923]/[0.07] shadow-sm focus-visible:ring-[#F49923]/40"
+                      ? "border-[#F49923] bg-[#F49923] text-black shadow-sm focus-visible:ring-[#F49923]/40"
                       : "border-border hover:border-primary/40 focus-visible:ring-primary"
                   }`}
                 >
                   <div
                     className={`flex size-9 items-center justify-center rounded-lg transition-colors duration-300 ${
-                      hasTodayLeads ? "bg-[#F49923]/15 text-[#F49923]" : item.className
+                      hasTodayLeads ? "bg-black/10 text-black" : item.className
                     }`}
                   >
                     <Icon className="size-4.5" aria-hidden="true" />
@@ -317,7 +317,7 @@ function AdminDashboard() {
 
                   <p
                     className={`mt-3 text-2xl font-semibold transition-colors duration-300 ${
-                      hasTodayLeads ? "text-[#F49923]" : "text-foreground"
+                      hasTodayLeads ? "text-black" : "text-foreground"
                     }`}
                   >
                     <span
@@ -330,7 +330,7 @@ function AdminDashboard() {
 
                   <p
                     className={`mt-1 text-sm transition-colors duration-300 ${
-                      hasTodayLeads ? "font-medium text-[#F49923]" : "text-muted-foreground"
+                      hasTodayLeads ? "font-medium text-black" : "text-muted-foreground"
                     }`}
                   >
                     {item.label}
