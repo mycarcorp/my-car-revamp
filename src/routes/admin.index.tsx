@@ -13,7 +13,6 @@ import {
   MessageSquare,
   Repeat2,
   Users,
-  X,
 } from "lucide-react";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Badge } from "@/components/ui/badge";
@@ -46,8 +45,6 @@ const LEAD_LABELS: Record<string, string> = {
   check_availability: "Check Availability",
   contact: "Contact",
 };
-
-const TODAY_LEAD_ORDER = ["finance", "sell", "trade", "appointment", "availability", "contact"];
 
 function normalizeLeadType(value: unknown) {
   const type = String(value || "other")
@@ -117,7 +114,7 @@ function startOfDay(date: Date) {
 function AdminDashboard() {
   const { session } = useAuth();
   const accessToken = session?.access_token ?? "";
-  const [todayBreakdownOpen, setTodayBreakdownOpen] = useState(false);
+  const [showTodayCounts, setShowTodayCounts] = useState(false);
 
   const { data: inventoryRows, isLoading: inventoryLoading } = useQuery({
     queryKey: ["admin", "inventory", "dashboard"],
@@ -158,30 +155,15 @@ function AdminDashboard() {
 
   const leadsToday = todayLeads.length;
 
-  const todayLeadBreakdown = Object.entries(
-    todayLeads.reduce<Record<string, number>>((counts, lead) => {
-      const type = normalizeLeadType(lead.lead_type);
-      counts[type] = (counts[type] ?? 0) + 1;
-      return counts;
-    }, {}),
-  )
-    .map(([type, count]) => ({
-      type,
-      count,
-      label: LEAD_LABELS[type] ?? type.replace(/_/g, " ").replace(/\b\w/g, (letter) => letter.toUpperCase()),
-    }))
-    .sort((a, b) => {
-      const aIndex = TODAY_LEAD_ORDER.indexOf(a.type);
-      const bIndex = TODAY_LEAD_ORDER.indexOf(b.type);
-      return (aIndex === -1 ? 999 : aIndex) - (bIndex === -1 ? 999 : bIndex);
-    });
-
-  const leadsByType = (type: string) => leads.filter((lead) => normalizeLeadType(lead.lead_type) === type).length;
+  const leadsByType = (type: string) => {
+    const source = showTodayCounts ? todayLeads : leads;
+    return source.filter((lead) => normalizeLeadType(lead.lead_type) === type).length;
+  };
 
   const leadOverview = [
     {
       key: "today",
-      label: "Leads today",
+      label: showTodayCounts ? "Back to totals" : "Leads today",
       value: leadsToday,
       icon: Clock3,
       className: "text-[#D25B4C] bg-[#D25B4C]/12",
@@ -244,7 +226,7 @@ function AdminDashboard() {
             </Button>
           </div>
 
-          <div className="relative grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-6 sm:p-5">
+          <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-6 sm:p-5">
             {leadOverview.map((item) => {
               const Icon = item.icon;
 
@@ -253,9 +235,11 @@ function AdminDashboard() {
                   <button
                     key={item.key}
                     type="button"
-                    aria-expanded={todayBreakdownOpen}
-                    onClick={() => setTodayBreakdownOpen((open) => !open)}
-                    className="group rounded-lg border border-border p-4 text-left transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                    aria-pressed={showTodayCounts}
+                    onClick={() => setShowTodayCounts((current) => !current)}
+                    className={`group rounded-lg border p-4 text-left transition-all hover:-translate-y-0.5 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary ${
+                      showTodayCounts ? "border-[#D25B4C]/60 bg-[#D25B4C]/5" : "border-border hover:border-primary/40"
+                    }`}
                   >
                     <div className={`flex size-9 items-center justify-center rounded-lg ${item.className}`}>
                       <Icon className="size-4.5" aria-hidden="true" />
@@ -265,7 +249,9 @@ function AdminDashboard() {
 
                     <div className="mt-1 flex items-center justify-between gap-2">
                       <p className="text-sm text-muted-foreground">{item.label}</p>
-                      <span className="text-xs font-medium text-primary">{todayBreakdownOpen ? "Close" : "View"}</span>
+                      <span className="text-xs font-medium text-primary">
+                        {showTodayCounts ? "Back" : "View today"}
+                      </span>
                     </div>
                   </button>
                 );
@@ -287,52 +273,6 @@ function AdminDashboard() {
                 </Link>
               );
             })}
-
-            {todayBreakdownOpen ? (
-              <div className="absolute left-4 top-[calc(100%-0.25rem)] z-30 w-[calc(100%-2rem)] max-w-xs rounded-xl border border-border bg-popover p-3 text-popover-foreground shadow-xl sm:left-5">
-                <div className="flex items-center justify-between gap-3 px-1 pb-2">
-                  <div>
-                    <p className="text-sm font-semibold">Today&apos;s leads</p>
-                    <p className="text-xs text-muted-foreground">
-                      {leadsToday} {leadsToday === 1 ? "lead" : "leads"} received
-                    </p>
-                  </div>
-
-                  <button
-                    type="button"
-                    className="flex size-7 items-center justify-center rounded-md text-muted-foreground hover:bg-muted hover:text-foreground"
-                    aria-label="Close today's lead breakdown"
-                    onClick={() => setTodayBreakdownOpen(false)}
-                  >
-                    <X className="size-4" />
-                  </button>
-                </div>
-
-                {leadsLoading ? (
-                  <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">Loading…</p>
-                ) : todayLeadBreakdown.length === 0 ? (
-                  <p className="rounded-lg bg-muted/50 px-3 py-2 text-sm text-muted-foreground">
-                    No leads received today.
-                  </p>
-                ) : (
-                  <div className="space-y-1">
-                    {todayLeadBreakdown.map((leadType) => (
-                      <Link
-                        key={leadType.type}
-                        to="/admin/customers"
-                        onClick={() => setTodayBreakdownOpen(false)}
-                        className="flex items-center justify-between rounded-lg px-3 py-2 text-sm transition-colors hover:bg-muted"
-                      >
-                        <span className="font-medium">{leadType.label}</span>
-                        <span className="rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-foreground">
-                          {leadType.count}
-                        </span>
-                      </Link>
-                    ))}
-                  </div>
-                )}
-              </div>
-            ) : null}
           </div>
         </section>
 

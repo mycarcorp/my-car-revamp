@@ -23,7 +23,7 @@ import { listLeads } from "@/lib/admin-leads.functions";
 import { listLegacyPosts } from "@/lib/legacy-blog.functions";
 import { formatDate } from "@/lib/format";
 
-export const Route = createFileRoute("/admin/")({
+export const Route = createFileRoute("/admin/customers")({
   head: () => ({
     meta: [
       { title: "Dashboard — MyCar Admin" },
