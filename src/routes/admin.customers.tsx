@@ -189,7 +189,7 @@ function findAccountForLead(lead: AdminLeadRow, accounts: AccountProfile[]) {
 }
 
 function getTradeIntent(lead: AdminLeadRow) {
-  const intent = lead.details?.intent;
+  const intent = lead.details?.["intent"];
 
   return typeof intent === "string" ? intent.trim().toLowerCase() : "";
 }
@@ -714,7 +714,7 @@ function LeadDetailsDialog({
   onOpenChange,
 }: {
   lead: AdminLeadRow | null;
-  account?: AccountProfile;
+  account?: AccountProfile | undefined;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }) {
@@ -851,11 +851,11 @@ function ProfileAvatar({
   admin = false,
   size = "sm",
 }: {
-  avatarUrl?: string | null;
+  avatarUrl?: string | null | undefined;
   name: string;
-  verified?: boolean;
-  admin?: boolean;
-  size?: "sm" | "md" | "lg";
+  verified?: boolean | undefined;
+  admin?: boolean | undefined;
+  size?: "sm" | "md" | "lg" | undefined;
 }) {
   const sizeClass = size === "lg" ? "size-12" : size === "md" ? "size-11" : "size-9";
 
@@ -1052,7 +1052,7 @@ function findVehicleTitle(vehicle: Record<string, unknown>) {
     }
   }
 
-  const titleParts = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim]
+  const titleParts = [vehicle["year"], vehicle["make"], vehicle["model"], vehicle["trim"]]
     .filter((value) => value !== null && value !== undefined && value !== "")
     .map(String);
 
@@ -1136,8 +1136,8 @@ function ContactRow({
 }: {
   icon: typeof Mail;
   label: string;
-  value?: string | null;
-  href?: string;
+  value?: string | null | undefined;
+  href?: string | undefined;
 }) {
   return (
     <div className="flex gap-3">
