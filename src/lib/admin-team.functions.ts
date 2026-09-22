@@ -5,6 +5,7 @@ export type AdminPosition = {
   name: string;
   description: string | null;
   responsibilities: string[];
+  sort_order: number | null;
   created_at: string | null;
   updated_at: string | null;
 };
@@ -48,7 +49,7 @@ export const savePosition = createServerFn({ method: "POST" })
         accessToken: token(input),
         id: input?.id ?? null,
         name,
-        description: description ? description : null,
+        description: description || null,
         responsibilities: cleanResponsibilities(input?.responsibilities),
       };
     },
@@ -57,12 +58,24 @@ export const savePosition = createServerFn({ method: "POST" })
     const { requireStaff } = await import("./legacy-blog.server");
     await requireStaff(data.accessToken);
     const { createPositionRow, updatePositionRow } = await import("./admin-team.server");
-    const payload = {
-      name: data.name,
-      description: data.description,
-      responsibilities: data.responsibilities,
-    };
+    const payload = { name: data.name, description: data.description, responsibilities: data.responsibilities };
     return data.id ? updatePositionRow(Number(data.id), payload) : createPositionRow(payload);
+  });
+
+export const reorderPositions = createServerFn({ method: "POST" })
+  .inputValidator((input: { accessToken: string; positionIds: number[] }) => {
+    const positionIds = Array.isArray(input?.positionIds) ? input.positionIds.map(Number) : [];
+    if (!positionIds.length || positionIds.some((id) => !Number.isFinite(id)))
+      throw new Error("Invalid position order.");
+    if (new Set(positionIds).size !== positionIds.length) throw new Error("Position order contains duplicates.");
+    return { accessToken: token(input), positionIds: positionIds.slice(0, 100) };
+  })
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const { requireStaff } = await import("./legacy-blog.server");
+    await requireStaff(data.accessToken);
+    const { reorderPositionRows } = await import("./admin-team.server");
+    await reorderPositionRows(data.positionIds);
+    return { ok: true };
   });
 
 export const deletePosition = createServerFn({ method: "POST" })
