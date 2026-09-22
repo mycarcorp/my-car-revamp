@@ -99,6 +99,10 @@ export function AdminTeamSection({
   }, [positionMenuOpen]);
 
   const positionsById = useMemo(() => new Map(positions.map((position) => [position.id, position])), [positions]);
+  const positionRankById = useMemo(
+    () => new Map(positions.map((position, index) => [position.id, index])),
+    [positions],
+  );
 
   const refreshAccounts = () => queryClient.invalidateQueries({ queryKey: ["admin", "customers"] });
   const refreshPositions = () => queryClient.invalidateQueries({ queryKey: ["admin", "positions"] });
@@ -160,7 +164,7 @@ export function AdminTeamSection({
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
-    return accounts.filter((account) => {
+    const visibleAccounts = accounts.filter((account) => {
       const admin = isAdminAccount(account);
       if (roleFilter === "admin" && !admin) return false;
       if (roleFilter === "customer" && admin) return false;
@@ -172,7 +176,26 @@ export function AdminTeamSection({
         .toLowerCase()
         .includes(needle);
     });
-  }, [accounts, roleFilter, search, positionsById]);
+
+    return [...visibleAccounts].sort((first, second) => {
+      const firstRank = first.position_id
+        ? (positionRankById.get(first.position_id) ?? Number.MAX_SAFE_INTEGER)
+        : Number.MAX_SAFE_INTEGER;
+      const secondRank = second.position_id
+        ? (positionRankById.get(second.position_id) ?? Number.MAX_SAFE_INTEGER)
+        : Number.MAX_SAFE_INTEGER;
+
+      if (firstRank !== secondRank) return firstRank - secondRank;
+
+      const firstIsAdmin = isAdminAccount(first);
+      const secondIsAdmin = isAdminAccount(second);
+      if (firstIsAdmin !== secondIsAdmin) return firstIsAdmin ? -1 : 1;
+
+      const firstName = (first.full_name || first.email || "").trim();
+      const secondName = (second.full_name || second.email || "").trim();
+      return firstName.localeCompare(secondName, undefined, { sensitivity: "base" });
+    });
+  }, [accounts, roleFilter, search, positionsById, positionRankById]);
 
   const trimmedPositionName = newPositionName.trim();
   const positionAlreadyExists = positions.some(
