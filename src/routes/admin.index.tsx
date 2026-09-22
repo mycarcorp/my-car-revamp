@@ -41,6 +41,49 @@ const LEAD_LABELS: Record<string, string> = {
   contact: "Contact",
 };
 
+type DashboardVehicle = {
+  id: string | number;
+  year?: number | string | null;
+  make?: string | null;
+  model?: string | null;
+  trim?: string | null;
+  status?: string | null;
+  price_cents?: number | string | null;
+  mileage?: number | string | null;
+  stock_number?: string | null;
+  vehicle_photos?: Array<{ url?: string | null; position?: number | null }> | null;
+};
+
+function formatVehiclePrice(value: DashboardVehicle["price_cents"]) {
+  const cents = Number(value);
+
+  if (!Number.isFinite(cents) || cents <= 0) return "Call for price";
+
+  return new Intl.NumberFormat("en-US", {
+    style: "currency",
+    currency: "USD",
+    maximumFractionDigits: 0,
+  }).format(cents / 100);
+}
+
+function formatVehicleMileage(value: DashboardVehicle["mileage"]) {
+  const mileage = Number(value);
+
+  if (!Number.isFinite(mileage) || mileage < 0) return "Mileage unavailable";
+
+  return `${new Intl.NumberFormat("en-US").format(mileage)} mi`;
+}
+
+function getVehicleTitle(vehicle: DashboardVehicle) {
+  return [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ") || "Untitled vehicle";
+}
+
+function getVehicleImage(vehicle: DashboardVehicle) {
+  return [...(vehicle.vehicle_photos ?? [])]
+    .sort((a, b) => (a.position ?? 0) - (b.position ?? 0))
+    .find((photo) => Boolean(photo.url))?.url;
+}
+
 function getValidDate(value: string | null | undefined) {
   if (!value) return null;
 
@@ -75,11 +118,14 @@ function AdminDashboard() {
     queryFn: () => listLegacyPosts({ data: { accessToken } }),
   });
 
-  const vehicles = inventoryRows ?? [];
+  const vehicles = (inventoryRows ?? []) as DashboardVehicle[];
   const leads = leadRows ?? [];
   const posts = blogPosts ?? [];
 
-  const activeVehicles = vehicles.filter((v) => v.status === "available" || v.status === "pending").length;
+  const recentActiveVehicles = vehicles
+    .filter((vehicle) => vehicle.status === "available" || vehicle.status === "pending")
+    .slice(0, 6);
+
   const now = new Date();
   const todayStart = startOfDay(now);
   const tomorrowStart = new Date(todayStart);
@@ -93,36 +139,51 @@ function AdminDashboard() {
 
   const leadsByType = (type: string) => leads.filter((lead) => lead.lead_type === type).length;
 
-  const stats = [
+  const leadOverview = [
     {
-      label: "Active cars",
-      value: activeVehicles,
-      icon: CheckCircle2,
-      iconClassName: "text-[#809C61]",
-      iconBackgroundClassName: "bg-[#809C61]/12",
-      to: "/admin/inventory" as const,
-      actionLabel: "View inventory",
-    },
-    {
+      key: "today",
       label: "Leads today",
       value: leadsToday,
       icon: Clock3,
-      iconClassName: "text-[#D25B4C]",
-      iconBackgroundClassName: "bg-[#D25B4C]/12",
-      to: "/admin/customers" as const,
-      actionLabel: "View today's leads",
+      className: "text-[#D25B4C] bg-[#D25B4C]/12",
+    },
+    {
+      key: "finance",
+      label: LEAD_LABELS.finance,
+      value: leadsByType("finance"),
+      icon: HandCoins,
+      className: "text-[#809C61] bg-[#809C61]/12",
+    },
+    {
+      key: "trade",
+      label: LEAD_LABELS.trade,
+      value: leadsByType("trade"),
+      icon: Repeat2,
+      className: "text-[#EDBA2B] bg-[#EDBA2B]/12",
+    },
+    {
+      key: "appointment",
+      label: LEAD_LABELS.appointment,
+      value: leadsByType("appointment"),
+      icon: CalendarCheck,
+      className: "text-[#D25B4C] bg-[#D25B4C]/12",
+    },
+    {
+      key: "availability",
+      label: LEAD_LABELS.availability,
+      value: leadsByType("availability"),
+      icon: Car,
+      className: "text-[#809C61] bg-[#809C61]/12",
+    },
+    {
+      key: "contact",
+      label: LEAD_LABELS.contact,
+      value: leadsByType("contact"),
+      icon: MessageSquare,
+      className: "text-[#EDBA2B] bg-[#EDBA2B]/12",
     },
   ];
 
-  const leadOverview = [
-    { type: "finance", icon: HandCoins, className: "text-[#809C61] bg-[#809C61]/12" },
-    { type: "trade", icon: Repeat2, className: "text-[#EDBA2B] bg-[#EDBA2B]/12" },
-    { type: "appointment", icon: CalendarCheck, className: "text-[#D25B4C] bg-[#D25B4C]/12" },
-    { type: "availability", icon: Car, className: "text-[#809C61] bg-[#809C61]/12" },
-    { type: "contact", icon: MessageSquare, className: "text-[#EDBA2B] bg-[#EDBA2B]/12" },
-  ];
-
-  const isLoading = inventoryLoading || leadsLoading;
   const recentLeads = leads.slice(0, 8);
 
   return (
@@ -130,41 +191,6 @@ function AdminDashboard() {
       <AdminPageHeader title="Dashboard" />
 
       <main className="space-y-6 p-4 sm:p-6">
-        <section>
-          <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 sm:gap-4">
-            {stats.map((stat) => {
-              const Icon = stat.icon;
-
-              return (
-                <Link
-                  key={stat.label}
-                  to={stat.to}
-                  aria-label={stat.actionLabel}
-                  className="group min-w-0 rounded-xl border border-border bg-background p-4 transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary focus-visible:ring-offset-2 active:translate-y-0"
-                >
-                  <div className="flex items-start justify-between gap-3">
-                    <div className="min-w-0">
-                      <p className="truncate text-sm font-medium text-muted-foreground">{stat.label}</p>
-                      <p className="mt-2 text-2xl font-semibold text-foreground">{isLoading ? "—" : stat.value}</p>
-                    </div>
-
-                    <div
-                      className={`flex size-10 shrink-0 items-center justify-center rounded-lg ${stat.iconBackgroundClassName}`}
-                    >
-                      <Icon className={`size-5 ${stat.iconClassName}`} aria-hidden="true" />
-                    </div>
-                  </div>
-
-                  <div className="mt-4 flex items-center gap-1 text-xs font-medium text-muted-foreground transition-colors group-hover:text-primary">
-                    <span className="truncate">{stat.actionLabel}</span>
-                    <ArrowRight className="size-3.5 shrink-0 transition-transform group-hover:translate-x-1" />
-                  </div>
-                </Link>
-              );
-            })}
-          </div>
-        </section>
-
         <section className="overflow-hidden rounded-xl border border-border bg-background">
           <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
             <div>
@@ -179,13 +205,13 @@ function AdminDashboard() {
             </Button>
           </div>
 
-          <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-5 sm:p-5">
+          <div className="grid grid-cols-2 gap-3 p-4 sm:grid-cols-3 lg:grid-cols-6 sm:p-5">
             {leadOverview.map((item) => {
               const Icon = item.icon;
 
               return (
                 <Link
-                  key={item.type}
+                  key={item.key}
                   to="/admin/customers"
                   className="group rounded-lg border border-border p-4 transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
                 >
@@ -193,11 +219,9 @@ function AdminDashboard() {
                     <Icon className="size-4.5" aria-hidden="true" />
                   </div>
 
-                  <p className="mt-3 text-2xl font-semibold text-foreground">
-                    {leadsLoading ? "—" : leadsByType(item.type)}
-                  </p>
+                  <p className="mt-3 text-2xl font-semibold text-foreground">{leadsLoading ? "—" : item.value}</p>
 
-                  <p className="mt-1 text-sm text-muted-foreground">{LEAD_LABELS[item.type] ?? item.type}</p>
+                  <p className="mt-1 text-sm text-muted-foreground">{item.label}</p>
                 </Link>
               );
             })}
@@ -311,6 +335,91 @@ function AdminDashboard() {
               </Button>
             </div>
           </div>
+        </section>
+
+        <section className="overflow-hidden rounded-xl border border-border bg-background">
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-border px-4 py-4 sm:px-5">
+            <div>
+              <h2 className="font-semibold text-foreground">Recent active cars</h2>
+              <p className="mt-1 text-sm text-muted-foreground">
+                Recently added vehicles that are available or pending.
+              </p>
+            </div>
+
+            <Button asChild variant="outline" size="sm">
+              <Link to="/admin/inventory">
+                View inventory
+                <ArrowRight className="ml-2 size-4" />
+              </Link>
+            </Button>
+          </div>
+
+          {inventoryLoading ? (
+            <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 sm:p-5">
+              {Array.from({ length: 3 }).map((_, index) => (
+                <div key={index} className="h-64 animate-pulse rounded-xl bg-muted" />
+              ))}
+            </div>
+          ) : recentActiveVehicles.length === 0 ? (
+            <div className="p-8 text-center sm:p-10">
+              <Car className="mx-auto size-8 text-muted-foreground" />
+              <p className="mt-3 font-medium text-foreground">No active cars found</p>
+              <p className="mt-1 text-sm text-muted-foreground">Available and pending inventory will appear here.</p>
+            </div>
+          ) : (
+            <div className="grid gap-4 p-4 sm:grid-cols-2 lg:grid-cols-3 sm:p-5">
+              {recentActiveVehicles.map((vehicle) => {
+                const imageUrl = getVehicleImage(vehicle);
+
+                return (
+                  <Link
+                    key={vehicle.id}
+                    to="/admin/inventory"
+                    className="group min-w-0 overflow-hidden rounded-xl border border-border bg-background transition-all hover:-translate-y-0.5 hover:border-primary/40 hover:shadow-sm focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary"
+                  >
+                    <div className="relative aspect-[16/9] overflow-hidden bg-muted">
+                      {imageUrl ? (
+                        <img
+                          src={imageUrl}
+                          alt={getVehicleTitle(vehicle)}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-300 group-hover:scale-[1.02]"
+                          onError={(event) => {
+                            event.currentTarget.style.display = "none";
+                          }}
+                        />
+                      ) : (
+                        <div className="flex h-full items-center justify-center">
+                          <Car className="size-9 text-muted-foreground/60" aria-hidden="true" />
+                        </div>
+                      )}
+
+                      <Badge
+                        variant="secondary"
+                        className="absolute left-3 top-3 bg-background/90 capitalize backdrop-blur-sm"
+                      >
+                        {vehicle.status || "available"}
+                      </Badge>
+                    </div>
+
+                    <div className="p-4">
+                      <h3 className="truncate font-semibold text-foreground">{getVehicleTitle(vehicle)}</h3>
+
+                      <div className="mt-2 flex items-center justify-between gap-3">
+                        <p className="font-semibold text-[#809C61]">{formatVehiclePrice(vehicle.price_cents)}</p>
+                        <ArrowRight className="size-4 shrink-0 text-muted-foreground transition-transform group-hover:translate-x-1" />
+                      </div>
+
+                      <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1 text-xs text-muted-foreground">
+                        <span>{formatVehicleMileage(vehicle.mileage)}</span>
+                        {vehicle.stock_number ? <span>Stock #{vehicle.stock_number}</span> : null}
+                      </div>
+                    </div>
+                  </Link>
+                );
+              })}
+            </div>
+          )}
         </section>
 
         <section className="overflow-hidden rounded-xl border border-border bg-background">
