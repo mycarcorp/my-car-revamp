@@ -183,19 +183,15 @@ function Home() {
               className="mt-5 max-w-[320px] text-[2.7rem] font-black leading-[0.94] tracking-[-0.065em] text-white sm:max-w-[360px] sm:text-[4rem] md:text-[4.6rem] lg:max-w-[440px] lg:text-[5.15rem]"
               style={{ fontFamily: '"Inter", "Segoe UI", sans-serif' }}
             >
-              {user ? (
-                <span className="block">Welcome back, {displayName}!</span>
-              ) : (
-                <>
-                  <span className="block">Used Cars, Trucks & SUVs</span>
-                  <span className="block">in Fredericksburg, VA</span>
-                </>
-              )}
+              <span className="block">Used Cars, Trucks & SUVs</span>
+              <span className="block">in Fredericksburg, VA</span>
             </h1>
+
             <p className="mt-3 text-lg font-medium text-slate-100">Right car. Right price.</p>
+
             <p className="mt-5 max-w-lg text-base text-slate-200/90 md:text-lg">
               {user
-                ? "Pick up where you left off and find the right next step for your car journey."
+                ? `Welcome back, ${displayName}! Pick up where you left off and find the right next step for your car journey.`
                 : facets?.total
                   ? "Search over 30,000 used vehicles with real monthly payments built in from day one."
                   : "Browse inspected used cars, trucks and SUVs in Fredericksburg, VA with real monthly payment estimates on every listing."}
