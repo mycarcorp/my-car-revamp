@@ -403,27 +403,22 @@ function FinancePage() {
   const [expandedReferenceAddresses, setExpandedReferenceAddresses] = useState<number[]>([]);
   const leadFormScopeRef = useRef<HTMLDivElement>(null);
 
-  const [price, setPrice] = useState(22000);
-  const [down, setDown] = useState(2000);
-  const [term, setTerm] = useState(72);
-  const [defaultsApplied, setDefaultsApplied] = useState(false);
+  const [price, setPrice] = useState("");
+  const [down, setDown] = useState("");
+  const [term, setTerm] = useState("");
 
   const apr = Number(settings?.finance_apr ?? 8.9);
-  const estimate = monthlyPayment(price * 100, {
-    apr,
-    termMonths: term,
-    downPercent: price > 0 ? (down / price) * 100 : 0,
-  });
-
-  // Estimator defaults come from the dealership settings stored in the database.
-  useEffect(() => {
-    if (defaultsApplied || !settings) return;
-    const months = Number(settings.finance_term_months ?? 0);
-    const downPercent = Number(settings.finance_down_percent ?? 0);
-    if (months > 0) setTerm(months);
-    if (downPercent > 0) setDown(Math.round((22000 * downPercent) / 100));
-    setDefaultsApplied(true);
-  }, [settings, defaultsApplied]);
+  const priceNumber = Number(price) || 0;
+  const downNumber = Number(down) || 0;
+  const termNumber = Number(term) || 0;
+  const canEstimate = priceNumber > 0 && termNumber > 0;
+  const estimate = canEstimate
+    ? monthlyPayment(priceNumber * 100, {
+        apr,
+        termMonths: termNumber,
+        downPercent: priceNumber > 0 ? (downNumber / priceNumber) * 100 : 0,
+      })
+    : null;
 
   // Prefill the applicant's contact details for a signed-in shopper.
   useEffect(() => {
@@ -720,9 +715,13 @@ function FinancePage() {
                 <p className="text-xs font-semibold uppercase tracking-[0.14em] text-slate-400">
                   Estimated Monthly Payment
                 </p>
-                <p className="mt-2 font-display text-4xl font-extrabold text-white">${estimate}/mo</p>
+                <p className="mt-2 font-display text-4xl font-extrabold text-white">
+                  {estimate != null ? `$${estimate}/mo` : "Enter details"}
+                </p>
                 <p className="mt-2 text-xs leading-5 text-slate-400">
-                  Based on {apr}% APR. {settings?.finance_disclosure}
+                  {estimate != null
+                    ? `Based on ${apr}% APR. ${settings?.finance_disclosure ?? ""}`
+                    : "Enter a vehicle price and choose a loan term to see an estimated monthly payment."}
                 </p>
               </div>
             </div>
@@ -741,8 +740,9 @@ function FinancePage() {
                       id="landing-price"
                       type="number"
                       min="0"
-                      value={String(price)}
-                      onChange={(event) => setPrice(Number(event.target.value))}
+                      value={price}
+                      onChange={(event) => setPrice(event.target.value)}
+                      placeholder="e.g. 22000"
                       className="h-11 pl-7"
                     />
                   </div>
@@ -760,8 +760,9 @@ function FinancePage() {
                       id="landing-down"
                       type="number"
                       min="0"
-                      value={String(down)}
-                      onChange={(event) => setDown(Number(event.target.value))}
+                      value={down}
+                      onChange={(event) => setDown(event.target.value)}
+                      placeholder="e.g. 2000"
                       className="h-11 pl-7"
                     />
                   </div>
@@ -771,9 +772,9 @@ function FinancePage() {
                   <Label htmlFor="landing-term" className="text-sm font-semibold text-slate-800">
                     Loan Term
                   </Label>
-                  <Select value={String(term)} onValueChange={(value) => setTerm(Number(value))}>
+                  <Select value={term || undefined} onValueChange={setTerm}>
                     <SelectTrigger id="landing-term" className="mt-2 h-11">
-                      <SelectValue />
+                      <SelectValue placeholder="Select a loan term" />
                     </SelectTrigger>
                     <SelectContent>
                       {[36, 48, 60, 72, 84].map((months) => (
@@ -794,7 +795,7 @@ function FinancePage() {
               <button
                 type="button"
                 onClick={scrollToApplication}
-                className="mt-6 inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#071b33] px-5 py-2.5 text-sm font-bold text-white transition hover:bg-[#0b2a4d]"
+                className="mt-6 inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#F7941D] px-5 py-2.5 text-sm font-bold text-slate-950 shadow-[0_10px_24px_rgba(247,148,29,0.22)] transition hover:bg-[#ea8718]"
               >
                 Start My Finance Application
                 <ArrowRight className="size-4" />
@@ -878,7 +879,7 @@ function FinancePage() {
             </p>
           </div>
 
-          <div className="grid items-start gap-6 xl:grid-cols-[minmax(0,1fr)_290px]">
+          <div className="grid items-start gap-6 xl:grid-cols-[290px_minmax(0,1fr)]">
             <div className="overflow-visible rounded-2xl border border-slate-200 bg-white shadow-sm">
               <div ref={leadFormScopeRef}>
                 <LeadForm
@@ -919,11 +920,11 @@ function FinancePage() {
                     other_income_amount: otherIncomeAmount,
                     other_income_source: otherIncomeSource,
                     references: JSON.stringify(references),
-                    vehicle_price: price,
-                    down_payment: down,
-                    loan_term: term,
+                    vehicle_price: priceNumber || "",
+                    down_payment: downNumber || "",
+                    loan_term: termNumber || "",
                     apr,
-                    estimated_payment: estimate,
+                    estimated_payment: estimate ?? "",
                   })}
                 >
                   <Tabs value={activeStep} onValueChange={setActiveStep} className="w-full">
@@ -1520,7 +1521,7 @@ function FinancePage() {
                           <Button
                             type="submit"
                             data-finance-submit
-                            className="bg-amber-400 font-semibold text-slate-950 hover:bg-amber-500"
+                            className="bg-[#F7941D] font-semibold text-slate-950 hover:bg-[#ea8718]"
                           >
                             Submit
                           </Button>
