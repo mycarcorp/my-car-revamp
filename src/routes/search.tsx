@@ -58,16 +58,36 @@ export const Route = createFileRoute("/search")({
   }),
   head: () => ({
     meta: [
-      { title: "Used Car Inventory — MyCar Fredericksburg, VA" },
+      {
+        title: "Used Cars for Sale in Fredericksburg, VA | My Car",
+      },
       {
         name: "description",
         content:
-          "Filter MyCar's live used vehicle inventory by price, monthly payment, make, body style, mileage, fuel type and drivetrain.",
+          "Shop used cars, trucks and SUVs for sale in Fredericksburg, VA at My Car. Browse current inventory, compare vehicles, estimate payments and schedule a test drive.",
       },
-      { property: "og:title", content: "Used Car Inventory — MyCar Fredericksburg" },
+      {
+        property: "og:title",
+        content: "Used Cars for Sale in Fredericksburg, VA | My Car",
+      },
       {
         property: "og:description",
-        content: "Filter live used vehicle inventory by price, payment, make, body style and more.",
+        content:
+          "Shop used cars, trucks and SUVs for sale in Fredericksburg, VA at My Car. Browse current inventory, compare vehicles, estimate payments and schedule a test drive.",
+      },
+      {
+        property: "og:url",
+        content: "https://mycarcorp.com/search",
+      },
+      {
+        property: "og:type",
+        content: "website",
+      },
+    ],
+    links: [
+      {
+        rel: "canonical",
+        href: "https://mycarcorp.com/search",
       },
     ],
   }),
@@ -178,9 +198,7 @@ function SearchPage() {
   }, [liveVehicles]);
 
   const priceBounds = useMemo(() => {
-    const prices = liveVehicles
-      .map((v) => Number(v.price_cents) / 100)
-      .filter((p) => Number.isFinite(p) && p > 0);
+    const prices = liveVehicles.map((v) => Number(v.price_cents) / 100).filter((p) => Number.isFinite(p) && p > 0);
     if (prices.length === 0) return { min: 0, max: 0 };
     return {
       min: Math.floor(Math.min(...prices) / 1000) * 1000,
@@ -308,9 +326,9 @@ function SearchPage() {
         <section className="mb-10 overflow-hidden rounded-2xl border border-border bg-card shadow-sm">
           <div className="border-b border-border bg-surface px-5 py-6 sm:px-8">
             <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Your MyCar dashboard</p>
-            <h1 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
+            <h2 className="mt-2 font-display text-3xl font-bold tracking-tight sm:text-4xl">
               Welcome back, {displayName}!
-            </h1>
+            </h2>
             <p className="mt-2 max-w-2xl text-sm text-muted-foreground sm:text-base">
               Here are a few ways to keep moving toward your next vehicle.
             </p>
@@ -350,13 +368,18 @@ function SearchPage() {
 
       <div className="flex flex-wrap items-end justify-between gap-4">
         <div>
-          <h1 className="font-display text-3xl font-bold">Used vehicle inventory</h1>
+          <h1 className="font-display text-3xl font-bold">Used Cars for Sale in Fredericksburg, VA</h1>
           <p className="mt-1 text-sm text-muted-foreground">
             {isLoading
               ? "Loading inventory…"
               : activeCount > 0
                 ? `${allSorted.length} vehicles match your filters`
                 : `${allSorted.length} vehicles in stock`}
+          </p>
+          <p className="mt-3 max-w-3xl text-sm leading-6 text-muted-foreground sm:text-base">
+            Shop My Car&apos;s current selection of used cars, trucks and SUVs in Fredericksburg, Virginia. Compare
+            available vehicles, pricing, mileage and estimated monthly payments, then schedule a test drive or start a
+            financing request online.
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -481,9 +504,24 @@ function SearchPage() {
             options={facets.makes}
             onChange={(v) => set({ make: v, model: undefined })}
           />
-          <FacetSelect label="Model" value={filters.model} options={facets.models} onChange={(v) => set({ model: v })} />
-          <FacetSelect label="Body type" value={filters.body} options={facets.bodies} onChange={(v) => set({ body: v })} />
-          <FacetSelect label="Fuel type" value={filters.fuel} options={facets.fuels} onChange={(v) => set({ fuel: v })} />
+          <FacetSelect
+            label="Model"
+            value={filters.model}
+            options={facets.models}
+            onChange={(v) => set({ model: v })}
+          />
+          <FacetSelect
+            label="Body type"
+            value={filters.body}
+            options={facets.bodies}
+            onChange={(v) => set({ body: v })}
+          />
+          <FacetSelect
+            label="Fuel type"
+            value={filters.fuel}
+            options={facets.fuels}
+            onChange={(v) => set({ fuel: v })}
+          />
           <FacetSelect
             label="Exterior color"
             value={filters.color}
