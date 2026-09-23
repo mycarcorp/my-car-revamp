@@ -1018,7 +1018,7 @@ function FinancePage() {
             <div className="mx-auto flex items-center justify-center">
               <img src={MYCAR_LOGO_DATA_URI} alt="My Car logo" className="h-16 w-auto object-contain" />
             </div>
-            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-primary">Ready to Apply?</p>
+
             <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
               Finance Application
             </h2>
