@@ -179,38 +179,38 @@ function BlogIndex() {
       <section
         className="relative isolate overflow-hidden border-b border-border bg-slate-950 bg-cover bg-center"
         style={{
-          backgroundImage: `linear-gradient(90deg, rgba(3, 12, 22, 0.94) 0%, rgba(3, 12, 22, 0.82) 45%, rgba(3, 12, 22, 0.52) 72%, rgba(3, 12, 22, 0.42) 100%), url("${heroImage}")`,
+          backgroundImage: `linear-gradient(90deg, rgba(3,12,22,0.95) 0%, rgba(3,12,22,0.84) 48%, rgba(3,12,22,0.48) 100%), url("${heroImage}")`,
         }}
       >
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_85%_40%,rgba(255,255,255,0.14),transparent_34%)]" />
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_82%_42%,rgba(255,255,255,0.14),transparent_32%)]" />
 
-        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-8 lg:px-12 lg:py-24">
+        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-12 lg:py-28">
           <div className="max-w-3xl">
             <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/90 backdrop-blur-sm">
               My Car Resource Center
             </p>
 
-            <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
+            <h1 className="mt-5 font-display text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
               Used Car Buying Tips in Fredericksburg, VA
             </h1>
 
-            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-100/90 sm:text-lg">
+            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-200 sm:text-lg">
               Get practical advice for shopping, financing, trading and owning a used vehicle in Fredericksburg,
               Virginia. Explore guides from My Car designed to help you research vehicles, understand your options and
               make informed decisions before your next purchase.
             </p>
 
-            <div className="mt-7 flex flex-wrap gap-3">
+            <div className="mt-8 flex flex-wrap gap-3">
               <Link
                 to="/search"
-                className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-lg bg-[#F7941D] px-5 py-2.5 text-sm font-bold text-slate-950 shadow-[0_10px_24px_rgba(247,148,29,0.28)] transition hover:bg-[#ea8718] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+                className="inline-flex min-h-12 items-center justify-center whitespace-nowrap rounded-lg bg-[#F7941D] px-6 py-3 text-sm font-bold text-slate-950 shadow-[0_12px_30px_rgba(247,148,29,0.28)] transition hover:bg-[#ea8718] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
               >
                 Browse Used Vehicles
               </Link>
 
               <Link
                 to="/finance"
-                className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-lg border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+                className="inline-flex min-h-12 items-center justify-center whitespace-nowrap rounded-lg border border-white/30 bg-white/10 px-6 py-3 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
               >
                 Explore Financing Options
               </Link>
