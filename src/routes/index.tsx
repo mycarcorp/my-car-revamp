@@ -33,7 +33,7 @@ export const Route = createFileRoute("/")({
       {
         name: "description",
         content:
-          "Browse MyCar's current used vehicle inventory in Fredericksburg, Virginia. Real monthly payment estimates, financing for all credit types, and instant trade-in reviews.",
+          "Shop quality used cars, trucks and SUVs in Fredericksburg, VA. Explore financing options, trade in your vehicle, sell your car, or schedule a test drive with My Car.",
       },
       { property: "og:title", content: "MyCar — Used Cars in Fredericksburg, VA" },
       {
