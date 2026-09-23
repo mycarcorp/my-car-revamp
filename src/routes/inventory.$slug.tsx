@@ -308,7 +308,15 @@ function VehicleDetail() {
                 <Link to="/finance">Get pre-qualified</Link>
               </Button>
               <Button asChild variant="outline">
-                <Link to="/schedule">Schedule a test drive</Link>
+                <Link
+                  to="/schedule"
+                  search={{
+                    type: "test_drive",
+                    vehicle: v.id,
+                  }}
+                >
+                  Schedule a test drive
+                </Link>
               </Button>
               <Button asChild variant="outline">
                 <Link to="/sell">Value my trade</Link>
