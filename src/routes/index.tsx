@@ -201,7 +201,7 @@ function Home() {
               Trusted local dealership
             </div>
             <h1
-              className="mt-5 text-base font-semibold tracking-wide text-slate-200 sm:text-lg"
+              className="mt-5 text-base font-semibold tracking-wide text-white sm:text-lg"
               style={{ fontFamily: '"Inter", "Segoe UI", sans-serif' }}
             >
               Used Cars, Trucks & SUVs in Fredericksburg, VA
