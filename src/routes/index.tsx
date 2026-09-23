@@ -192,6 +192,7 @@ function Home() {
                 </>
               )}
             </h1>
+            <p className="mt-3 text-lg font-medium text-slate-100">Right car. Right price.</p>
             <p className="mt-5 max-w-lg text-base text-slate-200/90 md:text-lg">
               {user
                 ? "Welcome back, ${displayName}! Pick up where you left off and find the right next step for your car journey."
