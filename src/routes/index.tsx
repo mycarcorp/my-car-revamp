@@ -201,16 +201,21 @@ function Home() {
               Trusted local dealership
             </div>
             <h1
-              className="mt-5 max-w-[320px] text-[2.7rem] font-black leading-[0.94] tracking-[-0.065em] text-white sm:max-w-[360px] sm:text-[4rem] md:text-[4.6rem] lg:max-w-[440px] lg:text-[5.15rem]"
+              className="mt-5 text-base font-semibold tracking-wide text-slate-200 sm:text-lg"
               style={{ fontFamily: '"Inter", "Segoe UI", sans-serif' }}
             >
-              <span className="block">Used Cars, Trucks & SUVs</span>
-              <span className="block">in Fredericksburg, VA</span>
+              Used Cars, Trucks & SUVs in Fredericksburg, VA
             </h1>
 
-            <p className="mt-3 text-lg font-medium text-slate-100">Right car. Right price.</p>
+            <p
+              className="mt-3 max-w-[520px] text-[3.4rem] font-black leading-[0.95] tracking-[-0.055em] text-white sm:text-[4.5rem] md:text-[5rem] lg:text-[5.4rem]"
+              style={{ fontFamily: '"Inter", "Segoe UI", sans-serif' }}
+            >
+              Right car.
+              <span className="block">Right price.</span>
+            </p>
 
-            <p className="mt-5 max-w-lg text-base text-slate-200/90 md:text-lg">
+            <p className="mt-5 max-w-lg text-base leading-7 text-slate-200/90 md:text-lg">
               {user
                 ? `Welcome back, ${displayName}! Pick up where you left off and find the right next step for your car journey.`
                 : facets?.total
