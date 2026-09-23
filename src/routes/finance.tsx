@@ -423,6 +423,7 @@ function FinancePage() {
   const [vehiclePickerOpen, setVehiclePickerOpen] = useState(false);
   const [vehicleSearch, setVehicleSearch] = useState("");
   const [manualPriceMode, setManualPriceMode] = useState(false);
+  const [smsConsent, setSmsConsent] = useState(false);
 
   const selectedVehicle = useMemo(
     () => inventory.find((item) => item.id === selectedVehicleId),
@@ -1018,7 +1019,7 @@ function FinancePage() {
             <div className="mx-auto flex items-center justify-center">
               <img src={MYCAR_LOGO_DATA_URI} alt="My Car logo" className="h-16 w-auto object-contain" />
             </div>
-
+            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-primary">Ready to Apply?</p>
             <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
               Finance Application
             </h2>
@@ -1127,6 +1128,10 @@ function FinancePage() {
                     loan_term: termNumber || "",
                     apr,
                     estimated_payment: estimate ?? "",
+                    sms_consent: smsConsent,
+                    sms_consent_text:
+                      "By checking this box, I consent to receive text messages from My Car Care regarding my service inquiry, appointment scheduling, and vehicle updates. Message frequency varies. Message & data rates may apply. Text HELP for assistance or reply STOP to opt out.",
+                    sms_consent_timestamp: smsConsent ? new Date().toISOString() : "",
                   })}
                 >
                   <Tabs value={activeStep} onValueChange={setActiveStep} className="w-full">
@@ -1716,6 +1721,26 @@ function FinancePage() {
                             Add More Reference
                           </Button>
                         </FormSection>
+
+                        <div className="mt-5 rounded-xl border border-slate-200 bg-slate-50 p-4 sm:p-5">
+                          <label htmlFor="sms-consent" className="flex cursor-pointer items-start gap-3">
+                            <input
+                              id="sms-consent"
+                              name="sms_consent"
+                              type="checkbox"
+                              checked={smsConsent}
+                              onChange={(event) => setSmsConsent(event.target.checked)}
+                              className="mt-1 size-4 shrink-0 cursor-pointer rounded border-slate-300 accent-[#F7941D]"
+                            />
+
+                            <span className="text-xs leading-5 text-slate-600 sm:text-sm sm:leading-6">
+                              By checking this box, I consent to receive text messages from My Car Care regarding my
+                              service inquiry, appointment scheduling, and vehicle updates. Message frequency varies.
+                              Message &amp; data rates may apply. Text HELP for assistance or reply STOP to opt out.
+                            </span>
+                          </label>
+                        </div>
+
                         <div className="mt-5 flex items-center justify-between">
                           <Button type="button" variant="ghost" onClick={() => setActiveStep("employment")}>
                             Back
