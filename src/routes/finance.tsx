@@ -1,32 +1,37 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useRef, useState, type Dispatch, type SetStateAction } from "react";
+import { useEffect, useMemo, useRef, useState, type Dispatch, type SetStateAction } from "react";
 import {
   ArrowRight,
   BadgeDollarSign,
   BriefcaseBusiness,
   Calculator,
   CalendarDays,
+  CarFront,
+  Check,
   FileCheck2,
   MapPin,
   MoreHorizontal,
   MoreVertical,
   Plus,
+  Search,
   ShieldCheck,
   UserRound,
   UsersRound,
   Trash2,
+  X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LeadForm } from "@/components/LeadForm";
-import { siteSettingsQuery } from "@/lib/queries";
+import { allVehiclesQuery, siteSettingsQuery } from "@/lib/queries";
 import { useAuth } from "@/hooks/useAuth";
 
-import { monthlyPayment } from "@/lib/format";
+import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 
 export const Route = createFileRoute("/finance")({
   head: () => ({
@@ -345,8 +350,14 @@ const MYCAR_LOGO_DATA_URI =
 
 function FinancePage() {
   const { data: settings } = useQuery(siteSettingsQuery());
+  const { data: allVehicles = [], isLoading: inventoryLoading } = useQuery(allVehiclesQuery());
   const { user } = useAuth();
   const [activeStep, setActiveStep] = useState("applicant");
+
+  const inventory = useMemo(
+    () => allVehicles.filter((item) => item.status === "available" || item.status === "pending"),
+    [allVehicles],
+  );
 
   const [buyerName, setBuyerName] = useState("");
   const [showBuyerNameDetails, setShowBuyerNameDetails] = useState(false);
@@ -408,6 +419,28 @@ function FinancePage() {
   const [price, setPrice] = useState("");
   const [down, setDown] = useState("");
   const [term, setTerm] = useState("");
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
+  const [vehiclePickerOpen, setVehiclePickerOpen] = useState(false);
+  const [vehicleSearch, setVehicleSearch] = useState("");
+  const [manualPriceMode, setManualPriceMode] = useState(false);
+
+  const selectedVehicle = useMemo(
+    () => inventory.find((item) => item.id === selectedVehicleId),
+    [inventory, selectedVehicleId],
+  );
+
+  const filteredVehicles = useMemo(() => {
+    const needle = vehicleSearch.trim().toLowerCase();
+    if (!needle) return inventory;
+
+    return inventory.filter((item) =>
+      [item.year, item.make, item.model, item.trim, item.vin, item.stock_number, item.body_style]
+        .filter(Boolean)
+        .join(" ")
+        .toLowerCase()
+        .includes(needle),
+    );
+  }, [inventory, vehicleSearch]);
 
   const apr = Number(settings?.finance_apr ?? 8.9);
   const priceNumber = Number(price) || 0;
@@ -563,6 +596,34 @@ function FinancePage() {
     });
   };
 
+  const chooseVehicle = (item: (typeof inventory)[number]) => {
+    const inventoryPrice = Number(item.price_cents ?? 0) / 100;
+
+    setSelectedVehicleId(item.id);
+    setPrice(inventoryPrice > 0 ? String(inventoryPrice) : "");
+    setManualPriceMode(false);
+    setVehiclePickerOpen(false);
+    setVehicleSearch("");
+  };
+
+  const clearSelectedVehicle = () => {
+    setSelectedVehicleId("");
+    setPrice("");
+  };
+
+  const useManualPrice = () => {
+    setSelectedVehicleId("");
+    setPrice("");
+    setManualPriceMode(true);
+  };
+
+  const chooseFromInventory = () => {
+    setManualPriceMode(false);
+    setPrice("");
+    setVehicleSearch("");
+    setVehiclePickerOpen(true);
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* HERO */}
@@ -710,7 +771,8 @@ function FinancePage() {
               <h2 className="mt-3 font-display text-3xl font-bold tracking-tight">Plan a payment before you apply</h2>
 
               <p className="mt-3 max-w-lg text-sm leading-6 text-slate-300">
-                Change the vehicle price, down payment and loan term to explore an estimated monthly payment.
+                Choose a vehicle from our current inventory, then adjust the down payment and loan term to explore an
+                estimated monthly payment.
               </p>
 
               <div className="mt-8 rounded-xl border border-white/10 bg-white/5 p-5">
@@ -723,7 +785,7 @@ function FinancePage() {
                 <p className="mt-2 text-xs leading-5 text-slate-400">
                   {estimate != null
                     ? `Based on ${apr}% APR. ${settings?.finance_disclosure ?? ""}`
-                    : "Enter a vehicle price and choose a loan term to see an estimated monthly payment."}
+                    : "Choose a vehicle or enter a price, then select a loan term to see an estimated monthly payment."}
                 </p>
               </div>
             </div>
@@ -731,24 +793,109 @@ function FinancePage() {
             <div className="p-6 sm:p-8 lg:p-10">
               <div className="grid gap-5 sm:grid-cols-2">
                 <div className="sm:col-span-2">
-                  <label htmlFor="landing-price" className="text-sm font-semibold text-slate-800">
-                    Vehicle Price
-                  </label>
-                  <div className="relative mt-2">
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
-                      $
-                    </span>
-                    <Input
-                      id="landing-price"
-                      type="number"
-                      min="0"
-                      value={price}
-                      onChange={(event) => setPrice(event.target.value)}
-                      placeholder="e.g. 22000"
-                      className="h-11 pl-7"
-                    />
-                  </div>
+                  <Label htmlFor="finance-vehicle-picker" className="text-sm font-semibold text-slate-800">
+                    Vehicle
+                  </Label>
+
+                  {!manualPriceMode ? (
+                    <>
+                      <div className="relative mt-2">
+                        <button
+                          id="finance-vehicle-picker"
+                          type="button"
+                          onClick={() => {
+                            setVehicleSearch("");
+                            setVehiclePickerOpen(true);
+                          }}
+                          className="flex min-h-12 w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-300 bg-white px-4 py-3 text-left text-sm transition hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+                        >
+                          <span className="min-w-0">
+                            {selectedVehicle ? (
+                              <>
+                                <span className="block truncate font-semibold text-slate-950">
+                                  {vehicleTitle(selectedVehicle)}
+                                </span>
+                                <span className="mt-0.5 block truncate text-xs text-slate-500">
+                                  Stock #{selectedVehicle.stock_number} ·{" "}
+                                  {formatUsd(Number(selectedVehicle.price_cents))}
+                                </span>
+                              </>
+                            ) : (
+                              <span className="text-slate-500">Choose a vehicle from current inventory</span>
+                            )}
+                          </span>
+
+                          <Search className="size-4 shrink-0 text-slate-500" />
+                        </button>
+
+                        {selectedVehicle && (
+                          <button
+                            type="button"
+                            aria-label="Clear selected vehicle"
+                            onClick={clearSelectedVehicle}
+                            className="absolute right-10 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-800"
+                          >
+                            <X className="size-4" />
+                          </button>
+                        )}
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={useManualPrice}
+                        className="mt-2 text-xs font-semibold text-primary hover:underline"
+                      >
+                        Enter a different amount instead
+                      </button>
+                    </>
+                  ) : (
+                    <>
+                      <div className="relative mt-2">
+                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
+                          $
+                        </span>
+                        <Input
+                          id="finance-vehicle-picker"
+                          type="number"
+                          min="0"
+                          value={price}
+                          onChange={(event) => setPrice(event.target.value)}
+                          placeholder="Enter vehicle price"
+                          className="h-11 pl-7"
+                        />
+                      </div>
+
+                      <button
+                        type="button"
+                        onClick={chooseFromInventory}
+                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+                      >
+                        <CarFront className="size-3.5" />
+                        Choose from inventory instead
+                      </button>
+                    </>
+                  )}
                 </div>
+
+                {selectedVehicle && !manualPriceMode && (
+                  <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+                    <div className="flex flex-wrap items-center justify-between gap-3">
+                      <div>
+                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
+                          Inventory Price
+                        </p>
+                        <p className="mt-1 font-display text-2xl font-bold text-slate-950">
+                          {formatUsd(Number(selectedVehicle.price_cents))}
+                        </p>
+                      </div>
+
+                      <div className="text-right text-xs text-slate-500">
+                        <p>Stock #{selectedVehicle.stock_number}</p>
+                        {selectedVehicle.mileage != null && <p>{formatMiles(selectedVehicle.mileage)}</p>}
+                      </div>
+                    </div>
+                  </div>
+                )}
 
                 <div>
                   <label htmlFor="landing-down" className="text-sm font-semibold text-slate-800">
@@ -899,6 +1046,17 @@ function FinancePage() {
                 </ol>
               </div>
 
+              {selectedVehicle && (
+                <div className="rounded-2xl border border-slate-200 bg-white p-5 text-xs leading-5 text-slate-500 shadow-sm">
+                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Selected Vehicle</p>
+                  <h3 className="mt-2 text-sm font-semibold text-slate-950">{vehicleTitle(selectedVehicle)}</h3>
+                  <p className="mt-1">Stock #{selectedVehicle.stock_number}</p>
+                  <p className="mt-2 font-display text-xl font-bold text-slate-950">
+                    {formatUsd(Number(selectedVehicle.price_cents))}
+                  </p>
+                </div>
+              )}
+
               <div className="rounded-2xl border border-slate-200 bg-slate-950 p-5 text-xs leading-5 text-slate-300 shadow-sm">
                 <h3 className="text-sm font-semibold text-white">Questions before applying?</h3>
                 <p className="mt-2">
@@ -955,6 +1113,15 @@ function FinancePage() {
                     other_income_amount: otherIncomeAmount,
                     other_income_source: otherIncomeSource,
                     references: JSON.stringify(references),
+                    vehicle_id: selectedVehicle?.id ?? "",
+                    vehicle_vin: selectedVehicle?.vin ?? "",
+                    vehicle_stock_number: selectedVehicle?.stock_number ?? "",
+                    vehicle_year: selectedVehicle?.year ?? "",
+                    vehicle_make: selectedVehicle?.make ?? "",
+                    vehicle_model: selectedVehicle?.model ?? "",
+                    vehicle_trim: selectedVehicle?.trim ?? "",
+                    vehicle_title: selectedVehicle ? vehicleTitle(selectedVehicle) : "",
+                    vehicle_price_source: selectedVehicle ? "inventory" : manualPriceMode ? "manual" : "",
                     vehicle_price: priceNumber || "",
                     down_payment: downNumber || "",
                     loan_term: termNumber || "",
@@ -1570,6 +1737,139 @@ function FinancePage() {
           </div>
         </div>
       </section>
+
+      {/* INVENTORY VEHICLE PICKER */}
+      <Dialog
+        open={vehiclePickerOpen}
+        onOpenChange={(open) => {
+          setVehiclePickerOpen(open);
+          if (!open) setVehicleSearch("");
+        }}
+      >
+        <DialogContent className="flex max-h-[88vh] w-[calc(100%-1.5rem)] max-w-5xl flex-col gap-0 overflow-hidden p-0 sm:w-full">
+          <DialogHeader className="border-b border-slate-200 px-5 py-4 text-left sm:px-6">
+            <DialogTitle className="font-display text-xl font-bold">Choose a Vehicle</DialogTitle>
+            <DialogDescription>
+              Select a vehicle from My Car&apos;s current inventory. Its listed price will automatically be used in the
+              payment estimator.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="border-b border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={vehicleSearch}
+                onChange={(event) => setVehicleSearch(event.target.value)}
+                placeholder="Search year, make, model, VIN or stock number"
+                className="pl-9"
+              />
+            </div>
+
+            <p className="mt-2 text-xs text-slate-500">
+              {inventoryLoading
+                ? "Loading inventory…"
+                : `${filteredVehicles.length} vehicle${filteredVehicles.length === 1 ? "" : "s"} available`}
+            </p>
+          </div>
+
+          <div className="min-h-0 flex-1 overflow-y-auto p-4 sm:p-6">
+            {inventoryLoading ? (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {Array.from({ length: 6 }).map((_, index) => (
+                  <div key={index} className="h-32 animate-pulse rounded-xl bg-slate-100" />
+                ))}
+              </div>
+            ) : filteredVehicles.length === 0 ? (
+              <div className="py-16 text-center">
+                <CarFront className="mx-auto size-9 text-slate-400" />
+                <h3 className="mt-4 font-display text-lg font-bold text-slate-950">No vehicles found</h3>
+                <p className="mt-1 text-sm text-slate-500">Try another make, model, VIN or stock number.</p>
+              </div>
+            ) : (
+              <div className="grid gap-4 sm:grid-cols-2">
+                {filteredVehicles.map((item) => {
+                  const photo = [...(item.vehicle_photos ?? [])].sort((a, b) => a.position - b.position)[0];
+                  const selected = item.id === selectedVehicleId;
+
+                  return (
+                    <button
+                      key={item.id}
+                      type="button"
+                      onClick={() => chooseVehicle(item)}
+                      className={`group grid cursor-pointer grid-cols-[112px_minmax(0,1fr)] gap-3 overflow-hidden rounded-xl border p-2 text-left transition hover:border-primary hover:shadow-md ${
+                        selected
+                          ? "border-primary bg-primary/[0.04] ring-1 ring-primary/20"
+                          : "border-slate-200 bg-white"
+                      }`}
+                    >
+                      <div className="relative h-24 overflow-hidden rounded-lg bg-slate-100">
+                        {photo?.url ? (
+                          <img
+                            src={photo.url}
+                            alt={photo.alt ?? vehicleTitle(item)}
+                            loading="lazy"
+                            className="size-full object-cover"
+                          />
+                        ) : (
+                          <div className="flex size-full items-center justify-center">
+                            <CarFront className="size-7 text-slate-400" />
+                          </div>
+                        )}
+
+                        {selected && (
+                          <span className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground shadow">
+                            <Check className="size-4" />
+                          </span>
+                        )}
+                      </div>
+
+                      <div className="min-w-0 py-1">
+                        <h3 className="line-clamp-2 text-sm font-bold text-slate-950">{vehicleTitle(item)}</h3>
+
+                        <p className="mt-1 text-xs text-slate-500">
+                          Stock #{item.stock_number}
+                          {item.mileage != null ? ` · ${formatMiles(item.mileage)}` : ""}
+                        </p>
+
+                        <p className="mt-3 font-display text-lg font-bold text-primary">
+                          {formatUsd(Number(item.price_cents))}
+                        </p>
+
+                        <span className="mt-2 inline-flex text-xs font-semibold text-primary group-hover:underline">
+                          {selected ? "Selected" : "Use this vehicle"}
+                        </span>
+                      </div>
+                    </button>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-200 bg-slate-50 px-5 py-4 sm:px-6">
+            <button
+              type="button"
+              onClick={() => {
+                setVehiclePickerOpen(false);
+                setVehicleSearch("");
+                useManualPrice();
+              }}
+              className="text-xs font-semibold text-primary hover:underline"
+            >
+              Enter a different amount instead
+            </button>
+
+            <button
+              type="button"
+              onClick={() => setVehiclePickerOpen(false)}
+              className="rounded-lg bg-[#F7941D] px-4 py-2 text-sm font-bold text-slate-950 transition hover:bg-[#ea8718]"
+            >
+              Done
+            </button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
