@@ -15,16 +15,36 @@ import { allVehiclesQuery, type VehicleWithPhotos } from "@/lib/queries";
 export const Route = createFileRoute("/sell")({
   head: () => ({
     meta: [
-      { title: "Sell or Trade Your Car in Fredericksburg, VA — MyCar" },
+      {
+        title: "Sell or Trade Your Car in Fredericksburg, VA | My Car",
+      },
       {
         name: "description",
         content:
-          "Send MyCar your VIN or plate, mileage and condition and our buyers respond with a real offer — usually the same business day. Trade it in or sell outright.",
+          "Sell your car or trade it in with My Car in Fredericksburg, VA. Submit your vehicle details, mileage and condition to request a real offer from our team.",
       },
-      { property: "og:title", content: "Sell or Trade Your Car — MyCar Fredericksburg" },
+      {
+        property: "og:title",
+        content: "Sell or Trade Your Car in Fredericksburg, VA | My Car",
+      },
       {
         property: "og:description",
-        content: "Send your VIN, mileage and condition; our buyers respond with a real offer.",
+        content:
+          "Sell your car or trade it in with My Car in Fredericksburg, VA. Submit your vehicle details, mileage and condition to request a real offer from our team.",
+      },
+      {
+        property: "og:url",
+        content: "https://mycarcorp.com/sell",
+      },
+      {
+        property: "og:type",
+        content: "website",
+      },
+    ],
+    links: [
+      {
+        rel: "canonical",
+        href: "https://mycarcorp.com/sell",
       },
     ],
   }),
@@ -380,6 +400,17 @@ function SellPage() {
   return (
     <div className="min-h-screen bg-slate-50/70">
       <div className="mx-auto w-full max-w-[1280px] px-4 py-8 sm:px-6 lg:py-10">
+        <div className="mb-6 max-w-3xl">
+          <h1 className="font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+            Sell or Trade Your Car in Fredericksburg, VA
+          </h1>
+          <p className="mt-2 text-sm leading-6 text-slate-600 sm:text-base">
+            Sell your car or trade it in with My Car in Fredericksburg, Virginia. Tell us about your vehicle, including
+            the VIN or plate, mileage and condition, and our team will review the information and follow up with an
+            offer or next steps.
+          </p>
+        </div>
+
         <div
           ref={leadFormScopeRef}
           className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 [&_button]:rounded-lg [&_input]:h-9 [&_input]:rounded-lg [&_label]:text-xs [&_textarea]:rounded-lg [&_textarea]:border-slate-300 [&_textarea]:text-sm"
