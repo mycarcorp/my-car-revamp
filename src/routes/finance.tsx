@@ -26,16 +26,36 @@ import { monthlyPayment } from "@/lib/format";
 export const Route = createFileRoute("/finance")({
   head: () => ({
     meta: [
-      { title: "Car Financing in Fredericksburg, VA — MyCar" },
+      {
+        title: "Used Car Financing in Fredericksburg, VA | My Car",
+      },
       {
         name: "description",
         content:
-          "Submit your vehicle financing information to MyCar in Fredericksburg, VA and let our finance team help you review available options.",
+          "Explore used car financing in Fredericksburg, VA with My Car. Complete our secure finance application, estimate your payment and review available financing options.",
       },
-      { property: "og:title", content: "Car Financing — MyCar Fredericksburg" },
+      {
+        property: "og:title",
+        content: "Used Car Financing in Fredericksburg, VA | My Car",
+      },
       {
         property: "og:description",
-        content: "Complete your financing information and let our finance team help with the next steps.",
+        content:
+          "Explore used car financing in Fredericksburg, VA with My Car. Complete our secure finance application, estimate your payment and review available financing options.",
+      },
+      {
+        property: "og:url",
+        content: "https://mycarcorp.com/finance",
+      },
+      {
+        property: "og:type",
+        content: "website",
+      },
+    ],
+    links: [
+      {
+        rel: "canonical",
+        href: "https://mycarcorp.com/finance",
       },
     ],
   }),
@@ -536,12 +556,14 @@ function FinancePage() {
   return (
     <div className="min-h-screen bg-slate-50/70">
       <div className="mx-auto w-full max-w-[1180px] px-4 py-8 sm:px-6 lg:py-10">
-        <div className="mb-6 max-w-2xl">
+        <div className="mb-6 max-w-3xl">
           <h1 className="mt-1 font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-            Finance application
+            Used Car Financing in Fredericksburg, VA
           </h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600">
-            Complete each section below. Your information is sent securely to our finance team.
+          <p className="mt-2 text-sm leading-6 text-slate-600 sm:text-base">
+            Explore financing options for your next used vehicle with My Car in Fredericksburg, Virginia. Complete the
+            secure finance application below, estimate a monthly payment and let our finance team review the information
+            you provide and contact you about the next steps.
           </p>
         </div>
 
