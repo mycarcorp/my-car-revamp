@@ -194,10 +194,10 @@ function Home() {
             </h1>
             <p className="mt-5 max-w-lg text-base text-slate-200/90 md:text-lg">
               {user
-                ? "Pick up where you left off and find the right next step for your car journey."
+                ? "Welcome back, ${displayName}! Pick up where you left off and find the right next step for your car journey."
                 : facets?.total
                   ? `Search over 30,000 used vehicles with real monthly payments built in from day one.`
-                  : "Inspected used vehicles with a real monthly payment estimate on every listing."}
+                  : "Browse inspected used cars, trucks and SUVs in Fredericksburg, VA with real monthly payment estimates on every listing."}
             </p>
 
             <form
