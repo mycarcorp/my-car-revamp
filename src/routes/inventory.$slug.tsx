@@ -13,12 +13,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { mirrorSavedVehicleToLegacy } from "@/lib/legacy-mirror.functions";
 import { supabase } from "@/integrations/supabase/app-client";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
-import {
-  similarVehiclesQuery,
-  siteSettingsQuery,
-  vehicleBySlugQuery,
-  type VehicleWithPhotos,
-} from "@/lib/queries";
+import { similarVehiclesQuery, siteSettingsQuery, vehicleBySlugQuery, type VehicleWithPhotos } from "@/lib/queries";
 
 export const Route = createFileRoute("/inventory/$slug")({
   loader: async ({ context, params }) => {
@@ -60,8 +55,7 @@ function VehicleDetail() {
   const photos = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
   const [active, setActive] = useState(0);
   const [failedPhotoIds, setFailedPhotoIds] = useState<string[]>([]);
-  const markFailed = (id: string) =>
-    setFailedPhotoIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+  const markFailed = (id: string) => setFailedPhotoIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
   const [saved, setSaved] = useState(false);
   const [savingBusy, setSavingBusy] = useState(false);
 
@@ -97,9 +91,7 @@ function VehicleDetail() {
     const { data: session } = await supabase.auth.getSession();
     const accessToken = session.session?.access_token;
     if (!accessToken) return;
-    await mirrorSavedVehicleToLegacy({ data: { accessToken, vehicleId: v.id, action } }).catch(
-      () => undefined,
-    );
+    await mirrorSavedVehicleToLegacy({ data: { accessToken, vehicleId: v.id, action } }).catch(() => undefined);
   }
 
   async function toggleSave() {
@@ -109,11 +101,7 @@ function VehicleDetail() {
     }
     setSavingBusy(true);
     if (saved) {
-      const { error } = await supabase
-        .from("saved_vehicles")
-        .delete()
-        .eq("user_id", user.id)
-        .eq("vehicle_id", v.id);
+      const { error } = await supabase.from("saved_vehicles").delete().eq("user_id", user.id).eq("vehicle_id", v.id);
       setSavingBusy(false);
       if (error) {
         toast.error("Could not remove this vehicle.");
@@ -124,9 +112,7 @@ function VehicleDetail() {
       toast.success("Removed from your saved vehicles.");
       return;
     }
-    const { error } = await supabase
-      .from("saved_vehicles")
-      .insert({ user_id: user.id, vehicle_id: v.id });
+    const { error } = await supabase.from("saved_vehicles").insert({ user_id: user.id, vehicle_id: v.id });
     setSavingBusy(false);
     if (error && !error.message.includes("duplicate")) {
       toast.error("Could not save this vehicle.");
@@ -165,10 +151,7 @@ function VehicleDetail() {
       "@type": "Offer",
       price: (Number(v.price_cents) / 100).toFixed(2),
       priceCurrency: v.currency,
-      availability:
-        v.status === "available"
-          ? "https://schema.org/InStock"
-          : "https://schema.org/LimitedAvailability",
+      availability: v.status === "available" ? "https://schema.org/InStock" : "https://schema.org/LimitedAvailability",
       seller: { "@type": "AutoDealer", name: "MyCar", areaServed: "Fredericksburg, VA" },
     },
   };
@@ -226,7 +209,13 @@ function VehicleDetail() {
                 >
                   {isVideoUrl(p.url) ? (
                     <>
-                      <video src={p.url} muted playsInline preload="metadata" className="size-full bg-black object-cover" />
+                      <video
+                        src={p.url}
+                        muted
+                        playsInline
+                        preload="metadata"
+                        className="size-full bg-black object-cover"
+                      />
                       <span className="absolute inset-0 flex items-center justify-center bg-black/30">
                         <Play className="size-5 text-white" />
                       </span>
@@ -243,7 +232,6 @@ function VehicleDetail() {
               ))}
             </div>
           )}
-
 
           <section className="mt-10">
             <h2 className="font-display text-xl font-bold">Specifications</h2>
@@ -273,9 +261,7 @@ function VehicleDetail() {
           {v.description && (
             <section className="mt-10">
               <h2 className="font-display text-xl font-bold">About this vehicle</h2>
-              <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-                {v.description}
-              </p>
+              <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{v.description}</p>
             </section>
           )}
 
@@ -303,9 +289,7 @@ function VehicleDetail() {
               {v.status !== "available" && <Badge variant="secondary">Sale pending</Badge>}
             </div>
 
-            <p className="mt-5 font-display text-3xl font-extrabold">
-              {formatUsd(Number(v.price_cents))}
-            </p>
+            <p className="mt-5 font-display text-3xl font-extrabold">{formatUsd(Number(v.price_cents))}</p>
             {payment != null && settings && (
               <div className="mt-2 rounded-lg bg-surface p-3 text-sm">
                 <p className="font-semibold text-primary">Est. ${payment}/mo</p>
