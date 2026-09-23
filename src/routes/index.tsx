@@ -188,7 +188,7 @@ function Home() {
               ) : (
                 <>
                   <span className="block">Used Cars, Trucks & SUVs</span>
-                  <span className="block">Rin Fredericksburg, VA</span>
+                  <span className="block">in Fredericksburg, VA</span>
                 </>
               )}
             </h1>
