@@ -1,7 +1,25 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState, type ReactNode } from "react";
-import { Camera, CarFront, Check, Copy, ImagePlus, Plus, Search, SlidersHorizontal, Trash2, X } from "lucide-react";
+import {
+  ArrowRight,
+  BadgeDollarSign,
+  Camera,
+  CarFront,
+  Check,
+  ClipboardCheck,
+  Copy,
+  FileText,
+  Handshake,
+  ImagePlus,
+  ListChecks,
+  Plus,
+  Search,
+  ShieldCheck,
+  SlidersHorizontal,
+  Trash2,
+  X,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -397,445 +415,723 @@ function SellPage() {
     }
   }
 
+  const scrollToOfferForm = () => {
+    document.getElementById("sell-trade-form")?.scrollIntoView({
+      behavior: "smooth",
+      block: "start",
+    });
+  };
+
+  const chooseIntentAndScroll = (nextIntent: "sell" | "trade") => {
+    setIntent(nextIntent);
+
+    window.setTimeout(() => {
+      scrollToOfferForm();
+    }, 80);
+  };
+
   return (
-    <div className="min-h-screen bg-slate-50/70">
-      <div className="mx-auto w-full max-w-[1280px] px-4 py-8 sm:px-6 lg:py-10">
-        <div className="mb-6 max-w-3xl">
-          <h1 className="font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-            Sell or Trade Your Car in Fredericksburg, VA
-          </h1>
-          <p className="mt-2 text-sm leading-6 text-slate-600 sm:text-base">
-            Sell your car or trade it in with My Car in Fredericksburg, Virginia. Tell us about your vehicle, including
-            the VIN or plate, mileage and condition, and our team will review the information and follow up with an
-            offer or next steps.
-          </p>
+    <div className="min-h-screen bg-background">
+      {/* HERO */}
+      <section
+        className="relative isolate overflow-hidden bg-slate-950 bg-cover bg-center"
+        style={{
+          backgroundImage:
+            'linear-gradient(90deg, rgba(3,12,22,0.95) 0%, rgba(3,12,22,0.84) 48%, rgba(3,12,22,0.48) 100%), url("https://images.unsplash.com/photo-1503736334956-4c8f8e92946d?auto=format&fit=crop&w=2000&q=88")',
+        }}
+      >
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_82%_42%,rgba(255,255,255,0.14),transparent_32%)]" />
+
+        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-12 lg:py-28">
+          <div className="max-w-3xl">
+            <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/90 backdrop-blur-sm">
+              Sell or Trade With My Car
+            </p>
+
+            <h1 className="mt-5 font-display text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
+              Sell or Trade Your Car in Fredericksburg, VA
+            </h1>
+
+            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-200 sm:text-lg">
+              Tell us about your vehicle and choose whether you want to sell it outright or trade it toward another
+              vehicle. Our team will review the information you provide and follow up with an offer or next steps.
+            </p>
+
+            <button
+              type="button"
+              onClick={scrollToOfferForm}
+              className="mt-8 inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#F7941D] px-6 py-3 text-sm font-bold text-slate-950 shadow-[0_12px_30px_rgba(247,148,29,0.28)] transition hover:bg-[#ea8718] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+            >
+              Get My Offer
+              <ArrowRight className="size-4" />
+            </button>
+          </div>
         </div>
+      </section>
 
-        <div
-          ref={leadFormScopeRef}
-          className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 [&_button]:rounded-lg [&_input]:h-9 [&_input]:rounded-lg [&_label]:text-xs [&_textarea]:rounded-lg [&_textarea]:border-slate-300 [&_textarea]:text-sm"
-        >
-          <LeadForm
-            leadType="trade"
-            submitLabel="Request My Offer"
-            successTitle="Appraisal request received"
-            successBody="Our buyer will review your vehicle and respond with a number, usually within one business day."
-            messageLabel="Damage, service history, or anything else we should know"
-            collectDetails={() => ({
-              customer_name: customerName,
-              customer_email: customerEmail,
-              customer_phone: customerPhone,
-              customer_address: customerAddress,
-              vin,
-              plate,
-              year_make_model: ymm,
-              mileage,
-              zip,
-              condition,
-              title_status: title,
-              intent,
-              customer_wish_list: intent === "trade" ? JSON.stringify(wishList) : "",
-              selected_vehicle_ids: intent === "trade" ? selectedIds.join(",") : "",
-              selected_vehicles:
+      {/* SELL VS TRADE */}
+      <section className="bg-white py-14 sm:py-16">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-12">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Choose What Works for You</p>
+            <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+              Sell your vehicle or trade it toward another one
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">
+              Start with the option that matches your goal. You can still change your selection in the form.
+            </p>
+          </div>
+
+          <div className="mx-auto mt-10 grid max-w-5xl gap-5 md:grid-cols-2">
+            <button
+              type="button"
+              onClick={() => chooseIntentAndScroll("sell")}
+              className={`group cursor-pointer rounded-2xl border p-6 text-left shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg sm:p-8 ${
+                intent === "sell"
+                  ? "border-primary bg-primary/[0.04] ring-1 ring-primary/20"
+                  : "border-slate-200 bg-white hover:border-primary/40"
+              }`}
+            >
+              <div
+                className={`flex size-12 items-center justify-center rounded-xl transition ${
+                  intent === "sell"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground"
+                }`}
+              >
+                <BadgeDollarSign className="size-6" />
+              </div>
+
+              <h3 className="mt-5 font-display text-2xl font-bold text-slate-950">Sell My Vehicle</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Submit your vehicle information for review if you want to sell your current vehicle without choosing
+                another one from our inventory.
+              </p>
+
+              <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                Start My Offer
+                <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+              </span>
+            </button>
+
+            <button
+              type="button"
+              onClick={() => chooseIntentAndScroll("trade")}
+              className={`group cursor-pointer rounded-2xl border p-6 text-left shadow-sm transition duration-300 hover:-translate-y-1 hover:shadow-lg sm:p-8 ${
                 intent === "trade"
-                  ? JSON.stringify(
-                      selectedVehicles.map((vehicle) => ({
-                        id: vehicle.id,
-                        title: vehicleTitle(vehicle),
-                        stock_number: vehicle.stock_number,
-                        vin: vehicle.vin,
-                        price_cents: vehicle.price_cents,
-                      })),
-                    )
-                  : "",
-              vehicle_photo_names: tradeInPhotoNames.join(","),
-              trade_in_records: JSON.stringify(tradeIns),
-            })}
+                  ? "border-primary bg-primary/[0.04] ring-1 ring-primary/20"
+                  : "border-slate-200 bg-white hover:border-primary/40"
+              }`}
+            >
+              <div
+                className={`flex size-12 items-center justify-center rounded-xl transition ${
+                  intent === "trade"
+                    ? "bg-primary text-primary-foreground"
+                    : "bg-primary/10 text-primary group-hover:bg-primary group-hover:text-primary-foreground"
+                }`}
+              >
+                <Handshake className="size-6" />
+              </div>
+
+              <h3 className="mt-5 font-display text-2xl font-bold text-slate-950">Trade My Vehicle</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Tell us about your current vehicle and, if you&apos;d like, browse My Car&apos;s available inventory to
+                select vehicles you may want to trade toward.
+              </p>
+
+              <span className="mt-5 inline-flex items-center gap-2 text-sm font-semibold text-primary">
+                Start My Trade
+                <ArrowRight className="size-4 transition-transform group-hover:translate-x-1" />
+              </span>
+            </button>
+          </div>
+        </div>
+      </section>
+
+      {/* HOW IT WORKS */}
+      <section className="border-y border-slate-200 bg-slate-50 py-14 sm:py-16">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-12">
+          <div className="text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">How It Works</p>
+            <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-slate-950">
+              Three simple steps to get started
+            </h2>
+          </div>
+
+          <div className="mt-10 grid gap-8 md:grid-cols-3">
+            <div className="text-center">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
+                1
+              </div>
+              <h3 className="mt-4 font-display text-lg font-bold text-slate-950">Tell Us About Your Vehicle</h3>
+              <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-slate-600">
+                Share the VIN or plate, mileage, condition and other basic vehicle information.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
+                2
+              </div>
+              <h3 className="mt-4 font-display text-lg font-bold text-slate-950">Choose Sell or Trade</h3>
+              <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-slate-600">
+                Sell your vehicle outright or choose the trade option and tell us what you&apos;re looking for next.
+              </p>
+            </div>
+
+            <div className="text-center">
+              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
+                3
+              </div>
+              <h3 className="mt-4 font-display text-lg font-bold text-slate-950">Our Team Reviews It</h3>
+              <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-slate-600">
+                Our buyer reviews the information you submit and follows up with an offer or the next steps.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* WHY SELL TO MY CAR */}
+      <section className="bg-white py-14 sm:py-16">
+        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
+          <div className="mx-auto max-w-3xl text-center">
+            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Why My Car</p>
+            <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+              A straightforward way to sell or trade
+            </h2>
+          </div>
+
+          <div className="mt-10 grid gap-5 md:grid-cols-3">
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ClipboardCheck className="size-6" />
+              </div>
+              <h3 className="mt-5 font-display text-xl font-bold text-slate-950">One Organized Submission</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                Provide your contact and vehicle details in one form so our team has the information needed to review
+                your request.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <CarFront className="size-6" />
+              </div>
+              <h3 className="mt-5 font-display text-xl font-bold text-slate-950">Trade Toward Current Inventory</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                If you&apos;re trading, you can browse available My Car inventory and select vehicles that interest you.
+              </p>
+            </div>
+
+            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                <ShieldCheck className="size-6" />
+              </div>
+              <h3 className="mt-5 font-display text-xl font-bold text-slate-950">Clear Next Steps</h3>
+              <p className="mt-2 text-sm leading-6 text-slate-600">
+                After review, our team follows up so you know what comes next for your sell or trade request.
+              </p>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* WHAT YOU'LL NEED */}
+      <section className="border-y border-slate-200 bg-slate-950 py-14 text-white sm:py-16">
+        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-12">
+          <div className="grid gap-10 lg:grid-cols-[0.9fr_1.1fr] lg:items-center">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.18em] text-[#F7941D]">Before You Start</p>
+              <h2 className="mt-3 font-display text-3xl font-bold tracking-tight sm:text-4xl">
+                What information you&apos;ll need
+              </h2>
+              <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300 sm:text-base">
+                Having a few details ready makes it easier to complete the request in one sitting.
+              </p>
+
+              <button
+                type="button"
+                onClick={scrollToOfferForm}
+                className="mt-7 inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#F7941D] px-5 py-2.5 text-sm font-bold text-slate-950 transition hover:bg-[#ea8718]"
+              >
+                Get My Offer
+                <ArrowRight className="size-4" />
+              </button>
+            </div>
+
+            <div className="grid gap-3 sm:grid-cols-2">
+              {[
+                ["VIN, plate or vehicle details", "VIN or license plate, or the year, make, model and trim."],
+                ["Mileage and ZIP code", "Current mileage and the ZIP code associated with the vehicle."],
+                [
+                  "Condition and title status",
+                  "Vehicle condition and whether the title is clean, financed, salvage/rebuilt or lost.",
+                ],
+                ["Contact information", "Your name, email, phone number and address."],
+                ["Vehicle photos", "Photos can be added to help provide more context about the vehicle."],
+                ["Trade preferences", "If trading, you can tell us what you want next and browse available inventory."],
+              ].map(([heading, description]) => (
+                <div key={heading} className="rounded-xl border border-white/10 bg-white/5 p-4">
+                  <div className="flex items-start gap-3">
+                    <span className="mt-0.5 flex size-7 shrink-0 items-center justify-center rounded-full bg-[#F7941D] text-slate-950">
+                      <Check className="size-4" />
+                    </span>
+                    <div>
+                      <h3 className="text-sm font-semibold text-white">{heading}</h3>
+                      <p className="mt-1 text-xs leading-5 text-slate-300">{description}</p>
+                    </div>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      </section>
+
+      {/* SELL / TRADE FORM */}
+      <section id="sell-trade-form" className="scroll-mt-20 bg-slate-50/70 py-14 sm:py-16">
+        <div className="mx-auto w-full max-w-[1280px] px-4 sm:px-6">
+          <div className="mx-auto mb-8 max-w-3xl text-center">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
+              <FileText className="size-6" />
+            </div>
+            <p className="mt-5 text-xs font-semibold uppercase tracking-[0.18em] text-primary">Ready to Get Started?</p>
+            <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
+              Sell / Trade Form
+            </h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">
+              Complete the form below with your contact and vehicle information. Choose Sell or Trade, then provide the
+              details our team needs to review your request.
+            </p>
+          </div>
+
+          <div
+            ref={leadFormScopeRef}
+            className="rounded-2xl border border-slate-200 bg-white p-3 shadow-sm sm:p-5 [&_button]:rounded-lg [&_button[type='submit']]:bg-[#F7941D] [&_button[type='submit']]:font-bold [&_button[type='submit']]:text-slate-950 [&_button[type='submit']]:hover:bg-[#ea8718] [&_input]:h-9 [&_input]:rounded-lg [&_label]:text-xs [&_textarea]:rounded-lg [&_textarea]:border-slate-300 [&_textarea]:text-sm"
           >
-            <div className="grid items-start gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
-              <aside className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 lg:sticky lg:top-6">
-                <div className="grid gap-4 [&_input]:!h-10 [&_label]:!text-xs">
-                  <CompactField label="Full Name" htmlFor="customer-full-name">
-                    <Input
-                      id="customer-full-name"
-                      value={customerName}
-                      onChange={(event) => setCustomerName(event.target.value)}
-                      placeholder="First and last name"
-                      autoComplete="name"
-                      className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
-                      required
-                    />
-                  </CompactField>
-
-                  <CompactField label="Email" htmlFor="customer-email">
-                    <Input
-                      id="customer-email"
-                      type="email"
-                      value={customerEmail}
-                      onChange={(event) => setCustomerEmail(event.target.value)}
-                      placeholder="name@example.com"
-                      autoComplete="email"
-                      className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
-                      required
-                    />
-                  </CompactField>
-
-                  <CompactField label="Phone" htmlFor="customer-phone">
-                    <Input
-                      id="customer-phone"
-                      type="tel"
-                      inputMode="numeric"
-                      maxLength={14}
-                      value={formatPhone(customerPhone)}
-                      onChange={(event) => setCustomerPhone(digitsOnly(event.target.value, 10))}
-                      placeholder="(000) 000-0000"
-                      autoComplete="tel"
-                      className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
-                      required
-                    />
-                  </CompactField>
-
-                  <CompactField label="Address" htmlFor="customer-address">
-                    <Input
-                      id="customer-address"
-                      value={customerAddress}
-                      onChange={(event) => setCustomerAddress(event.target.value)}
-                      placeholder="Street, city, state and ZIP"
-                      autoComplete="street-address"
-                      className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
-                    />
-                  </CompactField>
-                </div>
-              </aside>
-
-              <main className="min-w-0 space-y-5">
-                <div
-                  className="grid gap-1 rounded-xl bg-slate-100 p-1 sm:grid-cols-2"
-                  role="radiogroup"
-                  aria-label="Choose whether to sell or trade your vehicle"
-                >
-                  {[
-                    ["sell", "Sell My Vehicle"],
-                    ["trade", "Trade My Vehicle"],
-                  ].map(([value = "", heading]) => (
-                    <label
-                      key={value}
-                      className={`flex min-h-11 cursor-pointer items-center justify-center rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition-all ${
-                        intent === value
-                          ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200"
-                          : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
-                      }`}
-                    >
-                      <input
-                        type="radio"
-                        name="customer-intent"
-                        value={value}
-                        checked={intent === value}
-                        onChange={() => setIntent(value)}
+            <LeadForm
+              leadType="trade"
+              submitLabel="Request My Offer"
+              successTitle="Appraisal request received"
+              successBody="Our buyer will review your vehicle and respond with a number, usually within one business day."
+              messageLabel="Damage, service history, or anything else we should know"
+              collectDetails={() => ({
+                customer_name: customerName,
+                customer_email: customerEmail,
+                customer_phone: customerPhone,
+                customer_address: customerAddress,
+                vin,
+                plate,
+                year_make_model: ymm,
+                mileage,
+                zip,
+                condition,
+                title_status: title,
+                intent,
+                customer_wish_list: intent === "trade" ? JSON.stringify(wishList) : "",
+                selected_vehicle_ids: intent === "trade" ? selectedIds.join(",") : "",
+                selected_vehicles:
+                  intent === "trade"
+                    ? JSON.stringify(
+                        selectedVehicles.map((vehicle) => ({
+                          id: vehicle.id,
+                          title: vehicleTitle(vehicle),
+                          stock_number: vehicle.stock_number,
+                          vin: vehicle.vin,
+                          price_cents: vehicle.price_cents,
+                        })),
+                      )
+                    : "",
+                vehicle_photo_names: tradeInPhotoNames.join(","),
+                trade_in_records: JSON.stringify(tradeIns),
+              })}
+            >
+              <div className="grid items-start gap-6 lg:grid-cols-[260px_minmax(0,1fr)]">
+                <aside className="rounded-xl border border-slate-200 bg-slate-50/80 p-4 lg:sticky lg:top-6">
+                  <div className="grid gap-4 [&_input]:!h-10 [&_label]:!text-xs">
+                    <CompactField label="Full Name" htmlFor="customer-full-name">
+                      <Input
+                        id="customer-full-name"
+                        value={customerName}
+                        onChange={(event) => setCustomerName(event.target.value)}
+                        placeholder="First and last name"
+                        autoComplete="name"
+                        className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
                         required
-                        className="sr-only"
                       />
-                      {heading}
-                    </label>
-                  ))}
-                </div>
+                    </CompactField>
 
-                {intent === "trade" && (
-                  <>
-                    <Panel
-                      title="What Are You Looking For?"
-                      action={
-                        <Button
-                          type="button"
-                          size="sm"
-                          className="h-7 rounded-sm px-3 text-[10px]"
-                          onClick={() => openPicker("matching")}
-                        >
-                          <Search className="size-3" />
-                          Find Matching Vehicles
-                        </Button>
-                      }
-                    >
-                      <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
-                        <DatalistField
-                          id="wish-make-model"
-                          label="Make and Model"
-                          value={wishList.makeModel}
-                          options={inventoryOptions.makeModels}
-                          onChange={(value) => updateWishList("makeModel", value)}
-                          placeholder="Any make or model"
-                        />
+                    <CompactField label="Email" htmlFor="customer-email">
+                      <Input
+                        id="customer-email"
+                        type="email"
+                        value={customerEmail}
+                        onChange={(event) => setCustomerEmail(event.target.value)}
+                        placeholder="name@example.com"
+                        autoComplete="email"
+                        className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
+                        required
+                      />
+                    </CompactField>
 
-                        <DatalistField
-                          id="wish-body-type"
-                          label="Body Type"
-                          value={wishList.bodyType === "all" ? "" : wishList.bodyType}
-                          options={inventoryOptions.bodyTypes}
-                          onChange={(value) => updateWishList("bodyType", value || "all")}
-                          placeholder="Any body type"
-                        />
+                    <CompactField label="Phone" htmlFor="customer-phone">
+                      <Input
+                        id="customer-phone"
+                        type="tel"
+                        inputMode="numeric"
+                        maxLength={14}
+                        value={formatPhone(customerPhone)}
+                        onChange={(event) => setCustomerPhone(digitsOnly(event.target.value, 10))}
+                        placeholder="(000) 000-0000"
+                        autoComplete="tel"
+                        className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
+                        required
+                      />
+                    </CompactField>
 
-                        <DatalistField
-                          id="wish-min-year"
-                          label="Year or Newer"
-                          value={wishList.minYear}
-                          options={inventoryOptions.years}
-                          onChange={(value) => updateWishList("minYear", digitsOnly(value, 4))}
-                          placeholder="Any year"
-                          inputMode="numeric"
-                        />
+                    <CompactField label="Address" htmlFor="customer-address">
+                      <Input
+                        id="customer-address"
+                        value={customerAddress}
+                        onChange={(event) => setCustomerAddress(event.target.value)}
+                        placeholder="Street, city, state and ZIP"
+                        autoComplete="street-address"
+                        className="rounded-lg border-slate-300 bg-white px-3 text-sm focus-visible:ring-1 focus-visible:ring-cyan-700"
+                      />
+                    </CompactField>
+                  </div>
+                </aside>
 
-                        <DatalistField
-                          id="wish-max-price"
-                          label="Max Price"
-                          value={wishList.maxPrice}
-                          options={inventoryOptions.prices}
-                          onChange={(value) => updateWishList("maxPrice", value)}
-                          placeholder="Any price"
-                          inputMode="decimal"
+                <main className="min-w-0 space-y-5">
+                  <div
+                    className="grid gap-1 rounded-xl bg-slate-100 p-1 sm:grid-cols-2"
+                    role="radiogroup"
+                    aria-label="Choose whether to sell or trade your vehicle"
+                  >
+                    {[
+                      ["sell", "Sell My Vehicle"],
+                      ["trade", "Trade My Vehicle"],
+                    ].map(([value = "", heading]) => (
+                      <label
+                        key={value}
+                        className={`flex min-h-11 cursor-pointer items-center justify-center rounded-lg px-4 py-2.5 text-center text-sm font-semibold transition-all ${
+                          intent === value
+                            ? "bg-white text-cyan-800 shadow-sm ring-1 ring-slate-200"
+                            : "text-slate-600 hover:bg-white/70 hover:text-slate-900"
+                        }`}
+                      >
+                        <input
+                          type="radio"
+                          name="customer-intent"
+                          value={value}
+                          checked={intent === value}
+                          onChange={() => setIntent(value)}
+                          required
+                          className="sr-only"
                         />
+                        {heading}
+                      </label>
+                    ))}
+                  </div>
 
-                        <DatalistField
-                          id="wish-max-mileage"
-                          label="Max Mileage"
-                          value={wishList.maxMileage}
-                          options={inventoryOptions.mileages}
-                          onChange={(value) => updateWishList("maxMileage", value)}
-                          placeholder="Any Mileage"
-                          inputMode="numeric"
-                        />
-
-                        <DatalistField
-                          id="wish-transmission"
-                          label="Transmission"
-                          value={wishList.transmission === "all" ? "" : wishList.transmission}
-                          options={inventoryOptions.transmissions}
-                          onChange={(value) => updateWishList("transmission", value || "all")}
-                          placeholder="Any transmission"
-                        />
-                        <DatalistField
-                          id="wish-drivetrain"
-                          label="Drive Train"
-                          value={wishList.drivetrain === "all" ? "" : wishList.drivetrain}
-                          options={inventoryOptions.drivetrains}
-                          onChange={(value) => updateWishList("drivetrain", value || "all")}
-                          placeholder="Any drive train"
-                        />
-                        <DatalistField
-                          id="wish-fuel-type"
-                          label="Fuel Type"
-                          value={wishList.fuelType === "all" ? "" : wishList.fuelType}
-                          options={inventoryOptions.fuelTypes}
-                          onChange={(value) => updateWishList("fuelType", value || "all")}
-                          placeholder="Any fuel type"
-                        />
-
-                        <DatalistField
-                          id="wish-exterior-color"
-                          label="Exterior Color"
-                          value={wishList.exteriorColor}
-                          options={inventoryOptions.exteriorColors}
-                          onChange={(value) => updateWishList("exteriorColor", value === "Any Color" ? "" : value)}
-                          placeholder="Any Color"
-                        />
-
-                        <DatalistField
-                          id="wish-interior-color"
-                          label="Interior Color"
-                          value={wishList.interiorColor}
-                          options={inventoryOptions.interiorColors}
-                          onChange={(value) => updateWishList("interiorColor", value === "Any Color" ? "" : value)}
-                          placeholder="Any Color"
-                        />
-                      </div>
-
-                      <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-4">
-                        {WISH_FEATURES.map((feature) => (
-                          <label
-                            key={feature}
-                            className="flex cursor-pointer items-center gap-2 text-[11px] text-slate-700"
+                  {intent === "trade" && (
+                    <>
+                      <Panel
+                        title="What Are You Looking For?"
+                        action={
+                          <Button
+                            type="button"
+                            size="sm"
+                            className="h-7 rounded-sm px-3 text-[10px]"
+                            onClick={() => openPicker("matching")}
                           >
-                            <input
-                              type="checkbox"
-                              checked={wishList.features.includes(feature)}
-                              onChange={() => toggleFeature(feature)}
-                              className="size-3.5 rounded-sm border-slate-300 accent-cyan-700"
-                            />
-                            {feature}
-                          </label>
-                        ))}
-                      </div>
-                    </Panel>
+                            <Search className="size-3" />
+                            Find Matching Vehicles
+                          </Button>
+                        }
+                      >
+                        <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
+                          <DatalistField
+                            id="wish-make-model"
+                            label="Make and Model"
+                            value={wishList.makeModel}
+                            options={inventoryOptions.makeModels}
+                            onChange={(value) => updateWishList("makeModel", value)}
+                            placeholder="Any make or model"
+                          />
 
-                    <Panel
-                      title={`Vehicles You're Interested In (${selectedVehicles.length})`}
-                      action={
-                        <Button
-                          type="button"
-                          variant="outline"
-                          size="sm"
-                          className="h-7 rounded-sm px-3 text-[10px]"
-                          onClick={() => openPicker("all")}
-                        >
-                          <Plus className="size-3" />
-                          Choose From Our Inventory
-                        </Button>
-                      }
-                    >
-                      {selectedVehicles.length === 0 ? (
-                        <button
-                          type="button"
-                          onClick={() => openPicker("all")}
-                          className="flex w-full items-center justify-center gap-2 border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-xs text-slate-500 hover:border-cyan-600 hover:text-cyan-800"
-                        >
-                          <CarFront className="size-5" />
-                          No vehicles selected. Click to browse available inventory.
-                        </button>
-                      ) : (
-                        <div className="grid gap-3 lg:grid-cols-2">
-                          {selectedVehicles.map((vehicle) => (
-                            <SelectedVehicleCard
-                              key={vehicle.id}
-                              vehicle={vehicle}
-                              onRemove={() => toggleSelectedVehicle(vehicle.id)}
-                            />
+                          <DatalistField
+                            id="wish-body-type"
+                            label="Body Type"
+                            value={wishList.bodyType === "all" ? "" : wishList.bodyType}
+                            options={inventoryOptions.bodyTypes}
+                            onChange={(value) => updateWishList("bodyType", value || "all")}
+                            placeholder="Any body type"
+                          />
+
+                          <DatalistField
+                            id="wish-min-year"
+                            label="Year or Newer"
+                            value={wishList.minYear}
+                            options={inventoryOptions.years}
+                            onChange={(value) => updateWishList("minYear", digitsOnly(value, 4))}
+                            placeholder="Any year"
+                            inputMode="numeric"
+                          />
+
+                          <DatalistField
+                            id="wish-max-price"
+                            label="Max Price"
+                            value={wishList.maxPrice}
+                            options={inventoryOptions.prices}
+                            onChange={(value) => updateWishList("maxPrice", value)}
+                            placeholder="Any price"
+                            inputMode="decimal"
+                          />
+
+                          <DatalistField
+                            id="wish-max-mileage"
+                            label="Max Mileage"
+                            value={wishList.maxMileage}
+                            options={inventoryOptions.mileages}
+                            onChange={(value) => updateWishList("maxMileage", value)}
+                            placeholder="Any Mileage"
+                            inputMode="numeric"
+                          />
+
+                          <DatalistField
+                            id="wish-transmission"
+                            label="Transmission"
+                            value={wishList.transmission === "all" ? "" : wishList.transmission}
+                            options={inventoryOptions.transmissions}
+                            onChange={(value) => updateWishList("transmission", value || "all")}
+                            placeholder="Any transmission"
+                          />
+                          <DatalistField
+                            id="wish-drivetrain"
+                            label="Drive Train"
+                            value={wishList.drivetrain === "all" ? "" : wishList.drivetrain}
+                            options={inventoryOptions.drivetrains}
+                            onChange={(value) => updateWishList("drivetrain", value || "all")}
+                            placeholder="Any drive train"
+                          />
+                          <DatalistField
+                            id="wish-fuel-type"
+                            label="Fuel Type"
+                            value={wishList.fuelType === "all" ? "" : wishList.fuelType}
+                            options={inventoryOptions.fuelTypes}
+                            onChange={(value) => updateWishList("fuelType", value || "all")}
+                            placeholder="Any fuel type"
+                          />
+
+                          <DatalistField
+                            id="wish-exterior-color"
+                            label="Exterior Color"
+                            value={wishList.exteriorColor}
+                            options={inventoryOptions.exteriorColors}
+                            onChange={(value) => updateWishList("exteriorColor", value === "Any Color" ? "" : value)}
+                            placeholder="Any Color"
+                          />
+
+                          <DatalistField
+                            id="wish-interior-color"
+                            label="Interior Color"
+                            value={wishList.interiorColor}
+                            options={inventoryOptions.interiorColors}
+                            onChange={(value) => updateWishList("interiorColor", value === "Any Color" ? "" : value)}
+                            placeholder="Any Color"
+                          />
+                        </div>
+
+                        <div className="mt-3 grid gap-2 border-t border-slate-200 pt-3 sm:grid-cols-2 lg:grid-cols-4">
+                          {WISH_FEATURES.map((feature) => (
+                            <label
+                              key={feature}
+                              className="flex cursor-pointer items-center gap-2 text-[11px] text-slate-700"
+                            >
+                              <input
+                                type="checkbox"
+                                checked={wishList.features.includes(feature)}
+                                onChange={() => toggleFeature(feature)}
+                                className="size-3.5 rounded-sm border-slate-300 accent-cyan-700"
+                              />
+                              {feature}
+                            </label>
                           ))}
                         </div>
-                      )}
-                    </Panel>
-                  </>
-                )}
+                      </Panel>
 
-                {intent && (
-                  <Panel title="Your Vehicle">
-                    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
-                      <CompactField label="VIN" htmlFor="vin">
-                        <Input
-                          id="vin"
-                          value={vin}
-                          onChange={(event) => setVin(event.target.value.toUpperCase().slice(0, 17))}
-                          placeholder="17 characters"
-                          maxLength={17}
-                          className={fieldClass}
-                        />
-                      </CompactField>
-                      <CompactField label="Or License Plate" htmlFor="plate">
-                        <Input
-                          id="plate"
-                          value={plate}
-                          onChange={(event) => setPlate(event.target.value.toUpperCase())}
-                          placeholder="VA plate"
-                          className={fieldClass}
-                        />
-                      </CompactField>
-                      <div className="sm:col-span-2">
-                        <CompactField label="Or Year, Make, Model and Trim" htmlFor="ymm">
+                      <Panel
+                        title={`Vehicles You're Interested In (${selectedVehicles.length})`}
+                        action={
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="h-7 rounded-sm px-3 text-[10px]"
+                            onClick={() => openPicker("all")}
+                          >
+                            <Plus className="size-3" />
+                            Choose From Our Inventory
+                          </Button>
+                        }
+                      >
+                        {selectedVehicles.length === 0 ? (
+                          <button
+                            type="button"
+                            onClick={() => openPicker("all")}
+                            className="flex w-full items-center justify-center gap-2 border border-dashed border-slate-300 bg-slate-50 px-4 py-8 text-xs text-slate-500 hover:border-cyan-600 hover:text-cyan-800"
+                          >
+                            <CarFront className="size-5" />
+                            No vehicles selected. Click to browse available inventory.
+                          </button>
+                        ) : (
+                          <div className="grid gap-3 lg:grid-cols-2">
+                            {selectedVehicles.map((vehicle) => (
+                              <SelectedVehicleCard
+                                key={vehicle.id}
+                                vehicle={vehicle}
+                                onRemove={() => toggleSelectedVehicle(vehicle.id)}
+                              />
+                            ))}
+                          </div>
+                        )}
+                      </Panel>
+                    </>
+                  )}
+
+                  {intent && (
+                    <Panel title="Your Vehicle">
+                      <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
+                        <CompactField label="VIN" htmlFor="vin">
                           <Input
-                            id="ymm"
-                            value={ymm}
-                            onChange={(event) => setYmm(event.target.value)}
-                            placeholder="2019 Toyota RAV4 XLE"
+                            id="vin"
+                            value={vin}
+                            onChange={(event) => setVin(event.target.value.toUpperCase().slice(0, 17))}
+                            placeholder="17 characters"
+                            maxLength={17}
                             className={fieldClass}
                           />
                         </CompactField>
-                      </div>
-                      <CompactField label="Mileage" htmlFor="mileage">
-                        <Input
-                          id="mileage"
-                          value={mileage}
-                          onChange={(event) => setMileage(digitsOnly(event.target.value))}
-                          inputMode="numeric"
-                          required
-                          className={fieldClass}
-                        />
-                      </CompactField>
-                      <CompactField label="ZIP Code" htmlFor="zip">
-                        <Input
-                          id="zip"
-                          value={zip}
-                          onChange={(event) => setZip(digitsOnly(event.target.value, 5))}
-                          inputMode="numeric"
-                          maxLength={5}
-                          required
-                          className={fieldClass}
-                        />
-                      </CompactField>
-                      <TradeSelect
-                        label="Condition"
-                        value={condition}
-                        onChange={setCondition}
-                        options={[
-                          ["excellent", "Excellent"],
-                          ["good", "Good"],
-                          ["fair", "Fair"],
-                          ["rough", "Rough / Not Running"],
-                        ]}
-                      />
-                      <TradeSelect
-                        label="Title Status"
-                        value={title}
-                        onChange={setTitle}
-                        options={[
-                          ["clean", "Clean, in Hand"],
-                          ["lien", "Clean, Lien Payoff"],
-                          ["salvage", "Salvage or Rebuilt"],
-                          ["lost", "Lost Title"],
-                        ]}
-                      />
-                    </div>
-
-                    <div className="mt-3 border-t border-slate-200 pt-3">
-                      <Label htmlFor="customer-vehicle-photos" className="text-[10px] font-medium text-slate-700">
-                        Vehicle Photos
-                      </Label>
-                      <label
-                        htmlFor="customer-vehicle-photos"
-                        className="mt-1 flex cursor-pointer flex-col items-center justify-center border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center transition-colors hover:border-cyan-600 hover:bg-cyan-50/40"
-                        onDragOver={(event) => event.preventDefault()}
-                        onDrop={(event) => {
-                          event.preventDefault();
-                          const images = Array.from(event.dataTransfer.files).filter((file) =>
-                            ["image/jpeg", "image/png"].includes(file.type),
-                          );
-                          setTradeInPhotoNames(images.map((file) => file.name));
-                        }}
-                      >
-                        <ImagePlus className="size-6 text-cyan-700" />
-                        <span className="mt-2 text-xs font-semibold text-slate-700">
-                          Drop your images here, or browse
-                        </span>
-                        <span className="mt-1 text-[10px] text-slate-500">Supports JPG, JPEG and PNG</span>
-                        <Input
-                          id="customer-vehicle-photos"
-                          type="file"
-                          accept="image/jpeg,image/png"
-                          multiple
-                          className="sr-only"
-                          onChange={(event) =>
-                            setTradeInPhotoNames(Array.from(event.target.files ?? []).map((file) => file.name))
-                          }
-                        />
-                      </label>
-                      {tradeInPhotoNames.length > 0 && (
-                        <div className="mt-2 flex flex-wrap gap-1.5">
-                          {tradeInPhotoNames.map((name) => (
-                            <span
-                              key={name}
-                              className="border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-600"
-                            >
-                              {name}
-                            </span>
-                          ))}
+                        <CompactField label="Or License Plate" htmlFor="plate">
+                          <Input
+                            id="plate"
+                            value={plate}
+                            onChange={(event) => setPlate(event.target.value.toUpperCase())}
+                            placeholder="VA plate"
+                            className={fieldClass}
+                          />
+                        </CompactField>
+                        <div className="sm:col-span-2">
+                          <CompactField label="Or Year, Make, Model and Trim" htmlFor="ymm">
+                            <Input
+                              id="ymm"
+                              value={ymm}
+                              onChange={(event) => setYmm(event.target.value)}
+                              placeholder="2019 Toyota RAV4 XLE"
+                              className={fieldClass}
+                            />
+                          </CompactField>
                         </div>
-                      )}
-                    </div>
-                  </Panel>
-                )}
-              </main>
-            </div>
-          </LeadForm>
+                        <CompactField label="Mileage" htmlFor="mileage">
+                          <Input
+                            id="mileage"
+                            value={mileage}
+                            onChange={(event) => setMileage(digitsOnly(event.target.value))}
+                            inputMode="numeric"
+                            required
+                            className={fieldClass}
+                          />
+                        </CompactField>
+                        <CompactField label="ZIP Code" htmlFor="zip">
+                          <Input
+                            id="zip"
+                            value={zip}
+                            onChange={(event) => setZip(digitsOnly(event.target.value, 5))}
+                            inputMode="numeric"
+                            maxLength={5}
+                            required
+                            className={fieldClass}
+                          />
+                        </CompactField>
+                        <TradeSelect
+                          label="Condition"
+                          value={condition}
+                          onChange={setCondition}
+                          options={[
+                            ["excellent", "Excellent"],
+                            ["good", "Good"],
+                            ["fair", "Fair"],
+                            ["rough", "Rough / Not Running"],
+                          ]}
+                        />
+                        <TradeSelect
+                          label="Title Status"
+                          value={title}
+                          onChange={setTitle}
+                          options={[
+                            ["clean", "Clean, in Hand"],
+                            ["lien", "Clean, Lien Payoff"],
+                            ["salvage", "Salvage or Rebuilt"],
+                            ["lost", "Lost Title"],
+                          ]}
+                        />
+                      </div>
+
+                      <div className="mt-3 border-t border-slate-200 pt-3">
+                        <Label htmlFor="customer-vehicle-photos" className="text-[10px] font-medium text-slate-700">
+                          Vehicle Photos
+                        </Label>
+                        <label
+                          htmlFor="customer-vehicle-photos"
+                          className="mt-1 flex cursor-pointer flex-col items-center justify-center border border-dashed border-slate-300 bg-slate-50 px-4 py-5 text-center transition-colors hover:border-cyan-600 hover:bg-cyan-50/40"
+                          onDragOver={(event) => event.preventDefault()}
+                          onDrop={(event) => {
+                            event.preventDefault();
+                            const images = Array.from(event.dataTransfer.files).filter((file) =>
+                              ["image/jpeg", "image/png"].includes(file.type),
+                            );
+                            setTradeInPhotoNames(images.map((file) => file.name));
+                          }}
+                        >
+                          <ImagePlus className="size-6 text-cyan-700" />
+                          <span className="mt-2 text-xs font-semibold text-slate-700">
+                            Drop your images here, or browse
+                          </span>
+                          <span className="mt-1 text-[10px] text-slate-500">Supports JPG, JPEG and PNG</span>
+                          <Input
+                            id="customer-vehicle-photos"
+                            type="file"
+                            accept="image/jpeg,image/png"
+                            multiple
+                            className="sr-only"
+                            onChange={(event) =>
+                              setTradeInPhotoNames(Array.from(event.target.files ?? []).map((file) => file.name))
+                            }
+                          />
+                        </label>
+                        {tradeInPhotoNames.length > 0 && (
+                          <div className="mt-2 flex flex-wrap gap-1.5">
+                            {tradeInPhotoNames.map((name) => (
+                              <span
+                                key={name}
+                                className="border border-slate-200 bg-white px-2 py-1 text-[10px] text-slate-600"
+                              >
+                                {name}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+                      </div>
+                    </Panel>
+                  )}
+                </main>
+              </div>
+            </LeadForm>
+          </div>
         </div>
-      </div>
+      </section>
 
       <VehiclePickerDialog
         open={pickerOpen}
