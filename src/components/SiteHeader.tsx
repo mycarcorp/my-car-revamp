@@ -47,11 +47,9 @@ export function SiteHeader() {
     .slice(0, 2)
     .toUpperCase();
 
-  /*
-   * Active navigation logic
-   *
-   * Shop inventory should also remain active while viewing
-   * an individual vehicle page.
+  /**
+   * Keep the appropriate parent navigation item active
+   * even when the visitor is viewing a child page.
    */
   function isNavActive(to: string) {
     if (to === "/search") {
@@ -69,9 +67,8 @@ export function SiteHeader() {
     });
   }
 
-  /*
-   * Scroll progress indicator.
-   * Updates as the visitor moves down the current page.
+  /**
+   * Top reading / page scroll progress indicator.
    */
   useEffect(() => {
     let animationFrame = 0;
@@ -79,15 +76,14 @@ export function SiteHeader() {
     const updateScrollProgress = () => {
       cancelAnimationFrame(animationFrame);
 
-      animationFrame = requestAnimationFrame(() => {
+      animationFrame = window.requestAnimationFrame(() => {
         const scrollTop = window.scrollY || document.documentElement.scrollTop || 0;
 
         const scrollableHeight = document.documentElement.scrollHeight - window.innerHeight;
 
-        const nextProgress =
-          scrollableHeight > 0 ? Math.min(100, Math.max(0, (scrollTop / scrollableHeight) * 100)) : 0;
+        const progress = scrollableHeight > 0 ? Math.min(100, Math.max(0, (scrollTop / scrollableHeight) * 100)) : 0;
 
-        setScrollProgress(nextProgress);
+        setScrollProgress(progress);
         setScrolled(scrollTop > 8);
       });
     };
@@ -100,9 +96,9 @@ export function SiteHeader() {
 
     window.addEventListener("resize", updateScrollProgress);
 
-    /*
-     * Recalculate when page content changes height,
-     * such as inventory, blog posts, images or forms loading.
+    /**
+     * Recalculate if dynamic page content changes height.
+     * Useful for inventory, blog articles, forms, images, etc.
      */
     const resizeObserver =
       typeof ResizeObserver !== "undefined"
@@ -111,9 +107,7 @@ export function SiteHeader() {
           })
         : null;
 
-    if (resizeObserver) {
-      resizeObserver.observe(document.documentElement);
-    }
+    resizeObserver?.observe(document.documentElement);
 
     return () => {
       cancelAnimationFrame(animationFrame);
@@ -126,8 +120,8 @@ export function SiteHeader() {
     };
   }, [pathname]);
 
-  /*
-   * Sign-in redirect logic.
+  /**
+   * Existing sign-in redirect logic.
    */
   useEffect(() => {
     if (!user || !signInOpen) return;
@@ -147,8 +141,8 @@ export function SiteHeader() {
       });
   }, [user, signInOpen, navigate]);
 
-  /*
-   * Close mobile navigation when moving to another route.
+  /**
+   * Close the mobile navigation after route changes.
    */
   useEffect(() => {
     setOpen(false);
@@ -156,11 +150,47 @@ export function SiteHeader() {
 
   return (
     <header
-      className={`sticky top-0 z-50 border-b border-border bg-background/95 backdrop-blur-xl transition-shadow duration-300 ${
-        scrolled ? "shadow-[0_6px_24px_rgba(15,23,42,0.08)]" : ""
-      }`}
+      className={`
+        sticky top-0 z-50
+        border-b border-border
+        bg-background/95
+        backdrop-blur-xl
+        transition-shadow duration-300
+        ${scrolled ? "shadow-[0_5px_20px_rgba(15,23,42,0.07)]" : ""}
+      `}
     >
-      {/* BRAND ACCENT BAR */}
+      {/* TOP SCROLL PROGRESS BAR */}
+      <div
+        aria-hidden="true"
+        className="
+          pointer-events-none
+          absolute
+          left-0
+          top-0
+          z-[70]
+          h-[2px]
+          w-full
+          overflow-hidden
+        "
+      >
+        <div
+          className="
+            h-full
+            w-full
+            origin-left
+            bg-[#F7941D]
+            will-change-transform
+            transition-transform
+            duration-75
+            ease-linear
+          "
+          style={{
+            transform: `scaleX(${scrollProgress / 100})`,
+          }}
+        />
+      </div>
+
+      {/* EXISTING BRAND ACCENT */}
       <div className="accent-bar h-1 w-full" />
 
       <div className="mx-auto flex h-16 max-w-7xl items-center gap-4 px-4">
@@ -168,13 +198,27 @@ export function SiteHeader() {
         <Link
           to="/"
           aria-label="My Car home"
-          className="flex items-center gap-2 rounded-md transition duration-200 hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D]/50 focus-visible:ring-offset-2"
+          className="
+            flex
+            items-center
+            gap-2
+            rounded-md
+            transition-all
+            duration-300
+            ease-out
+            hover:-translate-y-[1px]
+            hover:scale-[1.015]
+            focus-visible:outline-none
+            focus-visible:ring-2
+            focus-visible:ring-[#F7941D]/40
+            focus-visible:ring-offset-2
+          "
         >
-          <BrandLogo className="h-12 w-auto transition-transform duration-200 hover:scale-[1.02]" />
+          <BrandLogo className="h-12 w-auto" />
         </Link>
 
         {/* DESKTOP NAVIGATION */}
-        <nav aria-label="Main navigation" className="ml-6 hidden items-center gap-1 lg:flex">
+        <nav aria-label="Main navigation" className="ml-6 hidden items-center gap-5 lg:flex">
           {NAV.map((item) => {
             const active = isNavActive(item.to);
 
@@ -184,44 +228,60 @@ export function SiteHeader() {
                 to={item.to}
                 aria-current={active ? "page" : undefined}
                 className={`
-                  relative rounded-lg px-3 py-2
-                  text-sm font-semibold
-                  transition-all duration-200
+                  group
+                  relative
+                  inline-flex
+                  items-center
+                  px-1
+                  py-2
+                  text-sm
+                  font-semibold
+                  transition-all
+                  duration-300
+                  ease-out
                   focus-visible:outline-none
                   focus-visible:ring-2
-                  focus-visible:ring-[#F7941D]/40
+                  focus-visible:ring-[#F7941D]/35
+                  focus-visible:ring-offset-2
+
                   ${
                     active
-                      ? `
-                        bg-[#F7941D]/10
-                        text-[#F7941D]
-                        shadow-[0_0_18px_rgba(247,148,29,0.16)]
-                      `
+                      ? "text-[#F7941D]"
                       : `
-                        text-foreground/75
-                        hover:bg-[#F7941D]/[0.06]
+                        text-foreground/80
+                        hover:-translate-y-[2px]
+                        hover:scale-[1.04]
                         hover:text-[#F7941D]
                       `
                   }
                 `}
               >
-                {item.label}
+                <span
+                  className={`
+                    transition-transform
+                    duration-300
+                    ease-out
+                    ${active ? "" : "group-hover:drop-shadow-[0_3px_6px_rgba(247,148,29,0.18)]"}
+                  `}
+                >
+                  {item.label}
+                </span>
 
-                {/* ACTIVE UNDERLINE */}
+                {/* FULL-WIDTH ACTIVE / HOVER UNDERLINE */}
                 <span
                   aria-hidden="true"
                   className={`
                     absolute
+                    inset-x-0
                     bottom-0
-                    left-1/2
                     h-[2px]
-                    -translate-x-1/2
+                    origin-center
                     rounded-full
                     bg-[#F7941D]
-                    shadow-[0_0_8px_rgba(247,148,29,0.65)]
-                    transition-all
+                    transition-transform
                     duration-300
-                    ${active ? "w-6 opacity-100" : "w-0 opacity-0"}
+                    ease-out
+                    ${active ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}
                   `}
                 />
               </Link>
@@ -229,7 +289,7 @@ export function SiteHeader() {
           })}
         </nav>
 
-        {/* ACCOUNT / MOBILE CONTROLS */}
+        {/* ACCOUNT / ACTIONS */}
         <div className="ml-auto flex items-center gap-2">
           {user ? (
             <>
@@ -237,24 +297,24 @@ export function SiteHeader() {
               <Link
                 to="/account"
                 aria-label="Saved vehicles and account"
-                className={`
-                  inline-flex size-9 items-center justify-center
+                className="
+                  inline-flex
+                  size-9
+                  items-center
+                  justify-center
                   rounded-full
-                  transition-all duration-200
-                  ${
-                    pathname.startsWith("/account")
-                      ? `
-                        bg-[#F7941D]/10
-                        text-[#F7941D]
-                        shadow-[0_0_14px_rgba(247,148,29,0.2)]
-                      `
-                      : `
-                        text-primary
-                        hover:bg-primary/5
-                        hover:text-[#F7941D]
-                      `
-                  }
-                `}
+                  text-primary
+                  transition-all
+                  duration-300
+                  ease-out
+                  hover:-translate-y-[1px]
+                  hover:scale-110
+                  hover:text-[#F7941D]
+                  focus-visible:outline-none
+                  focus-visible:ring-2
+                  focus-visible:ring-[#F7941D]/40
+                  focus-visible:ring-offset-2
+                "
               >
                 <Heart className="size-5" />
               </Link>
@@ -266,19 +326,25 @@ export function SiteHeader() {
                     type="button"
                     aria-label="Open account menu"
                     className="
-                      inline-flex items-center gap-1
+                      inline-flex
+                      items-center
+                      gap-1
                       rounded-full
-                      border border-primary/30
+                      border
+                      border-primary/30
                       bg-background
                       p-1
                       shadow-sm
                       transition-all
-                      duration-200
-                      hover:border-[#F7941D]/60
-                      hover:shadow-[0_0_14px_rgba(247,148,29,0.14)]
+                      duration-300
+                      ease-out
+                      hover:-translate-y-[1px]
+                      hover:scale-[1.03]
+                      hover:border-[#F7941D]/55
+                      hover:shadow-md
                       focus-visible:outline-none
                       focus-visible:ring-2
-                      focus-visible:ring-[#F7941D]/50
+                      focus-visible:ring-[#F7941D]/40
                       focus-visible:ring-offset-2
                     "
                   >
@@ -328,8 +394,11 @@ export function SiteHeader() {
               onClick={() => setSignInOpen(true)}
               className="
                 transition-all
-                duration-200
-                hover:shadow-[0_0_14px_rgba(247,148,29,0.18)]
+                duration-300
+                ease-out
+                hover:-translate-y-[1px]
+                hover:scale-[1.025]
+                hover:shadow-md
               "
             >
               <User2 className="size-4" />
@@ -337,39 +406,34 @@ export function SiteHeader() {
             </Button>
           )}
 
-          {/* MOBILE MENU BUTTON */}
-          <button
-            type="button"
-            className={`
-              inline-flex size-9 items-center justify-center
-              rounded-md
-              border
-              transition-all
-              duration-200
-              lg:hidden
-              ${
-                open
-                  ? `
-                    border-[#F7941D]/50
-                    bg-[#F7941D]/10
-                    text-[#F7941D]
-                    shadow-[0_0_12px_rgba(247,148,29,0.16)]
-                  `
-                  : `
-                    border-border
-                    text-foreground
-                    hover:border-[#F7941D]/40
-                    hover:bg-[#F7941D]/5
-                    hover:text-[#F7941D]
-                  `
-              }
-            `}
-            onClick={() => setOpen((value) => !value)}
-            aria-label={open ? "Close navigation menu" : "Open navigation menu"}
-            aria-expanded={open}
-          >
-            {open ? <X className="size-5" /> : <Menu className="size-5" />}
-          </button>
+          {!user && (
+            <button
+              type="button"
+              className="
+                inline-flex
+                size-9
+                items-center
+                justify-center
+                rounded-md
+                border
+                border-border
+                text-foreground
+                transition-all
+                duration-300
+                ease-out
+                hover:-translate-y-[1px]
+                hover:scale-105
+                hover:border-[#F7941D]/50
+                hover:text-[#F7941D]
+                lg:hidden
+              "
+              onClick={() => setOpen((value) => !value)}
+              aria-label={open ? "Close navigation menu" : "Open navigation menu"}
+              aria-expanded={open}
+            >
+              {open ? <X className="size-5" /> : <Menu className="size-5" />}
+            </button>
+          )}
         </div>
       </div>
 
@@ -388,7 +452,7 @@ export function SiteHeader() {
             lg:hidden
           "
         >
-          <div className="mx-auto max-w-7xl space-y-1">
+          <div className="mx-auto max-w-7xl">
             {NAV.map((item) => {
               const active = isNavActive(item.to);
 
@@ -399,36 +463,55 @@ export function SiteHeader() {
                   onClick={() => setOpen(false)}
                   aria-current={active ? "page" : undefined}
                   className={`
+                    group
                     relative
                     flex
                     items-center
-                    rounded-lg
-                    px-3
                     py-3
                     text-sm
                     font-semibold
                     transition-all
-                    duration-200
+                    duration-300
+                    ease-out
+
                     ${
                       active
-                        ? `
-                          bg-[#F7941D]/10
-                          text-[#F7941D]
-                          shadow-[inset_3px_0_0_#F7941D]
-                        `
+                        ? "text-[#F7941D]"
                         : `
                           text-foreground/80
-                          hover:bg-[#F7941D]/5
+                          hover:translate-x-1
                           hover:text-[#F7941D]
                         `
                     }
                   `}
                 >
-                  {item.label}
+                  <span
+                    className="
+                      transition-transform
+                      duration-300
+                      group-hover:scale-[1.02]
+                    "
+                  >
+                    {item.label}
+                  </span>
 
-                  {active && (
-                    <span className="ml-auto size-1.5 rounded-full bg-[#F7941D] shadow-[0_0_7px_rgba(247,148,29,0.8)]" />
-                  )}
+                  {/* MOBILE FULL-WIDTH UNDERLINE */}
+                  <span
+                    aria-hidden="true"
+                    className={`
+                      absolute
+                      inset-x-0
+                      bottom-0
+                      h-[2px]
+                      origin-left
+                      bg-[#F7941D]
+                      transition-transform
+                      duration-300
+                      ease-out
+
+                      ${active ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}
+                    `}
+                  />
                 </Link>
               );
             })}
@@ -442,69 +525,52 @@ export function SiteHeader() {
                   onClick={() => setOpen(false)}
                   aria-current={active ? "page" : undefined}
                   className={`
+                    group
+                    relative
                     flex
                     items-center
-                    rounded-lg
-                    px-3
                     py-3
                     text-sm
                     font-semibold
                     transition-all
-                    duration-200
+                    duration-300
+                    ease-out
+
                     ${
                       active
-                        ? `
-                          bg-[#F7941D]/10
-                          text-[#F7941D]
-                          shadow-[inset_3px_0_0_#F7941D]
-                        `
+                        ? "text-[#F7941D]"
                         : `
                           text-foreground/80
-                          hover:bg-[#F7941D]/5
+                          hover:translate-x-1
                           hover:text-[#F7941D]
                         `
                     }
                   `}
                 >
-                  Contact
-                  {active && (
-                    <span className="ml-auto size-1.5 rounded-full bg-[#F7941D] shadow-[0_0_7px_rgba(247,148,29,0.8)]" />
-                  )}
+                  <span className="transition-transform duration-300 group-hover:scale-[1.02]">Contact</span>
+
+                  <span
+                    aria-hidden="true"
+                    className={`
+                      absolute
+                      inset-x-0
+                      bottom-0
+                      h-[2px]
+                      origin-left
+                      bg-[#F7941D]
+                      transition-transform
+                      duration-300
+                      ease-out
+
+                      ${active ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}
+                    `}
+                  />
                 </Link>
               );
             })()}
           </div>
         </nav>
       )}
-
-      {/* SCROLL PROGRESS BAR */}
-      <div
-        aria-hidden="true"
-        className="
-          pointer-events-none
-          absolute
-          bottom-0
-          left-0
-          z-[60]
-          h-[2px]
-          w-full
-          overflow-hidden
-        "
-      >
-        <div
-          className="
-            h-full
-            bg-[#F7941D]
-            shadow-[0_0_7px_rgba(247,148,29,0.55)]
-            transition-[width]
-            duration-100
-            ease-out
-          "
-          style={{
-            width: `${scrollProgress}%`,
-          }}
-        />
-      </div>
 
       {/* SIGN-IN DRAWER */}
       <Sheet open={signInOpen} onOpenChange={setSignInOpen}>
