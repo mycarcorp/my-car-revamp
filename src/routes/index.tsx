@@ -29,20 +29,41 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "Used Car Dealership in Fredericksburg, VA | My Car" },
+      {
+        title: "Used Car Dealership in Fredericksburg, VA | My Car",
+      },
       {
         name: "description",
         content:
           "Shop quality used cars, trucks and SUVs in Fredericksburg, VA. Explore financing options, trade in your vehicle, sell your car, or schedule a test drive with My Car.",
       },
-      { property: "og:title", content: "MyCar — Used Cars in Fredericksburg, VA" },
+      {
+        property: "og:title",
+        content: "Used Car Dealership in Fredericksburg, VA | My Car",
+      },
       {
         property: "og:description",
         content:
-          "Current used vehicle inventory, payment estimates and trade-in offers from an independent Fredericksburg dealership.",
+          "Shop quality used cars, trucks and SUVs in Fredericksburg, VA. Explore financing options, trade in your vehicle, sell your car, or schedule a test drive with My Car.",
+      },
+      {
+        property: "og:url",
+        content: "https://mycarcorp.com/",
+      },
+      {
+        property: "og:type",
+        content: "website",
+      },
+    ],
+
+    links: [
+      {
+        rel: "canonical",
+        href: "https://mycarcorp.com/",
       },
     ],
   }),
+
   component: Home,
 });
 
