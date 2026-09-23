@@ -21,6 +21,13 @@ const PAGE = 12;
 
 const trim = (s: string | null, n = 160) => (s ? (s.length > n ? `${s.slice(0, n).trimEnd()}…` : s) : null);
 
+const slugifyTopic = (value: string) =>
+  value
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/^-+|-+$/g, "");
+
 export const Route = createFileRoute("/blog/")({
   loader: async () => {
     const [posts, articles] = await Promise.all([publicBlogList(), publicAutoseoList()]);
@@ -141,35 +148,71 @@ function BlogIndex() {
   const shown = rest.slice(0, visible);
 
   const topics = Array.from(new Set(cards.map((c) => c.category).filter(Boolean))) as string[];
+  const heroImage =
+    featured?.image ?? "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=85";
+
+  const scrollToTopic = (topic?: string) => {
+    if (!topic) {
+      document.getElementById("latest-posts")?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+      return;
+    }
+
+    const target = cards.find((card) => card.category === topic);
+    if (!target) return;
+
+    setVisible(Math.max(PAGE, rest.length));
+
+    window.setTimeout(() => {
+      document.getElementById(`post-${target.key}`)?.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+    }, 50);
+  };
 
   return (
     <div>
-      {/* SEO INTRO */}
-      <section className="border-b border-border bg-surface">
-        <div className="mx-auto max-w-6xl px-4 py-12 sm:px-8 lg:px-12 lg:py-16">
-          <div className="max-w-3xl">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">My Car Resource Center</p>
+      {/* SEO HERO */}
+      <section
+        className="relative isolate overflow-hidden border-b border-border bg-slate-950 bg-cover bg-center"
+        style={{
+          backgroundImage: `linear-gradient(90deg, rgba(3, 12, 22, 0.94) 0%, rgba(3, 12, 22, 0.82) 45%, rgba(3, 12, 22, 0.52) 72%, rgba(3, 12, 22, 0.42) 100%), url("${heroImage}")`,
+        }}
+      >
+        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_85%_40%,rgba(255,255,255,0.14),transparent_34%)]" />
 
-            <h1 className="mt-3 font-display text-3xl font-bold tracking-tight text-foreground sm:text-4xl lg:text-5xl">
+        <div className="mx-auto max-w-6xl px-4 py-16 sm:px-8 lg:px-12 lg:py-24">
+          <div className="max-w-3xl">
+            <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/90 backdrop-blur-sm">
+              My Car Resource Center
+            </p>
+
+            <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl lg:text-5xl">
               Used Car Buying Tips in Fredericksburg, VA
             </h1>
 
-            <p className="mt-4 max-w-2xl text-base leading-7 text-muted-foreground">
+            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-100/90 sm:text-lg">
               Get practical advice for shopping, financing, trading and owning a used vehicle in Fredericksburg,
               Virginia. Explore guides from My Car designed to help you research vehicles, understand your options and
               make informed decisions before your next purchase.
             </p>
 
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Link to="/search" className={ctaButtonClass}>
-                Browse used vehicles
+            <div className="mt-7 flex flex-wrap gap-3">
+              <Link
+                to="/search"
+                className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-lg bg-[#F7941D] px-5 py-2.5 text-sm font-bold text-slate-950 shadow-[0_10px_24px_rgba(247,148,29,0.28)] transition hover:bg-[#ea8718] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
+              >
+                Browse Used Vehicles
               </Link>
 
               <Link
                 to="/finance"
-                className="inline-flex items-center justify-center rounded-md border border-border bg-background px-4 py-2 text-sm font-semibold text-foreground transition hover:bg-muted"
+                className="inline-flex min-h-11 items-center justify-center whitespace-nowrap rounded-lg border border-white/30 bg-white/10 px-5 py-2.5 text-sm font-bold text-white backdrop-blur-sm transition hover:bg-white/20 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white/80"
               >
-                Explore financing
+                Explore Financing Options
               </Link>
             </div>
           </div>
@@ -177,20 +220,75 @@ function BlogIndex() {
       </section>
 
       <div className="mx-auto max-w-6xl px-4 py-10 sm:px-8 lg:px-12">
-        {/* TOPICS */}
+        {/* AUTO-SCROLLING TOPIC CAROUSEL */}
         {topics.length > 0 && (
-          <nav
-            aria-label="Blog topics"
-            className="flex gap-5 overflow-x-auto border-b border-border py-4 text-sm font-semibold text-muted-foreground"
-          >
-            <span className="shrink-0 text-foreground">All posts</span>
+          <>
+            <style>{`
+              @keyframes blog-topic-marquee {
+                from { transform: translate3d(0, 0, 0); }
+                to { transform: translate3d(calc(-50% - 0.375rem), 0, 0); }
+              }
 
-            {topics.map((topic) => (
-              <span key={topic} className="shrink-0">
-                {topic}
-              </span>
-            ))}
-          </nav>
+              .blog-topic-marquee {
+                display: flex;
+                width: max-content;
+                min-width: max-content;
+                animation: blog-topic-marquee 34s linear infinite;
+                will-change: transform;
+              }
+
+              .blog-topic-carousel:hover .blog-topic-marquee,
+              .blog-topic-carousel:focus-within .blog-topic-marquee {
+                animation-play-state: paused;
+              }
+
+              @media (prefers-reduced-motion: reduce) {
+                .blog-topic-marquee {
+                  animation: none !important;
+                  transform: none !important;
+                }
+              }
+            `}</style>
+
+            <nav
+              aria-label="Blog topics"
+              className="blog-topic-carousel relative overflow-hidden border-y border-border bg-background py-4"
+            >
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-background to-transparent sm:w-20" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-background to-transparent sm:w-20" />
+
+              <div className="blog-topic-marquee gap-3 px-3">
+                {[0, 1].map((copy) => (
+                  <div
+                    key={copy}
+                    className="flex shrink-0 items-center gap-3"
+                    aria-hidden={copy === 1 ? true : undefined}
+                  >
+                    <button
+                      type="button"
+                      onClick={() => scrollToTopic()}
+                      tabIndex={copy === 1 ? -1 : 0}
+                      className="shrink-0 cursor-pointer whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-foreground shadow-sm transition hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                    >
+                      All posts
+                    </button>
+
+                    {topics.map((topic) => (
+                      <button
+                        key={`${copy}-${topic}`}
+                        type="button"
+                        onClick={() => scrollToTopic(topic)}
+                        tabIndex={copy === 1 ? -1 : 0}
+                        className="shrink-0 cursor-pointer whitespace-nowrap rounded-full border border-border bg-card px-4 py-2 text-sm font-semibold text-muted-foreground shadow-sm transition hover:border-primary hover:bg-primary hover:text-primary-foreground"
+                      >
+                        {topic}
+                      </button>
+                    ))}
+                  </div>
+                ))}
+              </div>
+            </nav>
+          </>
         )}
 
         {cards.length === 0 ? (
@@ -204,9 +302,10 @@ function BlogIndex() {
             {/* FEATURED ARTICLE */}
             {featured && (
               <Link
+                id={`post-${featured.key}`}
                 to="/blog/$slug"
                 params={{ slug: featured.slug }}
-                className="group grid cursor-pointer overflow-hidden rounded-2xl border border-border bg-card transition duration-300 hover:shadow-lg md:grid-cols-[1.35fr_1fr]"
+                className="group grid scroll-mt-28 cursor-pointer overflow-hidden rounded-2xl border border-border bg-card transition duration-300 hover:shadow-lg md:grid-cols-[1.35fr_1fr]"
               >
                 {featured.image ? (
                   <img
@@ -243,16 +342,19 @@ function BlogIndex() {
 
             {/* LATEST POSTS */}
             {shown.length > 0 && (
-              <h2 className="mt-12 font-display text-2xl font-bold">Latest used car tips and guides</h2>
+              <h2 id="latest-posts" className="mt-12 scroll-mt-28 font-display text-2xl font-bold">
+                Latest used car tips and guides
+              </h2>
             )}
 
             <div className="mt-5 grid gap-6 sm:grid-cols-2 lg:grid-cols-3">
               {shown.map((p) => (
                 <Link
+                  id={`post-${p.key}`}
                   key={p.key}
                   to="/blog/$slug"
                   params={{ slug: p.slug }}
-                  className="flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-border bg-card transition duration-300 hover:-translate-y-1 hover:shadow-lg"
+                  className="flex h-full scroll-mt-28 cursor-pointer flex-col overflow-hidden rounded-xl border border-border bg-card transition duration-300 hover:-translate-y-1 hover:shadow-lg"
                 >
                   {p.image ? (
                     <img
