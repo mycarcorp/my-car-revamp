@@ -29,7 +29,7 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
-      { title: "MyCar — Used Cars, Trucks & SUVs in Fredericksburg, VA" },
+      { title: "Used Car Dealership in Fredericksburg, VA | My Car" },
       {
         name: "description",
         content:
