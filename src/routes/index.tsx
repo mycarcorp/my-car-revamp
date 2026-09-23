@@ -187,8 +187,8 @@ function Home() {
                 <span className="block">Welcome back, {displayName}!</span>
               ) : (
                 <>
-                  <span className="block">Right car.</span>
-                  <span className="block">Right price.</span>
+                  <span className="block">Used Cars, Trucks & SUVs</span>
+                  <span className="block">in Fredericksburg, VA</span>
                 </>
               )}
             </h1>
