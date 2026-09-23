@@ -219,7 +219,7 @@ function Home() {
               {user
                 ? `Welcome back, ${displayName}! Pick up where you left off and find the right next step for your car journey.`
                 : facets?.total
-                  ? "Search over 30,000 used vehicles with real monthly payments built in from day one."
+                  ? `Search ${facets.total.toLocaleString()} used vehicles with real monthly payment estimates.`
                   : "Browse inspected used cars, trucks and SUVs in Fredericksburg, VA with real monthly payment estimates on every listing."}
             </p>
 
