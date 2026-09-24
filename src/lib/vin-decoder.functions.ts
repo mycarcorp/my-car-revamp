@@ -35,7 +35,9 @@ export type VinDecodedVehicle = {
 };
 
 const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/;
-const NHTSA_TIMEOUT_MS = 12_000;
+const NHTSA_TIMEOUT_MS = 8_000;
+const NHTSA_MIN_REQUEST_GAP_MS = 500;
+const NHTSA_PRIMARY_ATTEMPTS = 2;
 const MPG_TOTAL_TIMEOUT_MS = 3_500;
 const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_CACHE_ENTRIES = 500;
@@ -43,6 +45,8 @@ const MAX_CACHE_ENTRIES = 500;
 type CacheEntry = { expiresAt: number; value: VinDecodedVehicle };
 const decodeCache = new Map<string, CacheEntry>();
 const inFlightDecodes = new Map<string, Promise<VinDecodedVehicle>>();
+let nhtsaQueue: Promise<void> = Promise.resolve();
+let lastNhtsaRequestAt = 0;
 
 const clean = (value: unknown): string | undefined => {
   const text = String(value ?? "")
@@ -116,6 +120,81 @@ async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Respons
   } finally {
     clearTimeout(timer);
   }
+}
+
+const sleep = (milliseconds: number) => new Promise<void>((resolve) => setTimeout(resolve, milliseconds));
+
+function enqueueNhtsa<T>(task: () => Promise<T>): Promise<T> {
+  const queued = nhtsaQueue.then(task, task);
+  nhtsaQueue = queued.then(
+    () => undefined,
+    () => undefined,
+  );
+  return queued;
+}
+
+async function respectNhtsaRequestGap() {
+  const remaining = NHTSA_MIN_REQUEST_GAP_MS - (Date.now() - lastNhtsaRequestAt);
+  if (remaining > 0) await sleep(remaining);
+  lastNhtsaRequestAt = Date.now();
+}
+
+function isTemporaryStatus(status: number) {
+  return status === 408 || status === 425 || status === 429 || status >= 500;
+}
+
+async function requestNhtsa(vin: string): Promise<Record<string, unknown>> {
+  return enqueueNhtsa(async () => {
+    const encodedVin = encodeURIComponent(vin);
+    const requests = [
+      ...Array.from(
+        { length: NHTSA_PRIMARY_ATTEMPTS },
+        () => `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${encodedVin}?format=json`,
+      ),
+      `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValues/${encodedVin}?format=json`,
+    ];
+
+    let sawRateLimit = false;
+    let sawTimeout = false;
+
+    for (let index = 0; index < requests.length; index++) {
+      await respectNhtsaRequestGap();
+
+      try {
+        const response = await fetchWithTimeout(requests[index]!, NHTSA_TIMEOUT_MS);
+        if (response.ok) {
+          const payload = (await response.json()) as {
+            Results?: Array<Record<string, unknown>>;
+          };
+          const result = payload.Results?.[0];
+          if (result) return result;
+        } else {
+          sawRateLimit ||= response.status === 429;
+          if (!isTemporaryStatus(response.status)) {
+            throw new Error(`VIN service rejected the request (${response.status}).`);
+          }
+        }
+      } catch (error) {
+        if (error instanceof Error && error.name === "AbortError") {
+          sawTimeout = true;
+        } else if (error instanceof Error && error.message.startsWith("VIN service rejected")) {
+          throw error;
+        }
+      }
+
+      if (index < requests.length - 1) {
+        await sleep(600 * 2 ** index);
+      }
+    }
+
+    if (sawRateLimit) {
+      throw new Error("VIN service is busy. Your request was retried automatically; please try again shortly.");
+    }
+    if (sawTimeout) {
+      throw new Error("VIN service did not respond after automatic retries. Please try again.");
+    }
+    throw new Error("VIN service is temporarily unavailable after automatic retries.");
+  });
 }
 
 async function lookupMpg(year: number, make: string, model: string): Promise<EpaMpg> {
@@ -203,23 +282,7 @@ function writeCache(vin: string, value: VinDecodedVehicle) {
 }
 
 async function decodeVinData(vin: string): Promise<VinDecodedVehicle> {
-  let response: Response;
-  try {
-    response = await fetchWithTimeout(
-      `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${encodeURIComponent(vin)}?format=json`,
-      NHTSA_TIMEOUT_MS,
-    );
-  } catch (error) {
-    if (error instanceof Error && error.name === "AbortError") {
-      throw new Error("VIN service is taking too long. Please try again.");
-    }
-    throw new Error("VIN service is unavailable. Please try again.");
-  }
-  if (!response.ok) throw new Error("VIN service is unavailable. Please try again.");
-
-  const payload = (await response.json()) as { Results?: Array<Record<string, unknown>> };
-  const result = payload.Results?.[0];
-  if (!result) throw new Error("VIN was not found.");
+  const result = await requestNhtsa(vin);
 
   const year = numberValue(result["ModelYear"]);
   const make = clean(result["Make"]);
