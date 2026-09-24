@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Linkedin, Youtube } from "lucide-react";
+import { Facebook, Instagram, Linkedin, Youtube } from "lucide-react";
 import { siteSettingsQuery, serviceAreasQuery } from "@/lib/queries";
 import { BrandLogo } from "@/components/BrandLogo";
 
@@ -19,6 +19,28 @@ export function SiteFooter() {
           <BrandLogo className="h-12 w-auto" />
 
           <div className="mt-4 flex items-center gap-2" aria-label="MyCar social media links">
+            <a
+              href="https://www.facebook.com/mycarcorporation"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="MyCar Corporation on Facebook"
+              title="Facebook"
+              className={socialButtonClass}
+            >
+              <Facebook className="size-4" aria-hidden="true" />
+            </a>
+
+            <a
+              href="https://www.instagram.com/mycarcorporation/?utm_source=ig_web_button_share_sheet"
+              target="_blank"
+              rel="noopener noreferrer"
+              aria-label="MyCar Corporation on Instagram"
+              title="Instagram"
+              className={socialButtonClass}
+            >
+              <Instagram className="size-4" aria-hidden="true" />
+            </a>
+
             <a
               href="https://www.youtube.com/@MyCarCorporation"
               target="_blank"
