@@ -922,7 +922,7 @@ function FinancePage() {
                   <Label htmlFor="landing-term" className="text-sm font-semibold text-slate-800">
                     Loan Term
                   </Label>
-                  <Select value={term || undefined} onValueChange={setTerm}>
+                  <Select value={term} onValueChange={setTerm}>
                     <SelectTrigger id="landing-term" className="mt-2 h-11">
                       <SelectValue placeholder="Select a loan term" />
                     </SelectTrigger>
