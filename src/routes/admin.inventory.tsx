@@ -25,20 +25,27 @@ import { createMediaUploadFn, saveVehiclePhotosFn, type PhotoOrderInput } from "
 import { decodeVin, type VinDecodedVehicle } from "@/lib/vin-decoder.functions";
 
 const VIN_CACHE_PREFIX = "vehicle-vin-decode:";
-const VIN_CACHE_TTL_MS = 24 * 60 * 60 * 1000;
+const VIN_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const MAX_CONCURRENT_UPLOADS = 3;
+const VIN_DECODE_TIMEOUT_MS = 15_000;
+
+const vinMemoryCache = new Map<string, VinDecodedVehicle>();
 
 type CachedVin = { savedAt: number; value: VinDecodedVehicle };
 
 function getCachedVin(vin: string): VinDecodedVehicle | null {
+  const memoryValue = vinMemoryCache.get(vin);
+  if (memoryValue) return memoryValue;
+
   try {
-    const raw = sessionStorage.getItem(`${VIN_CACHE_PREFIX}${vin}`);
+    const raw = localStorage.getItem(`${VIN_CACHE_PREFIX}${vin}`);
     if (!raw) return null;
     const cached = JSON.parse(raw) as CachedVin;
     if (!cached?.savedAt || Date.now() - cached.savedAt > VIN_CACHE_TTL_MS) {
-      sessionStorage.removeItem(`${VIN_CACHE_PREFIX}${vin}`);
+      localStorage.removeItem(`${VIN_CACHE_PREFIX}${vin}`);
       return null;
     }
+    if (cached.value) vinMemoryCache.set(vin, cached.value);
     return cached.value ?? null;
   } catch {
     return null;
@@ -46,14 +53,31 @@ function getCachedVin(vin: string): VinDecodedVehicle | null {
 }
 
 function cacheVin(vin: string, value: VinDecodedVehicle) {
+  vinMemoryCache.set(vin, value);
   try {
-    sessionStorage.setItem(
+    localStorage.setItem(
       `${VIN_CACHE_PREFIX}${vin}`,
       JSON.stringify({ savedAt: Date.now(), value } satisfies CachedVin),
     );
   } catch {
     // VIN decoding still works when browser storage is unavailable.
   }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
+  });
 }
 
 async function mapWithConcurrency<T, R>(
@@ -317,7 +341,13 @@ export function VehicleFormDialog({
     const requestId = ++decodeRequestId.current;
     try {
       const cached = getCachedVin(vin);
-      const decoded = cached ?? (await decodeVin({ data: { accessToken: session.access_token, vin } }));
+      const decoded =
+        cached ??
+        (await withTimeout(
+          decodeVin({ data: { accessToken: session.access_token, vin } }),
+          VIN_DECODE_TIMEOUT_MS,
+          "VIN decoding is taking too long. Please try again.",
+        ));
       if (requestId !== decodeRequestId.current) return;
       if (!cached) cacheVin(vin, decoded);
       setForm((current) => applyDecodedVehicle(current, decoded));
@@ -386,10 +416,6 @@ export function VehicleFormDialog({
       };
 
       if (!session?.access_token) throw new Error("Your session has expired. Please sign in again.");
-      await saveLegacyInventoryRow({
-        data: { accessToken: session.access_token, vehicle: payload },
-      });
-
       const originalUrls = existing.map((photo) => photo.url);
       const currentExistingUrls = photos
         .filter((photo): photo is Extract<PhotoDraft, { kind: "existing" }> => photo.kind === "existing")
@@ -400,46 +426,48 @@ export function VehicleFormDialog({
         originalUrls.length !== currentExistingUrls.length ||
         originalUrls.some((url, index) => url !== currentExistingUrls[index]);
 
-      if (photosChanged) {
-        const pendingUploads = photos
-          .map((photo, photoIndex) => ({ photo, photoIndex }))
-          .filter(
-            (item): item is { photo: Extract<PhotoDraft, { kind: "new" }>; photoIndex: number } =>
-              item.photo.kind === "new",
-          );
-
-        setSaveLabel(
-          pendingUploads.length > 0
-            ? `Uploading ${pendingUploads.length} photo${pendingUploads.length === 1 ? "" : "s"}…`
-            : "Updating photos…",
+      const pendingUploads = photos
+        .map((photo, photoIndex) => ({ photo, photoIndex }))
+        .filter(
+          (item): item is { photo: Extract<PhotoDraft, { kind: "new" }>; photoIndex: number } =>
+            item.photo.kind === "new",
         );
 
+      // The row save and direct file uploads are independent. Starting them
+      // together removes a full network round trip from the user's wait.
+      const vehicleSavePromise = saveLegacyInventoryRow({
+        data: { accessToken: session.access_token, vehicle: payload },
+      });
+      let uploadedPromise: Promise<Array<{ photoIndex: number; key: string }>> = Promise.resolve([]);
+
+      if (photosChanged && pendingUploads.length > 0) {
+        setSaveLabel(`Saving and uploading ${pendingUploads.length} photo${pendingUploads.length === 1 ? "" : "s"}…`);
         let uploadedCount = 0;
-        const uploaded = await mapWithConcurrency(
-          pendingUploads,
-          MAX_CONCURRENT_UPLOADS,
-          async ({ photo, photoIndex }) => {
-            const { uploadUrl, key } = await createMediaUploadFn({
-              data: {
-                accessToken: session.access_token,
-                vin,
-                contentType: photo.file.type,
-              },
-            });
-            const response = await fetch(uploadUrl, {
-              method: "PUT",
-              headers: { "content-type": photo.file.type, "x-upsert": "true" },
-              body: photo.file,
-            });
-            if (!response.ok) {
-              throw new Error(`Could not upload ${photo.file.name}. Please try again.`);
-            }
-            uploadedCount += 1;
-            setSaveLabel(`Uploading photos… ${uploadedCount}/${pendingUploads.length}`);
-            return { photoIndex, key };
-          },
-        );
+        uploadedPromise = mapWithConcurrency(pendingUploads, MAX_CONCURRENT_UPLOADS, async ({ photo, photoIndex }) => {
+          const { uploadUrl, key } = await createMediaUploadFn({
+            data: {
+              accessToken: session.access_token,
+              vin,
+              contentType: photo.file.type,
+            },
+          });
+          const response = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: { "content-type": photo.file.type, "x-upsert": "true" },
+            body: photo.file,
+          });
+          if (!response.ok) {
+            throw new Error(`Could not upload ${photo.file.name}. Please try again.`);
+          }
+          uploadedCount += 1;
+          setSaveLabel(`Uploading photos… ${uploadedCount}/${pendingUploads.length}`);
+          return { photoIndex, key };
+        });
+      }
 
+      const [, uploaded] = await Promise.all([vehicleSavePromise, uploadedPromise]);
+
+      if (photosChanged) {
         const keyByPhotoIndex = new Map(uploaded.map((item) => [item.photoIndex, item.key]));
         const order: PhotoOrderInput[] = photos.map((photo, photoIndex) =>
           photo.kind === "existing"
