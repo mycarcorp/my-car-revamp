@@ -574,7 +574,7 @@ function SchedulePage() {
                         model: selectedVehicle.model,
                         trim: selectedVehicle.trim,
                       }
-                    : undefined
+                    : null
                 }
                 collectDetails={() => ({
                   appointment_type: type,
