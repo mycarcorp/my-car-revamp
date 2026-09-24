@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { GripVertical, ImagePlus, Loader2, Plus, Trash2, Upload } from "lucide-react";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
@@ -26,13 +26,78 @@ import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
 import { createMediaUploadFn, saveVehiclePhotosFn, type PhotoOrderInput } from "@/lib/vehicle-photos.functions";
 import { decodeVin, type VinDecodedVehicle } from "@/lib/vin-decoder.functions";
 
-function fileToDataUrl(file: File): Promise<string> {
+const VIN_CACHE_PREFIX = "vehicle-vin-decode:";
+const VIN_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const VIN_DECODE_TIMEOUT_MS = 15_000;
+const MAX_CONCURRENT_UPLOADS = 3;
+
+type CachedVin = { savedAt: number; value: VinDecodedVehicle };
+const vinMemoryCache = new Map<string, VinDecodedVehicle>();
+
+function getCachedVin(vin: string): VinDecodedVehicle | null {
+  const memoryValue = vinMemoryCache.get(vin);
+  if (memoryValue) return memoryValue;
+
+  try {
+    const raw = localStorage.getItem(`${VIN_CACHE_PREFIX}${vin}`);
+    if (!raw) return null;
+    const cached = JSON.parse(raw) as CachedVin;
+    if (!cached?.savedAt || Date.now() - cached.savedAt > VIN_CACHE_TTL_MS) {
+      localStorage.removeItem(`${VIN_CACHE_PREFIX}${vin}`);
+      return null;
+    }
+    if (cached.value) vinMemoryCache.set(vin, cached.value);
+    return cached.value ?? null;
+  } catch {
+    return null;
+  }
+}
+
+function cacheVin(vin: string, value: VinDecodedVehicle) {
+  vinMemoryCache.set(vin, value);
+  try {
+    localStorage.setItem(
+      `${VIN_CACHE_PREFIX}${vin}`,
+      JSON.stringify({ savedAt: Date.now(), value } satisfies CachedVin),
+    );
+  } catch {
+    // Decoding still works if browser storage is unavailable.
+  }
+}
+
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
   return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(String(reader.result));
-    reader.onerror = () => reject(new Error("Could not read the selected image."));
-    reader.readAsDataURL(file);
+    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
+    promise.then(
+      (value) => {
+        window.clearTimeout(timer);
+        resolve(value);
+      },
+      (error) => {
+        window.clearTimeout(timer);
+        reject(error);
+      },
+    );
   });
+}
+
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  worker: (item: T, index: number) => Promise<R>,
+): Promise<R[]> {
+  const results = new Array<R>(items.length);
+  let cursor = 0;
+
+  async function runWorker() {
+    while (cursor < items.length) {
+      const index = cursor++;
+      results[index] = await worker(items[index]!, index);
+    }
+  }
+
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => runWorker()));
+  return results;
 }
 
 function isVideoDraft(draft: PhotoDraft): boolean {
@@ -235,6 +300,7 @@ export function VehicleFormDialog({
   const [decoding, setDecoding] = useState(false);
   const [isDraggingFiles, setIsDraggingFiles] = useState(false);
   const [draggedPhotoIndex, setDraggedPhotoIndex] = useState<number | null>(null);
+  const decodeRequestId = useRef(0);
 
   useEffect(() => {
     if (!open) return;
@@ -246,6 +312,7 @@ export function VehicleFormDialog({
       return [];
     });
     setExisting([]);
+    setUploadLabel(null);
     setIsDraggingFiles(false);
     setDraggedPhotoIndex(null);
     if (!vehicle) return;
@@ -352,10 +419,20 @@ export function VehicleFormDialog({
       return;
     }
     setDecoding(true);
+    const requestId = ++decodeRequestId.current;
     try {
-      const decoded = await decodeVin({ data: { accessToken: session.access_token, vin } });
+      const cached = getCachedVin(vin);
+      const decoded =
+        cached ??
+        (await withTimeout(
+          decodeVin({ data: { accessToken: session.access_token, vin } }),
+          VIN_DECODE_TIMEOUT_MS,
+          "VIN decoding is taking too long. Please try again.",
+        ));
+      if (requestId !== decodeRequestId.current) return;
+      if (!cached) cacheVin(vin, decoded);
       setForm((current) => applyDecodedVehicle(current, decoded));
-      toast.success("VIN decoded. Review the details before saving.");
+      toast.success(cached ? "VIN details loaded instantly." : "VIN decoded. Review the details before saving.");
     } catch (error) {
       toast.error(error instanceof Error ? error.message : "Could not decode this VIN.");
     } finally {
@@ -419,48 +496,97 @@ export function VehicleFormDialog({
       };
 
       if (!session?.access_token) throw new Error("Your session has expired. Please sign in again.");
-      const saved = (await saveLegacyInventoryRow({
+      const originalMedia = existing.map((item) => item.url);
+      const currentExistingMedia = photos
+        .filter((item): item is Extract<PhotoDraft, { kind: "existing" }> => item.kind === "existing")
+        .map((item) => item.url);
+      const hasNewMedia = photos.some((item) => item.kind === "new");
+      const mediaChanged =
+        hasNewMedia ||
+        originalMedia.length !== currentExistingMedia.length ||
+        originalMedia.some((url, index) => url !== currentExistingMedia[index]);
+
+      const pendingUploads = photos
+        .map((item, mediaIndex) => ({ item, mediaIndex }))
+        .filter(
+          (
+            entry,
+          ): entry is {
+            item: Extract<PhotoDraft, { kind: "new" }>;
+            mediaIndex: number;
+          } => entry.item.kind === "new",
+        );
+
+      setUploadLabel(
+        pendingUploads.length > 0
+          ? `Saving and uploading ${pendingUploads.length} file${pendingUploads.length === 1 ? "" : "s"}…`
+          : "Saving changes…",
+      );
+
+      // Saving vehicle data and uploading media do not depend on one another,
+      // so start them together instead of waiting for each network step.
+      const vehicleSavePromise = saveLegacyInventoryRow({
         data: { accessToken: session.access_token, vehicle: payload },
-      })) as unknown as Vehicle;
-
-      const newPhotos: Array<{ dataUrl: string; contentType?: string }> = [];
-      const order: PhotoOrderInput[] = [];
-      for (const p of photos) {
-        const media = isVideoDraft(p) ? ("video" as const) : ("photo" as const);
-        if (p.kind === "existing") {
-          order.push({ kind: "keep", url: p.url, media });
-          continue;
-        }
-        if (media === "video") {
-          // Large files go straight to storage with a signed URL so nothing
-          // huge has to travel inside the save request.
-          setUploadLabel(`Uploading ${p.file.name}…`);
-          const { uploadUrl, key } = await createMediaUploadFn({
-            data: { accessToken: session.access_token, vin, contentType: p.file.type },
-          });
-          const put = await fetch(uploadUrl, {
-            method: "PUT",
-            headers: { "content-type": p.file.type, "x-upsert": "true" },
-            body: p.file,
-          });
-          if (!put.ok) throw new Error(`Could not upload ${p.file.name}. Please try again.`);
-          order.push({ kind: "new", index: -1, media, uploadedKey: key });
-          setUploadLabel(null);
-          continue;
-        }
-        order.push({ kind: "new", index: newPhotos.length, media });
-        newPhotos.push({ dataUrl: await fileToDataUrl(p.file), contentType: p.file.type });
-      }
-
-      await saveVehiclePhotosFn({
-        data: {
-          accessToken: session.access_token,
-          vin,
-          altBase: title,
-          order,
-          newPhotos,
-        },
       });
+
+      let completedUploads = 0;
+      const uploadedMediaPromise = mapWithConcurrency(
+        pendingUploads,
+        MAX_CONCURRENT_UPLOADS,
+        async ({ item, mediaIndex }) => {
+          const { uploadUrl, key } = await createMediaUploadFn({
+            data: {
+              accessToken: session.access_token,
+              vin,
+              contentType: item.file.type,
+            },
+          });
+          const response = await fetch(uploadUrl, {
+            method: "PUT",
+            headers: { "content-type": item.file.type, "x-upsert": "true" },
+            body: item.file,
+          });
+          if (!response.ok) {
+            throw new Error(`Could not upload ${item.file.name}. Please try again.`);
+          }
+          completedUploads += 1;
+          setUploadLabel(`Uploading media… ${completedUploads}/${pendingUploads.length}`);
+          return {
+            mediaIndex,
+            key,
+            media: isVideoDraft(item) ? ("video" as const) : ("photo" as const),
+          };
+        },
+      );
+
+      const [, uploadedMedia] = await Promise.all([vehicleSavePromise, uploadedMediaPromise]);
+
+      if (mediaChanged) {
+        const uploadedByIndex = new Map(uploadedMedia.map((item) => [item.mediaIndex, item]));
+        const order: PhotoOrderInput[] = photos.map((item, mediaIndex) => {
+          const media = isVideoDraft(item) ? ("video" as const) : ("photo" as const);
+          if (item.kind === "existing") {
+            return { kind: "keep", url: item.url, media };
+          }
+          return {
+            kind: "new",
+            index: -1,
+            media,
+            uploadedKey: uploadedByIndex.get(mediaIndex)!.key,
+          };
+        });
+
+        setUploadLabel("Finalizing media…");
+        await saveVehiclePhotosFn({
+          data: {
+            accessToken: session.access_token,
+            vin,
+            altBase: title,
+            order,
+            newPhotos: [],
+          },
+        });
+      }
       toast.success(vehicle ? "Vehicle updated." : "Vehicle added.");
       onSaved();
       onOpenChange(false);
