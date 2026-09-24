@@ -28,7 +28,6 @@ import { decodeVin, type VinDecodedVehicle } from "@/lib/vin-decoder.functions";
 
 const VIN_CACHE_PREFIX = "vehicle-vin-decode:v3:";
 const VIN_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const VIN_DECODE_TIMEOUT_MS = 15_000;
 const MAX_CONCURRENT_UPLOADS = 3;
 
 type CachedVin = { savedAt: number; value: VinDecodedVehicle };
@@ -63,22 +62,6 @@ function cacheVin(vin: string, value: VinDecodedVehicle) {
   } catch {
     // Decoding still works if browser storage is unavailable.
   }
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        window.clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
 }
 
 async function mapWithConcurrency<T, R>(
@@ -424,11 +407,9 @@ export function VehicleFormDialog({
       const cached = getCachedVin(vin);
       const decoded =
         cached ??
-        (await withTimeout(
-          decodeVin({ data: { accessToken: session.access_token, vin } }),
-          VIN_DECODE_TIMEOUT_MS,
-          "VIN decoding is taking too long. Please try again.",
-        ));
+        (await decodeVin({
+          data: { accessToken: session.access_token, vin },
+        }));
       if (requestId !== decodeRequestId.current) return;
       if (!cached) cacheVin(vin, decoded);
       setForm((current) => applyDecodedVehicle(current, decoded));
@@ -615,7 +596,14 @@ export function VehicleFormDialog({
                 className="min-w-0 flex-1"
               />
               <Button type="button" variant="outline" onClick={() => void decodeCurrentVin()} disabled={decoding}>
-                {decoding ? <Loader2 className="size-4 animate-spin" /> : "Decode"}
+                {decoding ? (
+                  <>
+                    <Loader2 className="size-4 animate-spin" />
+                    Decoding…
+                  </>
+                ) : (
+                  "Decode"
+                )}
               </Button>
             </div>
           </Field>
