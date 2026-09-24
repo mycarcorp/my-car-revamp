@@ -27,17 +27,23 @@ export type VinDecodedVehicle = {
   plantCountry?: string | undefined;
   plantState?: string | undefined;
   plantCity?: string | undefined;
-  /** Combined MPG from fueleconomy.gov, when a confident match exists. */
   mpgCombined?: number | undefined;
   mpgCity?: number | undefined;
   mpgHighway?: number | undefined;
-  /** Safety / equipment highlights suitable for the features list. */
   features: string[];
-  /** Ready-to-use description sentence built from the decoded data. */
   description?: string | undefined;
 };
 
 const VIN_PATTERN = /^[A-HJ-NPR-Z0-9]{17}$/;
+const NHTSA_TIMEOUT_MS = 12_000;
+const MPG_TOTAL_TIMEOUT_MS = 3_500;
+const CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
+const MAX_CACHE_ENTRIES = 500;
+
+type CacheEntry = { expiresAt: number; value: VinDecodedVehicle };
+const decodeCache = new Map<string, CacheEntry>();
+const inFlightDecodes = new Map<string, Promise<VinDecodedVehicle>>();
+
 const clean = (value: unknown): string | undefined => {
   const text = String(value ?? "").trim();
   return !text ||
@@ -54,7 +60,6 @@ const numberValue = (value: unknown): number | undefined => {
   return Number.isFinite(n) && n > 0 ? n : undefined;
 };
 
-/** NHTSA equipment fields that read as feature bullets when present/standard. */
 const FEATURE_FIELDS: Array<[key: string, label: string]> = [
   ["ABS", "Anti-lock brakes (ABS)"],
   ["ESC", "Electronic stability control"],
@@ -81,7 +86,9 @@ const FEATURE_FIELDS: Array<[key: string, label: string]> = [
 ];
 
 const isEnabled = (value: unknown): boolean => {
-  const text = String(value ?? "").trim().toLowerCase();
+  const text = String(value ?? "")
+    .trim()
+    .toLowerCase();
   if (!text) return false;
   return (
     text === "standard" ||
@@ -94,22 +101,43 @@ const isEnabled = (value: unknown): boolean => {
 
 type EpaMpg = { combined?: number; city?: number; highway?: number };
 
-/** Best-effort combined MPG lookup from the free fueleconomy.gov API. */
-async function lookupMpg(year: number, make: string, model: string): Promise<EpaMpg> {
-  const base = "https://www.fueleconomy.gov/ws/rest/vehicle/menu/options";
-  const url = `${base}?year=${year}&make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}`;
+async function fetchWithTimeout(url: string, timeoutMs: number): Promise<Response> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const listRes = await fetch(url, { headers: { Accept: "application/json" } });
+    return await fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+async function lookupMpg(year: number, make: string, model: string): Promise<EpaMpg> {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), MPG_TOTAL_TIMEOUT_MS);
+  const request = (url: string) =>
+    fetch(url, {
+      headers: { Accept: "application/json" },
+      signal: controller.signal,
+    });
+
+  try {
+    const base = "https://www.fueleconomy.gov/ws/rest/vehicle/menu/options";
+    const url = `${base}?year=${year}&make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}`;
+    const listRes = await request(url);
     if (!listRes.ok) return {};
+
     const list = (await listRes.json()) as { menuItem?: unknown };
     const items = Array.isArray(list.menuItem) ? list.menuItem : list.menuItem ? [list.menuItem] : [];
     const first = items[0] as { value?: unknown } | undefined;
     const id = clean(first?.value);
     if (!id) return {};
-    const detailRes = await fetch(`https://www.fueleconomy.gov/ws/rest/vehicle/${id}`, {
-      headers: { Accept: "application/json" },
-    });
+
+    const detailRes = await request(`https://www.fueleconomy.gov/ws/rest/vehicle/${encodeURIComponent(id)}`);
     if (!detailRes.ok) return {};
+
     const detail = (await detailRes.json()) as Record<string, unknown>;
     const combined = numberValue(detail["comb08"]);
     const city = numberValue(detail["city08"]);
@@ -121,6 +149,8 @@ async function lookupMpg(year: number, make: string, model: string): Promise<Epa
     };
   } catch {
     return {};
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -150,88 +180,138 @@ function buildTransmission(result: Record<string, unknown>): string | undefined 
   return style ?? (speeds ? `${speeds}-speed` : undefined);
 }
 
+function readCache(vin: string): VinDecodedVehicle | undefined {
+  const cached = decodeCache.get(vin);
+  if (!cached) return undefined;
+  if (cached.expiresAt <= Date.now()) {
+    decodeCache.delete(vin);
+    return undefined;
+  }
+  return cached.value;
+}
+
+function writeCache(vin: string, value: VinDecodedVehicle) {
+  if (decodeCache.size >= MAX_CACHE_ENTRIES) {
+    const oldestKey = decodeCache.keys().next().value as string | undefined;
+    if (oldestKey) decodeCache.delete(oldestKey);
+  }
+  decodeCache.set(vin, { expiresAt: Date.now() + CACHE_TTL_MS, value });
+}
+
+async function decodeVinData(vin: string): Promise<VinDecodedVehicle> {
+  let response: Response;
+  try {
+    response = await fetchWithTimeout(
+      `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${encodeURIComponent(vin)}?format=json`,
+      NHTSA_TIMEOUT_MS,
+    );
+  } catch (error) {
+    if (error instanceof Error && error.name === "AbortError") {
+      throw new Error("VIN service is taking too long. Please try again.");
+    }
+    throw new Error("VIN service is unavailable. Please try again.");
+  }
+  if (!response.ok) throw new Error("VIN service is unavailable. Please try again.");
+
+  const payload = (await response.json()) as { Results?: Array<Record<string, unknown>> };
+  const result = payload.Results?.[0];
+  if (!result) throw new Error("VIN was not found.");
+
+  const year = numberValue(result["ModelYear"]);
+  const make = clean(result["Make"]);
+  const model = clean(result["Model"]);
+  if (!year && !make && !model) throw new Error("VIN returned no usable vehicle information.");
+
+  const features = FEATURE_FIELDS.filter(([key]) => isEnabled(result[key])).map(([, label]) => label);
+  const trim = clean(result["Trim"]) ?? clean(result["Series"]);
+  const bodyStyle = clean(result["BodyClass"]);
+  const doors = clean(result["Doors"]);
+  const engine = buildEngine(result);
+  const transmission = buildTransmission(result);
+  const drivetrain = clean(result["DriveType"]);
+  const fuelType = clean(result["FuelTypePrimary"]);
+
+  // MPG is optional. Its entire two-request lookup gets only one short budget.
+  // If it is slow or unavailable, decoding still succeeds with NHTSA data.
+  const mpg = year && make && model ? await lookupMpg(year, make, model) : {};
+
+  const titleName = [year, make, model, trim].filter(Boolean).join(" ");
+  const descriptionBits = [
+    bodyStyle ? bodyStyle.toLowerCase() : undefined,
+    drivetrain ? drivetrain.replace(/\s*\/\s*/g, "/") : undefined,
+    engine,
+    transmission ? transmission.toLowerCase() : undefined,
+    fuelType ? `${fuelType.toLowerCase()} fuel` : undefined,
+    mpg.combined ? `${mpg.combined} MPG combined` : undefined,
+  ].filter(Boolean);
+  const description = titleName
+    ? `${titleName}${descriptionBits.length ? ` — ${descriptionBits.join(", ")}` : ""}.`
+    : undefined;
+
+  return {
+    vin,
+    year,
+    make,
+    model,
+    trim,
+    series: clean(result["Series"]),
+    bodyStyle,
+    vehicleType: clean(result["VehicleType"]),
+    doors,
+    seats: clean(result["Seats"]) ?? clean(result["SeatRows"]),
+    engine,
+    cylinders: clean(result["EngineCylinders"]),
+    displacement: clean(result["DisplacementL"]),
+    horsepower: clean(result["EngineHP"]),
+    turbo: clean(result["Turbo"]),
+    fuelType,
+    fuelTypeSecondary: clean(result["FuelTypeSecondary"]),
+    electrification: clean(result["ElectrificationLevel"]),
+    transmission,
+    transmissionSpeeds: clean(result["TransmissionSpeeds"]),
+    drivetrain,
+    manufacturer: clean(result["Manufacturer"]),
+    plantCountry: clean(result["PlantCountry"]),
+    plantState: clean(result["PlantState"]),
+    plantCity: clean(result["PlantCity"]),
+    ...(mpg.combined ? { mpgCombined: mpg.combined } : {}),
+    ...(mpg.city ? { mpgCity: mpg.city } : {}),
+    ...(mpg.highway ? { mpgHighway: mpg.highway } : {}),
+    features,
+    description,
+  };
+}
+
 export const decodeVin = createServerFn({ method: "POST" })
   .inputValidator((input: { accessToken: string; vin: string }) => {
     const accessToken = String(input?.accessToken ?? "");
-    const vin = String(input?.vin ?? "").replace(/\s+/g, "").toUpperCase();
+    const vin = String(input?.vin ?? "")
+      .replace(/\s+/g, "")
+      .toUpperCase();
     if (!accessToken) throw new Error("Not signed in.");
     if (!VIN_PATTERN.test(vin)) throw new Error("Enter a valid 17-character VIN.");
     return { accessToken, vin };
   })
   .handler(async ({ data }): Promise<VinDecodedVehicle> => {
     await requireStaff(data.accessToken);
-    const response = await fetch(
-      `https://vpic.nhtsa.dot.gov/api/vehicles/DecodeVinValuesExtended/${encodeURIComponent(data.vin)}?format=json`,
-      { headers: { Accept: "application/json" } },
-    );
-    if (!response.ok) throw new Error("VIN service is unavailable. Please try again.");
 
-    const payload = (await response.json()) as {
-      Results?: Array<Record<string, unknown>>;
-    };
-    const result = payload.Results?.[0];
-    if (!result) throw new Error("VIN was not found.");
+    const cached = readCache(data.vin);
+    if (cached) return cached;
 
-    const year = numberValue(result["ModelYear"]);
-    const make = clean(result["Make"]);
-    const model = clean(result["Model"]);
-    if (!year && !make && !model) throw new Error("VIN returned no usable vehicle information.");
+    const activeRequest = inFlightDecodes.get(data.vin);
+    if (activeRequest) return activeRequest;
 
-    const features = FEATURE_FIELDS.filter(([key]) => isEnabled(result[key])).map(([, label]) => label);
+    const request = decodeVinData(data.vin).then((decoded) => {
+      writeCache(data.vin, decoded);
+      return decoded;
+    });
+    inFlightDecodes.set(data.vin, request);
 
-    const trim = clean(result["Trim"]) ?? clean(result["Series"]);
-    const bodyStyle = clean(result["BodyClass"]);
-    const doors = clean(result["Doors"]);
-    const engine = buildEngine(result);
-    const transmission = buildTransmission(result);
-    const drivetrain = clean(result["DriveType"]);
-    const fuelType = clean(result["FuelTypePrimary"]);
-
-    const mpg = year && make && model ? await lookupMpg(year, make, model) : {};
-
-    const titleName = [year, make, model, trim].filter(Boolean).join(" ");
-    const descriptionBits = [
-      bodyStyle ? bodyStyle.toLowerCase() : undefined,
-      drivetrain ? drivetrain.replace(/\s*\/\s*/g, "/") : undefined,
-      engine,
-      transmission ? transmission.toLowerCase() : undefined,
-      fuelType ? `${fuelType.toLowerCase()} fuel` : undefined,
-      mpg.combined ? `${mpg.combined} MPG combined` : undefined,
-    ].filter(Boolean);
-    const description = titleName
-      ? `${titleName}${descriptionBits.length ? ` — ${descriptionBits.join(", ")}` : ""}.`
-      : undefined;
-
-    return {
-      vin: data.vin,
-      year,
-      make,
-      model,
-      trim,
-      series: clean(result["Series"]),
-      bodyStyle,
-      vehicleType: clean(result["VehicleType"]),
-      doors,
-      seats: clean(result["Seats"]) ?? clean(result["SeatRows"]),
-      engine,
-      cylinders: clean(result["EngineCylinders"]),
-      displacement: clean(result["DisplacementL"]),
-      horsepower: clean(result["EngineHP"]),
-      turbo: clean(result["Turbo"]),
-      fuelType,
-      fuelTypeSecondary: clean(result["FuelTypeSecondary"]),
-      electrification: clean(result["ElectrificationLevel"]),
-      transmission,
-      transmissionSpeeds: clean(result["TransmissionSpeeds"]),
-      drivetrain,
-      manufacturer: clean(result["Manufacturer"]),
-      plantCountry: clean(result["PlantCountry"]),
-      plantState: clean(result["PlantState"]),
-      plantCity: clean(result["PlantCity"]),
-      ...(mpg.combined ? { mpgCombined: mpg.combined } : {}),
-      ...(mpg.city ? { mpgCity: mpg.city } : {}),
-      ...(mpg.highway ? { mpgHighway: mpg.highway } : {}),
-      features,
-      description,
-    };
+    try {
+      return await request;
+    } finally {
+      if (inFlightDecodes.get(data.vin) === request) {
+        inFlightDecodes.delete(data.vin);
+      }
+    }
   });
