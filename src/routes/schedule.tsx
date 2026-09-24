@@ -562,7 +562,7 @@ function SchedulePage() {
                 successTitle="Appointment requested"
                 successBody="We'll confirm your time by phone or email shortly."
                 messageLabel="Anything we should prepare?"
-                vehicleId={selectedVehicle?.id}
+                vehicleId={selectedVehicle?.id ?? null}
                 vehicle={
                   selectedVehicle
                     ? {
