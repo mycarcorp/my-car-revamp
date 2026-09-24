@@ -45,7 +45,11 @@ const decodeCache = new Map<string, CacheEntry>();
 const inFlightDecodes = new Map<string, Promise<VinDecodedVehicle>>();
 
 const clean = (value: unknown): string | undefined => {
-  const text = String(value ?? "").trim();
+  const text = String(value ?? "")
+    .replace(/\*+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+
   return !text ||
     /^not applicable$/i.test(text) ||
     /^not available$/i.test(text) ||
