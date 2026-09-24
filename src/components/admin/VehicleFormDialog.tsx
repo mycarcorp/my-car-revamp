@@ -26,7 +26,7 @@ import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
 import { createMediaUploadFn, saveVehiclePhotosFn, type PhotoOrderInput } from "@/lib/vehicle-photos.functions";
 import { decodeVin, type VinDecodedVehicle } from "@/lib/vin-decoder.functions";
 
-const VIN_CACHE_PREFIX = "vehicle-vin-decode:";
+const VIN_CACHE_PREFIX = "vehicle-vin-decode:v3:";
 const VIN_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const VIN_DECODE_TIMEOUT_MS = 15_000;
 const MAX_CONCURRENT_UPLOADS = 3;
@@ -246,7 +246,7 @@ function applyDecodedVehicle(form: FormState, decoded: VinDecodedVehicle): FormS
     transmission: decoded.transmission ?? form.transmission,
     engine: decoded.engine ?? form.engine,
     mpg_combined: decoded.mpgCombined ? String(decoded.mpgCombined) : form.mpg_combined,
-    description: form.description.trim() || decoded.description || "",
+    description: decoded.description || form.description.trim() || "",
     features: mergedFeatures.join("\n"),
     slug: form.slug.trim() || vehicleSlug({ year: Number(year), make, model, trim, vin: decoded.vin }),
   };
