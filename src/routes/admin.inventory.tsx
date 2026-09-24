@@ -1,795 +1,954 @@
-import { useEffect, useMemo, useRef, useState } from "react";
-import { GripVertical, ImagePlus, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { useEffect, useMemo, useState } from "react";
+import { createFileRoute } from "@tanstack/react-router";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
+import { Camera, Check, Play, Plus, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
+import { isVideoUrl } from "@/lib/vehicle-media";
+
+import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Button } from "@/components/ui/button";
-import {
-  Dialog,
-  DialogContent,
-  DialogDescription,
-  DialogFooter,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { Textarea } from "@/components/ui/textarea";
-import { Switch } from "@/components/ui/switch";
+import { Slider } from "@/components/ui/slider";
+import {
+  AlertDialog,
+  AlertDialogAction,
+  AlertDialogCancel,
+  AlertDialogContent,
+  AlertDialogDescription,
+  AlertDialogFooter,
+  AlertDialogHeader,
+  AlertDialogTitle,
+} from "@/components/ui/alert-dialog";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { supabase } from "@/integrations/supabase/app-client";
 import { useAuth } from "@/hooks/useAuth";
+import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
+import { type Vehicle } from "@/lib/admin-inventory";
+import { CsvImportDialog } from "@/components/admin/CsvImportDialog";
+import { VehicleFormDialog, BODY_STYLES, STATUSES } from "@/components/admin/VehicleFormDialog";
+import { listLegacyInventoryRows } from "@/lib/legacy-inventory.functions";
+import { deleteLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
 import type { Database } from "@/integrations/supabase/types";
-import { MAX_PHOTOS, MAX_PHOTO_BYTES, type PhotoDraft, type Vehicle, type VehiclePhoto } from "@/lib/admin-inventory";
-import { VIN_RE, vehicleSlug } from "@/lib/inventory-csv";
-import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
-import { createMediaUploadFn, saveVehiclePhotosFn, type PhotoOrderInput } from "@/lib/vehicle-photos.functions";
-import { decodeVin, type VinDecodedVehicle } from "@/lib/vin-decoder.functions";
 
-const VIN_CACHE_PREFIX = "vehicle-vin-decode:";
-const VIN_CACHE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
-const MAX_CONCURRENT_UPLOADS = 3;
-const VIN_DECODE_TIMEOUT_MS = 15_000;
-
-const vinMemoryCache = new Map<string, VinDecodedVehicle>();
-
-type CachedVin = { savedAt: number; value: VinDecodedVehicle };
-
-function getCachedVin(vin: string): VinDecodedVehicle | null {
-  const memoryValue = vinMemoryCache.get(vin);
-  if (memoryValue) return memoryValue;
-
-  try {
-    const raw = localStorage.getItem(`${VIN_CACHE_PREFIX}${vin}`);
-    if (!raw) return null;
-    const cached = JSON.parse(raw) as CachedVin;
-    if (!cached?.savedAt || Date.now() - cached.savedAt > VIN_CACHE_TTL_MS) {
-      localStorage.removeItem(`${VIN_CACHE_PREFIX}${vin}`);
-      return null;
-    }
-    if (cached.value) vinMemoryCache.set(vin, cached.value);
-    return cached.value ?? null;
-  } catch {
-    return null;
-  }
-}
-
-function cacheVin(vin: string, value: VinDecodedVehicle) {
-  vinMemoryCache.set(vin, value);
-  try {
-    localStorage.setItem(
-      `${VIN_CACHE_PREFIX}${vin}`,
-      JSON.stringify({ savedAt: Date.now(), value } satisfies CachedVin),
-    );
-  } catch {
-    // VIN decoding still works when browser storage is unavailable.
-  }
-}
-
-function withTimeout<T>(promise: Promise<T>, timeoutMs: number, message: string): Promise<T> {
-  return new Promise((resolve, reject) => {
-    const timer = window.setTimeout(() => reject(new Error(message)), timeoutMs);
-    promise.then(
-      (value) => {
-        window.clearTimeout(timer);
-        resolve(value);
-      },
-      (error) => {
-        window.clearTimeout(timer);
-        reject(error);
-      },
-    );
-  });
-}
-
-async function mapWithConcurrency<T, R>(
-  items: T[],
-  limit: number,
-  worker: (item: T, index: number) => Promise<R>,
-): Promise<R[]> {
-  const results = new Array<R>(items.length);
-  let cursor = 0;
-
-  async function runWorker() {
-    while (cursor < items.length) {
-      const index = cursor++;
-      results[index] = await worker(items[index]!, index);
-    }
-  }
-
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => runWorker()));
-  return results;
-}
-
-type BodyStyle = Database["public"]["Enums"]["body_style"];
-type FuelType = Database["public"]["Enums"]["fuel_type"];
-type Drivetrain = Database["public"]["Enums"]["drivetrain"];
 type VehicleStatus = Database["public"]["Enums"]["vehicle_status"];
+type Row = Vehicle & {
+  vehicle_photos: { url: string; position: number }[];
+};
 
-export const BODY_STYLES: BodyStyle[] = [
-  "SUV",
-  "Sedan",
-  "Truck",
-  "Coupe",
-  "Hatchback",
-  "Convertible",
-  "Minivan",
-  "Wagon",
-  "Van",
+export const Route = createFileRoute("/admin/inventory")({
+  component: AdminInventory,
+});
+
+const PAGE_SIZE = 25;
+
+const SORTS = [
+  { value: "newest", label: "Newest added" },
+  { value: "oldest", label: "Oldest added" },
+  { value: "price-desc", label: "Price: high to low" },
+  { value: "price-asc", label: "Price: low to high" },
+  { value: "year-desc", label: "Year: newest" },
+  { value: "mileage-asc", label: "Mileage: lowest" },
 ];
-export const FUEL_TYPES: FuelType[] = ["Gas", "Electric", "Hybrid", "Plug-in Hybrid", "Diesel"];
-export const DRIVETRAINS: Drivetrain[] = ["AWD/4WD", "FWD", "RWD"];
-export const STATUSES: VehicleStatus[] = ["available", "pending", "sold", "draft"];
 
-type FormState = {
-  vin: string;
-  stock_number: string;
-  year: string;
-  make: string;
-  model: string;
-  trim: string;
-  body_style: BodyStyle;
-  mileage: string;
-  price: string;
-  exterior_color: string;
-  interior_color: string;
-  transmission: string;
-  engine: string;
-  fuel_type: string;
-  drivetrain: string;
-  mpg_combined: string;
-  description: string;
-  features: string;
-  status: VehicleStatus;
-  is_featured: boolean;
-  slug: string;
-};
-
-const empty: FormState = {
-  vin: "",
-  stock_number: "",
-  year: String(new Date().getFullYear()),
-  make: "",
-  model: "",
-  trim: "",
-  body_style: "SUV",
-  mileage: "",
-  price: "",
-  exterior_color: "",
-  interior_color: "",
-  transmission: "",
-  engine: "",
-  fuel_type: "none",
-  drivetrain: "none",
-  mpg_combined: "",
-  description: "",
-  features: "",
-  status: "available",
-  is_featured: false,
-  slug: "",
-};
-
-function applyDecodedVehicle(form: FormState, decoded: VinDecodedVehicle): FormState {
-  const body = BODY_STYLES.find((option) => decoded.bodyStyle?.toLowerCase().includes(option.toLowerCase()));
-  const fuelText = decoded.fuelType?.toLowerCase() ?? "";
-  const fuel =
-    fuelText.includes("plug-in") || fuelText.includes("plug in")
-      ? "Plug-in Hybrid"
-      : FUEL_TYPES.find((option) => fuelText.includes(option.toLowerCase()));
-  const drivetrain =
-    decoded.drivetrain?.toLowerCase().includes("all") || decoded.drivetrain?.toLowerCase().includes("4wd")
-      ? "AWD/4WD"
-      : decoded.drivetrain?.toLowerCase().includes("rear")
-        ? "RWD"
-        : decoded.drivetrain?.toLowerCase().includes("front")
-          ? "FWD"
-          : undefined;
-
-  return {
-    ...form,
-    vin: decoded.vin,
-    year: decoded.year ? String(decoded.year) : form.year,
-    make: decoded.make ?? form.make,
-    model: decoded.model ?? form.model,
-    trim: decoded.trim ?? form.trim,
-    body_style: body ?? form.body_style,
-    fuel_type: fuel ?? form.fuel_type,
-    drivetrain: drivetrain ?? form.drivetrain,
-    transmission: decoded.transmission ?? form.transmission,
-    engine: decoded.engine ?? form.engine,
-  };
-}
-
-function fromVehicle(v: Vehicle): FormState {
-  return {
-    vin: v.vin,
-    stock_number: v.stock_number,
-    year: String(v.year),
-    make: v.make,
-    model: v.model,
-    trim: v.trim ?? "",
-    body_style: v.body_style,
-    mileage: String(v.mileage),
-    price: (Number(v.price_cents) / 100).toFixed(2),
-    exterior_color: v.exterior_color ?? "",
-    interior_color: v.interior_color ?? "",
-    transmission: v.transmission ?? "",
-    engine: v.engine ?? "",
-    fuel_type: v.fuel_type ?? "none",
-    drivetrain: v.drivetrain ?? "none",
-    mpg_combined: v.mpg_combined === null ? "" : String(v.mpg_combined),
-    description: v.description ?? "",
-    features: (v.features ?? []).join("\n"),
-    status: v.status,
-    is_featured: v.is_featured,
-    slug: v.slug,
-  };
-}
-
-export function VehicleFormDialog({
-  open,
-  onOpenChange,
-  vehicle,
-  onSaved,
-  onDelete,
-}: {
-  open: boolean;
-  onOpenChange: (v: boolean) => void;
-  vehicle: Vehicle | null;
-  onSaved: () => void;
-  onDelete?: () => void;
-}) {
+function AdminInventory() {
   const { session } = useAuth();
-  const [form, setForm] = useState<FormState>(empty);
-  const [photos, setPhotos] = useState<PhotoDraft[]>([]);
-  const [existing, setExisting] = useState<VehiclePhoto[]>([]);
-  const [saving, setSaving] = useState(false);
-  const [decoding, setDecoding] = useState(false);
-  const [saveLabel, setSaveLabel] = useState<string | null>(null);
-  const [isDraggingFiles, setIsDraggingFiles] = useState(false);
-  const [draggedPhotoIndex, setDraggedPhotoIndex] = useState<number | null>(null);
-  const decodeRequestId = useRef(0);
+  const accessToken = session?.access_token ?? "";
+  const queryClient = useQueryClient();
+
+  const [q, setQ] = useState("");
+  const [status, setStatus] = useState("all");
+  const [make, setMake] = useState("all");
+  const [year, setYear] = useState("all");
+  const [body, setBody] = useState("all");
+  const [priceRange, setPriceRange] = useState<[number, number]>([0, 0]);
+  const [sort, setSort] = useState("newest");
+  const [page, setPage] = useState(1);
+
+  const [formOpen, setFormOpen] = useState(false);
+  const [editing, setEditing] = useState<Vehicle | null>(null);
+  const [importOpen, setImportOpen] = useState(false);
+  const [toDelete, setToDelete] = useState<Vehicle | null>(null);
+  const [deleting, setDeleting] = useState(false);
+  const [viewing, setViewing] = useState<Row | null>(null);
+  const [activePhoto, setActivePhoto] = useState(0);
+  const [failedPhotoUrls, setFailedPhotoUrls] = useState<string[]>([]);
+
+  function openVehicleDetails(vehicle: Row) {
+    setViewing(vehicle);
+    setActivePhoto(0);
+    setFailedPhotoUrls([]);
+  }
+
+  const { data, isLoading, error } = useQuery({
+    queryKey: ["admin", "vehicles"],
+    enabled: Boolean(accessToken),
+    queryFn: async () => {
+      const rows = await listLegacyInventoryRows({
+        data: { accessToken },
+      });
+
+      return rows as unknown as Row[];
+    },
+  });
+
+  const refresh = () => {
+    void queryClient.invalidateQueries({
+      queryKey: ["admin", "vehicles"],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["admin", "dashboard", "vehicles"],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["vehicles"],
+    });
+    void queryClient.invalidateQueries({
+      queryKey: ["facets"],
+    });
+  };
+
+  const makes = useMemo(() => Array.from(new Set((data ?? []).map((v) => v.make))).sort(), [data]);
+
+  const years = useMemo(() => Array.from(new Set((data ?? []).map((v) => v.year))).sort((a, b) => b - a), [data]);
+
+  const priceBounds = useMemo(() => {
+    const prices = (data ?? []).map((v) => Number(v.price_cents) / 100).filter((price) => price > 0);
+
+    if (prices.length === 0) {
+      return { min: 0, max: 0 };
+    }
+
+    return {
+      min: Math.floor(Math.min(...prices) / 1000) * 1000,
+      max: Math.ceil(Math.max(...prices) / 1000) * 1000,
+    };
+  }, [data]);
 
   useEffect(() => {
-    if (!open) return;
-    setForm(vehicle ? fromVehicle(vehicle) : empty);
-    setPhotos((current) => {
-      current.forEach((photo) => {
-        if (photo.kind === "new") URL.revokeObjectURL(photo.previewUrl);
-      });
-      return [];
-    });
-    setExisting([]);
-    setSaveLabel(null);
-    setIsDraggingFiles(false);
-    setDraggedPhotoIndex(null);
-    if (!vehicle) return;
-    void (async () => {
-      const { data } = await supabase.from("vehicle_photos").select("*").eq("vehicle_id", vehicle.id).order("position");
-      setExisting(data ?? []);
-      setPhotos((data ?? []).map((p) => ({ kind: "existing" as const, id: p.id, url: p.url, alt: p.alt })));
-    })();
-  }, [open, vehicle]);
+    setPriceRange([priceBounds.min, priceBounds.max]);
+  }, [priceBounds.min, priceBounds.max]);
 
-  const set = <K extends keyof FormState>(k: K, v: FormState[K]) => setForm((f) => ({ ...f, [k]: v }));
+  const filtered = useMemo(() => {
+    const needle = q.trim().toLowerCase();
 
-  const title = useMemo(
-    () => `${form.year} ${form.make} ${form.model} ${form.trim}`.trim(),
-    [form.year, form.make, form.model, form.trim],
-  );
-
-  function addFiles(list: FileList | File[] | null) {
-    if (!list) return;
-    const room = MAX_PHOTOS - photos.length;
-    const files = Array.from(list)
-      .filter((f) => ["image/jpeg", "image/png", "image/webp"].includes(f.type) && f.size <= MAX_PHOTO_BYTES)
-      .slice(0, Math.max(0, room));
-    if (files.length < list.length) {
-      toast.warning(`Use JPG, PNG, or WebP files under 10 MB. Up to ${MAX_PHOTOS} photos per vehicle.`);
-    }
-    setPhotos((p) => [
-      ...p,
-      ...files.map((file) => ({
-        kind: "new" as const,
-        file,
-        previewUrl: URL.createObjectURL(file),
-      })),
-    ]);
-  }
-
-  function removePhoto(index: number) {
-    setPhotos((current) => {
-      const photo = current[index];
-      if (photo?.kind === "new") URL.revokeObjectURL(photo.previewUrl);
-      return current.filter((_, photoIndex) => photoIndex !== index);
-    });
-  }
-
-  function moveTo(from: number, to: number) {
-    setPhotos((current) => {
-      if (from === to || from < 0 || to < 0 || from >= current.length || to >= current.length) {
-        return current;
+    let rows = (data ?? []).filter((v) => {
+      if (status !== "all" && v.status !== status) {
+        return false;
       }
 
-      const next = [...current];
-      const [moved] = next.splice(from, 1);
-      if (!moved) return current;
-      next.splice(to, 0, moved);
-      return next;
+      if (make !== "all" && v.make !== make) {
+        return false;
+      }
+
+      if (year !== "all" && String(v.year) !== year) {
+        return false;
+      }
+
+      if (body !== "all" && v.body_style !== body) {
+        return false;
+      }
+
+      const price = Number(v.price_cents) / 100;
+
+      if (priceBounds.max > 0 && (price < priceRange[0] || price > priceRange[1])) {
+        return false;
+      }
+
+      if (!needle) {
+        return true;
+      }
+
+      /*
+       * Main search now searches:
+       * - Year
+       * - VIN
+       * - Stock number
+       * - Make
+       * - Model
+       * - Trim
+       */
+      return [String(v.year), v.vin, v.stock_number, v.make, v.model, v.trim ?? ""]
+        .join(" ")
+        .toLowerCase()
+        .includes(needle);
     });
+
+    rows = [...rows].sort((a, b) => {
+      switch (sort) {
+        case "oldest":
+          return a.date_received.localeCompare(b.date_received);
+
+        case "price-desc":
+          return Number(b.price_cents) - Number(a.price_cents);
+
+        case "price-asc":
+          return Number(a.price_cents) - Number(b.price_cents);
+
+        case "year-desc":
+          return b.year - a.year;
+
+        case "mileage-asc":
+          return a.mileage - b.mileage;
+
+        default:
+          return b.date_received.localeCompare(a.date_received);
+      }
+    });
+
+    return rows;
+  }, [data, q, status, make, year, body, sort, priceBounds.max, priceRange]);
+
+  const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+
+  const current = Math.min(page, totalPages);
+
+  const visible = filtered.slice((current - 1) * PAGE_SIZE, current * PAGE_SIZE);
+
+  const hasActiveFilters =
+    Boolean(q.trim()) ||
+    status !== "all" ||
+    make !== "all" ||
+    year !== "all" ||
+    body !== "all" ||
+    (priceBounds.max > 0 && (priceRange[0] !== priceBounds.min || priceRange[1] !== priceBounds.max));
+
+  function resetFilters() {
+    setQ("");
+    setStatus("all");
+    setMake("all");
+    setYear("all");
+    setBody("all");
+    setPriceRange([priceBounds.min, priceBounds.max]);
+    setPage(1);
   }
 
-  function move(index: number, delta: number) {
-    setPhotos((p) => {
-      const next = [...p];
-      const target = index + delta;
-      if (target < 0 || target >= next.length) return p;
-      [next[index], next[target]] = [next[target]!, next[index]!];
-      return next;
-    });
+  async function update(id: string, patch: Partial<Vehicle>) {
+    const { error } = await supabase.from("vehicles").update(patch).eq("id", id);
+
+    if (error) {
+      toast.error("Could not update this vehicle.");
+      return;
+    }
+
+    refresh();
+    toast.success("Vehicle updated.");
   }
 
-  async function decodeCurrentVin() {
-    const vin = form.vin.replace(/\s+/g, "").toUpperCase();
-    if (!VIN_RE.test(vin)) {
-      toast.error("Enter a valid 17-character VIN first.");
+  async function confirmDelete() {
+    if (!toDelete) {
       return;
     }
-    if (!session?.access_token) {
-      toast.error("Your session has expired. Please sign in again.");
-      return;
-    }
-    setDecoding(true);
-    const requestId = ++decodeRequestId.current;
+
+    setDeleting(true);
+
     try {
-      const cached = getCachedVin(vin);
-      const decoded =
-        cached ??
-        (await withTimeout(
-          decodeVin({ data: { accessToken: session.access_token, vin } }),
-          VIN_DECODE_TIMEOUT_MS,
-          "VIN decoding is taking too long. Please try again.",
-        ));
-      if (requestId !== decodeRequestId.current) return;
-      if (!cached) cacheVin(vin, decoded);
-      setForm((current) => applyDecodedVehicle(current, decoded));
-      toast.success(cached ? "VIN details loaded." : "VIN decoded. Review the details before saving.");
-    } catch (error) {
-      toast.error(error instanceof Error ? error.message : "Could not decode this VIN.");
-    } finally {
-      setDecoding(false);
-    }
-  }
+      const match = /^LEGACY-(\d+)$/i.exec(toDelete.stock_number);
 
-  async function submit() {
-    const vin = form.vin.trim().toUpperCase();
-    if (!VIN_RE.test(vin)) {
-      toast.error("Enter a valid 17-character VIN.");
-      return;
-    }
-    const year = Number(form.year);
-    const mileage = Number(form.mileage);
-    const price = Number(form.price);
-    if (!form.make.trim() || !form.model.trim()) {
-      toast.error("Make and model are required.");
-      return;
-    }
-    if (!Number.isFinite(year) || year < 1900) {
-      toast.error("Enter a valid year.");
-      return;
-    }
-    if (!Number.isFinite(mileage) || mileage < 0) {
-      toast.error("Enter a valid mileage.");
-      return;
-    }
-    if (!Number.isFinite(price) || price <= 0) {
-      toast.error("Enter a valid price.");
-      return;
-    }
+      if (!accessToken) {
+        throw new Error("Your session has expired. Please sign in again.");
+      }
 
-    setSaving(true);
-    try {
-      setSaveLabel("Saving vehicle…");
-      const payload = {
-        vin,
-        stock_number: form.stock_number.trim() || vin.slice(-8),
-        year,
-        make: form.make.trim(),
-        model: form.model.trim(),
-        trim: form.trim.trim() || null,
-        body_style: form.body_style,
-        mileage,
-        price_cents: Math.round(price * 100),
-        exterior_color: form.exterior_color.trim() || null,
-        interior_color: form.interior_color.trim() || null,
-        transmission: form.transmission.trim() || null,
-        engine: form.engine.trim() || null,
-        fuel_type: form.fuel_type === "none" ? null : (form.fuel_type as FuelType),
-        drivetrain: form.drivetrain === "none" ? null : (form.drivetrain as Drivetrain),
-        mpg_combined: form.mpg_combined ? Number(form.mpg_combined) : null,
-        description: form.description.trim() || null,
-        features: form.features
-          .split("\n")
-          .map((s) => s.trim())
-          .filter(Boolean),
-        status: form.status,
-        is_featured: form.is_featured,
-        slug: form.slug.trim() || vehicleSlug({ year, make: form.make, model: form.model, trim: form.trim, vin }),
-      };
-
-      if (!session?.access_token) throw new Error("Your session has expired. Please sign in again.");
-      const originalUrls = existing.map((photo) => photo.url);
-      const currentExistingUrls = photos
-        .filter((photo): photo is Extract<PhotoDraft, { kind: "existing" }> => photo.kind === "existing")
-        .map((photo) => photo.url);
-      const hasNewPhotos = photos.some((photo) => photo.kind === "new");
-      const photosChanged =
-        hasNewPhotos ||
-        originalUrls.length !== currentExistingUrls.length ||
-        originalUrls.some((url, index) => url !== currentExistingUrls[index]);
-
-      const pendingUploads = photos
-        .map((photo, photoIndex) => ({ photo, photoIndex }))
-        .filter(
-          (item): item is { photo: Extract<PhotoDraft, { kind: "new" }>; photoIndex: number } =>
-            item.photo.kind === "new",
-        );
-
-      // The row save and direct file uploads are independent. Starting them
-      // together removes a full network round trip from the user's wait.
-      const vehicleSavePromise = saveLegacyInventoryRow({
-        data: { accessToken: session.access_token, vehicle: payload },
+      await deleteLegacyInventoryRow({
+        data: {
+          accessToken,
+          legacyId: match ? Number(match[1]) : null,
+          publicId: toDelete.id,
+          vin: toDelete.vin,
+        },
       });
-      let uploadedPromise: Promise<Array<{ photoIndex: number; key: string }>> = Promise.resolve([]);
 
-      if (photosChanged && pendingUploads.length > 0) {
-        setSaveLabel(`Saving and uploading ${pendingUploads.length} photo${pendingUploads.length === 1 ? "" : "s"}…`);
-        let uploadedCount = 0;
-        uploadedPromise = mapWithConcurrency(pendingUploads, MAX_CONCURRENT_UPLOADS, async ({ photo, photoIndex }) => {
-          const { uploadUrl, key } = await createMediaUploadFn({
-            data: {
-              accessToken: session.access_token,
-              vin,
-              contentType: photo.file.type,
-            },
-          });
-          const response = await fetch(uploadUrl, {
-            method: "PUT",
-            headers: { "content-type": photo.file.type, "x-upsert": "true" },
-            body: photo.file,
-          });
-          if (!response.ok) {
-            throw new Error(`Could not upload ${photo.file.name}. Please try again.`);
-          }
-          uploadedCount += 1;
-          setSaveLabel(`Uploading photos… ${uploadedCount}/${pendingUploads.length}`);
-          return { photoIndex, key };
-        });
-      }
-
-      const [, uploaded] = await Promise.all([vehicleSavePromise, uploadedPromise]);
-
-      if (photosChanged) {
-        const keyByPhotoIndex = new Map(uploaded.map((item) => [item.photoIndex, item.key]));
-        const order: PhotoOrderInput[] = photos.map((photo, photoIndex) =>
-          photo.kind === "existing"
-            ? { kind: "keep", url: photo.url }
-            : { kind: "new", index: -1, uploadedKey: keyByPhotoIndex.get(photoIndex)! },
-        );
-
-        setSaveLabel("Finalizing…");
-        await saveVehiclePhotosFn({
-          data: {
-            accessToken: session.access_token,
-            vin,
-            altBase: title,
-            order,
-            newPhotos: [],
-          },
-        });
-      }
-
-      toast.success(vehicle ? "Vehicle updated." : "Vehicle added.");
-      onSaved();
-      onOpenChange(false);
+      toast.success("Vehicle deleted.");
+      setToDelete(null);
+      refresh();
     } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save this vehicle.");
+      toast.error(e instanceof Error ? e.message : "Could not delete this vehicle.");
     } finally {
-      setSaveLabel(null);
-      setSaving(false);
+      setDeleting(false);
     }
   }
 
   return (
-    <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-h-[90vh] max-w-3xl overflow-y-auto">
-        <DialogHeader>
-          <DialogTitle>{vehicle ? "Edit vehicle" : "Add vehicle"}</DialogTitle>
-          <DialogDescription>
-            New vehicles start as drafts. Details appear on public inventory only when published as available.
-          </DialogDescription>
-        </DialogHeader>
-
-        <div className="grid gap-4 sm:grid-cols-2">
-          <Field label="VIN">
-            <div className="flex gap-2">
-              <Input
-                value={form.vin}
-                onChange={(e) => set("vin", e.target.value.replace(/\s+/g, "").toUpperCase())}
-                maxLength={17}
-                className="min-w-0 flex-1"
-              />
-              <Button type="button" variant="outline" onClick={() => void decodeCurrentVin()} disabled={decoding}>
-                {decoding ? <Loader2 className="size-4 animate-spin" /> : "Decode"}
-              </Button>
-            </div>
-          </Field>
-          <Field label="Stock number">
-            <Input value={form.stock_number} onChange={(e) => set("stock_number", e.target.value)} />
-          </Field>
-          <Field label="Year">
-            <Input type="number" value={form.year} onChange={(e) => set("year", e.target.value)} />
-          </Field>
-          <Field label="Make">
-            <Input value={form.make} onChange={(e) => set("make", e.target.value)} />
-          </Field>
-          <Field label="Model">
-            <Input value={form.model} onChange={(e) => set("model", e.target.value)} />
-          </Field>
-          <Field label="Trim">
-            <Input value={form.trim} onChange={(e) => set("trim", e.target.value)} />
-          </Field>
-          <Field label="Body style">
-            <Choice value={form.body_style} options={BODY_STYLES} onChange={(v) => set("body_style", v as BodyStyle)} />
-          </Field>
-          <Field label="Mileage">
-            <Input type="number" value={form.mileage} onChange={(e) => set("mileage", e.target.value)} />
-          </Field>
-          <Field label="Price (USD)">
-            <Input type="number" step="0.01" value={form.price} onChange={(e) => set("price", e.target.value)} />
-          </Field>
-          <Field label="Status">
-            <Choice value={form.status} options={STATUSES} onChange={(v) => set("status", v as VehicleStatus)} />
-          </Field>
-          <Field label="Fuel type">
-            <Choice value={form.fuel_type} options={FUEL_TYPES} allowNone onChange={(v) => set("fuel_type", v)} />
-          </Field>
-          <Field label="Drivetrain">
-            <Choice value={form.drivetrain} options={DRIVETRAINS} allowNone onChange={(v) => set("drivetrain", v)} />
-          </Field>
-          <Field label="Transmission">
-            <Input value={form.transmission} onChange={(e) => set("transmission", e.target.value)} />
-          </Field>
-          <Field label="Engine">
-            <Input value={form.engine} onChange={(e) => set("engine", e.target.value)} />
-          </Field>
-          <Field label="Exterior color">
-            <Input value={form.exterior_color} onChange={(e) => set("exterior_color", e.target.value)} />
-          </Field>
-          <Field label="Interior color">
-            <Input value={form.interior_color} onChange={(e) => set("interior_color", e.target.value)} />
-          </Field>
-          <Field label="Combined MPG">
-            <Input type="number" value={form.mpg_combined} onChange={(e) => set("mpg_combined", e.target.value)} />
-          </Field>
-          <Field label="URL slug">
-            <Input value={form.slug} placeholder="auto-generated" onChange={(e) => set("slug", e.target.value)} />
-          </Field>
-        </div>
-
-        <Field label="Description">
-          <Textarea rows={4} value={form.description} onChange={(e) => set("description", e.target.value)} />
-        </Field>
-        <Field label="Features (one per line)">
-          <Textarea rows={3} value={form.features} onChange={(e) => set("features", e.target.value)} />
-        </Field>
-
-        <div className="flex items-center gap-3">
-          <Switch id="featured" checked={form.is_featured} onCheckedChange={(v) => set("is_featured", v)} />
-          <Label htmlFor="featured">Feature this vehicle on the homepage</Label>
-        </div>
-
-        <div className="space-y-3 rounded-lg border border-border p-4">
-          <div className="flex items-center justify-between">
-            <div>
-              <p className="text-sm font-medium">Photos</p>
-              <p className="text-xs text-muted-foreground">Up to {MAX_PHOTOS}. The first photo is the main image.</p>
-            </div>
-            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
+    <div className="w-full">
+      <AdminPageHeader
+        title="Car Listings"
+        actions={
+          <>
+            <Button variant="outline" size="sm" onClick={() => setImportOpen(true)}>
               <Upload className="size-4" />
-              Add photos
-              <input
-                type="file"
-                accept="image/*"
-                multiple
-                className="hidden"
+              Import CSV
+            </Button>
+
+            <Button
+              size="sm"
+              onClick={() => {
+                setEditing(null);
+                setFormOpen(true);
+              }}
+            >
+              <Plus className="size-4" />
+              Add vehicle
+            </Button>
+          </>
+        }
+      />
+
+      <div className="p-4 sm:p-6">
+        <div className="mb-5 flex flex-wrap items-end justify-between gap-4">
+          <div>
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Inventory</p>
+
+            <h2 className="mt-1 font-display text-2xl font-bold text-foreground">All cars</h2>
+
+            <p className="mt-1 text-sm text-muted-foreground">{filtered.length} matching vehicles</p>
+          </div>
+
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto">
+            <div className="relative min-w-0 flex-1 sm:w-72 sm:flex-none">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+
+              <Input
+                id="admin-search"
+                className="h-10 rounded-lg bg-background pl-9"
+                placeholder="Search year, make, model, VIN..."
+                value={q}
                 onChange={(e) => {
-                  addFiles(e.target.files);
-                  e.target.value = "";
+                  setQ(e.target.value);
+                  setPage(1);
                 }}
               />
-            </label>
-          </div>
-          <div
-            role="button"
-            tabIndex={0}
-            aria-label="Drop vehicle photos here or click to browse"
-            onDragEnter={(event) => {
-              if (!event.dataTransfer.types.includes("Files")) return;
-              event.preventDefault();
-              event.stopPropagation();
-              setIsDraggingFiles(true);
-            }}
-            onDragOver={(event) => {
-              if (!event.dataTransfer.types.includes("Files")) return;
-              event.preventDefault();
-              event.stopPropagation();
-              event.dataTransfer.dropEffect = "copy";
-              setIsDraggingFiles(true);
-            }}
-            onDragLeave={(event) => {
-              if (!event.dataTransfer.types.includes("Files")) return;
-              event.preventDefault();
-              event.stopPropagation();
-              if (!event.currentTarget.contains(event.relatedTarget as Node | null)) {
-                setIsDraggingFiles(false);
-              }
-            }}
-            onDrop={(event) => {
-              if (!event.dataTransfer.types.includes("Files")) return;
-              event.preventDefault();
-              event.stopPropagation();
-              setIsDraggingFiles(false);
-              addFiles(event.dataTransfer.files);
-            }}
-            onKeyDown={(event) => {
-              if (event.key === "Enter" || event.key === " ") {
-                event.preventDefault();
-                document.getElementById("vehicle-photo-upload")?.click();
-              }
-            }}
-            onClick={() => document.getElementById("vehicle-photo-upload")?.click()}
-            className={`flex cursor-pointer flex-col items-center justify-center rounded-lg border-2 border-dashed px-6 py-8 text-center transition-colors ${
-              isDraggingFiles
-                ? "border-[#F7941D] bg-[#F7941D]/10"
-                : "border-border bg-muted/30 hover:border-[#F7941D]/60 hover:bg-muted/50"
-            }`}
-          >
-            <ImagePlus className={`mb-2 size-8 ${isDraggingFiles ? "text-[#F7941D]" : "text-muted-foreground"}`} />
-            <p className="text-sm font-semibold text-foreground">
-              {isDraggingFiles ? "Drop photos here" : "Drag and drop vehicle photos"}
-            </p>
-            <p className="mt-1 text-xs text-muted-foreground">or click to browse JPG, PNG, or WebP files under 10 MB</p>
-            <input
-              id="vehicle-photo-upload"
-              type="file"
-              accept="image/jpeg,image/png,image/webp"
-              multiple
-              className="hidden"
-              onChange={(event) => {
-                addFiles(event.target.files);
-                event.target.value = "";
-              }}
-            />
-          </div>
+            </div>
 
-          {photos.length === 0 ? (
-            <p className="text-center text-xs text-muted-foreground">No photos yet.</p>
-          ) : (
-            <ul className="grid gap-3 sm:grid-cols-3">
-              {photos.map((p, i) => (
-                <li
-                  key={p.kind === "existing" ? p.id : p.previewUrl}
-                  draggable
-                  onDragStart={(event) => {
-                    setDraggedPhotoIndex(i);
-                    event.dataTransfer.effectAllowed = "move";
-                    event.dataTransfer.setData("text/plain", String(i));
-                  }}
-                  onDragOver={(event) => {
-                    if (draggedPhotoIndex === null) return;
-                    event.preventDefault();
-                    event.dataTransfer.dropEffect = "move";
-                  }}
-                  onDrop={(event) => {
-                    if (draggedPhotoIndex === null) return;
-                    event.preventDefault();
-                    event.stopPropagation();
-                    moveTo(draggedPhotoIndex, i);
-                    setDraggedPhotoIndex(null);
-                  }}
-                  onDragEnd={() => setDraggedPhotoIndex(null)}
-                  className={`overflow-hidden rounded-md border bg-background transition ${
-                    draggedPhotoIndex === i ? "scale-[0.98] border-[#F7941D] opacity-60" : "border-border"
-                  }`}
-                >
-                  <img
-                    src={p.kind === "existing" ? p.url : p.previewUrl}
-                    alt={`Photo ${i + 1}`}
-                    className="h-24 w-full object-cover"
-                  />
-                  <div className="flex items-center justify-between gap-1 p-1">
-                    <span className="flex items-center gap-1 pl-1 text-xs text-muted-foreground">
-                      <GripVertical className="size-3" />#{i + 1}
-                      {i === 0 ? " · Main" : ""}
-                    </span>
-                    <div className="flex">
-                      <Button size="icon" variant="ghost" onClick={() => move(i, -1)} aria-label="Move earlier">
-                        <GripVertical className="size-3 rotate-180" />
-                      </Button>
-                      <Button size="icon" variant="ghost" onClick={() => move(i, 1)} aria-label="Move later">
-                        <GripVertical className="size-3" />
-                      </Button>
-                      <Button size="icon" variant="ghost" onClick={() => removePhoto(i)} aria-label="Remove photo">
-                        <Trash2 className="size-3 text-destructive" />
-                      </Button>
-                    </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
-          )}
+            <Select value={sort} onValueChange={setSort}>
+              <SelectTrigger className="h-10 w-full rounded-lg bg-background sm:w-52">
+                <SelectValue />
+              </SelectTrigger>
+
+              <SelectContent>
+                {SORTS.map((s) => (
+                  <SelectItem key={s.value} value={s.value}>
+                    {s.label}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </div>
 
-        <DialogFooter className="grid grid-cols-3 items-center">
-          <Button variant="outline" onClick={() => onOpenChange(false)} disabled={saving}>
-            Cancel
-          </Button>
-          {vehicle && onDelete ? (
-            <Button
-              type="button"
-              variant="ghost"
-              className="justify-self-center text-destructive hover:bg-destructive/10 hover:text-destructive"
-              onClick={onDelete}
-              disabled={saving}
+        <div className="grid gap-5 lg:grid-cols-[240px_minmax(0,1fr)]">
+          <details className="group rounded-xl border border-border bg-background lg:contents" open>
+            <summary className="flex cursor-pointer list-none items-center justify-between p-4 font-semibold lg:hidden">
+              <span className="flex items-center gap-2">
+                <SlidersHorizontal className="size-4 text-[#F7941D]" />
+                Filters
+              </span>
+
+              <span className="text-xs font-normal text-muted-foreground">
+                {hasActiveFilters ? "Active" : "All vehicles"}
+              </span>
+            </summary>
+
+            <aside className="space-y-5 rounded-xl border border-border bg-background p-4 group-open:block lg:block">
+              <div className="flex items-center justify-between">
+                <h3 className="font-semibold text-foreground">Filters</h3>
+
+                {hasActiveFilters && (
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="text-xs font-semibold text-[#F7941D] hover:underline"
+                  >
+                    Clear all
+                  </button>
+                )}
+              </div>
+
+              <div className="space-y-4">
+                <Filter
+                  label="Status"
+                  value={status}
+                  onChange={(value) => {
+                    setStatus(value);
+                    setPage(1);
+                  }}
+                  options={STATUSES}
+                />
+
+                <Filter
+                  label="Make"
+                  value={make}
+                  onChange={(value) => {
+                    setMake(value);
+                    setPage(1);
+                  }}
+                  options={makes}
+                />
+
+                <Filter
+                  label="Year"
+                  value={year}
+                  onChange={(value) => {
+                    setYear(value);
+                    setPage(1);
+                  }}
+                  options={years.map((y) => String(y))}
+                />
+
+                <Filter
+                  label="Body style"
+                  value={body}
+                  onChange={(value) => {
+                    setBody(value);
+                    setPage(1);
+                  }}
+                  options={BODY_STYLES}
+                />
+              </div>
+
+              <div className="space-y-3 border-t border-border pt-4">
+                <div className="flex items-center justify-between">
+                  <Label htmlFor="price-range">Price</Label>
+
+                  <span className="text-xs font-medium text-muted-foreground">
+                    {formatUsd(priceRange[0] * 100)} - {formatUsd(priceRange[1] * 100)}
+                  </span>
+                </div>
+
+                <Slider
+                  id="price-range"
+                  min={priceBounds.min}
+                  max={priceBounds.max || 1}
+                  step={1000}
+                  value={priceRange}
+                  onValueChange={(value) => {
+                    const next = value as [number, number];
+
+                    setPriceRange(next[0] <= next[1] ? next : [next[1], next[1]]);
+
+                    setPage(1);
+                  }}
+                  disabled={priceBounds.max <= priceBounds.min}
+                  aria-label="Filter by price range"
+                  className="py-2 [&_[data-orientation=horizontal]]:bg-[#F7941D]/20 [&_[data-orientation=horizontal]_span]:bg-[#F7941D] [&_[role=slider]]:border-[#F7941D] [&_[role=slider]]:focus-visible:ring-[#F7941D]"
+                />
+
+                <div className="grid grid-cols-2 gap-2">
+                  <Input
+                    aria-label="Minimum price"
+                    type="number"
+                    min={priceBounds.min}
+                    max={priceRange[1]}
+                    step={1000}
+                    value={priceRange[0]}
+                    onChange={(e) =>
+                      setPriceRange([Math.min(Number(e.target.value) || priceBounds.min, priceRange[1]), priceRange[1]])
+                    }
+                    className="h-9 rounded-lg text-xs"
+                  />
+
+                  <Input
+                    aria-label="Maximum price"
+                    type="number"
+                    min={priceRange[0]}
+                    max={priceBounds.max}
+                    step={1000}
+                    value={priceRange[1]}
+                    onChange={(e) =>
+                      setPriceRange([priceRange[0], Math.max(Number(e.target.value) || priceBounds.max, priceRange[0])])
+                    }
+                    className="h-9 rounded-lg text-xs"
+                  />
+                </div>
+              </div>
+
+              {hasActiveFilters && (
+                <div className="flex flex-wrap gap-2 border-t border-border pt-4">
+                  <button
+                    type="button"
+                    onClick={resetFilters}
+                    className="inline-flex items-center gap-1 rounded-full bg-[#F7941D]/10 px-2.5 py-1 text-xs font-semibold text-[#b76508]"
+                  >
+                    Reset filters
+                    <X className="size-3" />
+                  </button>
+                </div>
+              )}
+            </aside>
+          </details>
+
+          <div className="min-w-0">
+            {isLoading ? (
+              <div className="mt-4 space-y-3">
+                {Array.from({ length: 5 }).map((_, i) => (
+                  <div key={i} className="h-16 animate-pulse rounded-lg bg-muted" />
+                ))}
+              </div>
+            ) : error ? (
+              <p className="mt-6 rounded-lg border border-destructive/40 bg-background p-6 text-sm">
+                Couldn't load inventory. Refresh to try again.
+              </p>
+            ) : filtered.length === 0 ? (
+              <div className="mt-4 rounded-lg border border-dashed border-border bg-background p-10 text-center">
+                <p className="font-medium">No vehicles match</p>
+
+                <p className="mt-1 text-sm text-muted-foreground">
+                  Adjust the filters, add a vehicle, or import your inventory file.
+                </p>
+              </div>
+            ) : (
+              <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
+                {visible.map((v) => {
+                  const sortedMedia = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
+                  const photo = sortedMedia.find((m) => !isVideoUrl(m.url)) ?? sortedMedia[0];
+
+                  const title = vehicleTitle(v);
+
+                  const statusClasses = {
+                    available: "bg-emerald-100 text-emerald-700",
+                    sold: "bg-slate-200 text-slate-700",
+                    pending: "bg-amber-100 text-amber-700",
+                    reserved: "bg-blue-100 text-blue-700",
+                  } as const;
+
+                  return (
+                    <article
+                      key={v.id}
+                      role="button"
+                      tabIndex={0}
+                      aria-label={`View details for ${title}`}
+                      onClick={() => openVehicleDetails(v)}
+                      onKeyDown={(event) => {
+                        if (event.key === "Enter" || event.key === " ") {
+                          event.preventDefault();
+                          openVehicleDetails(v);
+                        }
+                      }}
+                      className="group cursor-pointer overflow-hidden rounded-xl border border-border bg-background shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#F7941D]/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] focus-visible:ring-offset-2"
+                    >
+                      <div className="relative aspect-[16/10] overflow-hidden bg-muted">
+                        {photo ? (
+                          <img
+                            src={photo.url}
+                            alt={title}
+                            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
+                            loading="lazy"
+                          />
+                        ) : (
+                          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
+                            No photo available
+                          </div>
+                        )}
+
+                        <span
+                          className={`absolute left-3 top-3 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${
+                            statusClasses[v.status as keyof typeof statusClasses] ?? "bg-muted text-muted-foreground"
+                          }`}
+                        >
+                          {v.status}
+                        </span>
+                      </div>
+
+                      <div className="space-y-4 p-4">
+                        <div>
+                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                            {v.year} {v.make}
+                          </p>
+
+                          <h3 className="mt-1 line-clamp-2 font-display text-lg font-bold text-foreground">
+                            {v.model}
+                            {v.trim ? ` ${v.trim}` : ""}
+                          </h3>
+
+                          <p className="mt-1 text-sm text-muted-foreground">
+                            {v.body_style} · {formatMiles(v.mileage)}
+                          </p>
+                        </div>
+
+                        <div className="border-t border-border pt-3">
+                          <div>
+                            <p className="text-xs text-muted-foreground">Price</p>
+
+                            <p className="font-display text-xl font-bold text-foreground">
+                              {formatUsd(Number(v.price_cents))}
+                            </p>
+                          </div>
+                        </div>
+                      </div>
+                    </article>
+                  );
+                })}
+              </div>
+            )}
+
+            {totalPages > 1 && (
+              <div className="mt-6 flex items-center justify-center gap-3">
+                <Button variant="outline" disabled={current <= 1} onClick={() => setPage(current - 1)}>
+                  Previous
+                </Button>
+
+                <span className="text-sm text-muted-foreground">
+                  Page {current} of {totalPages}
+                </span>
+
+                <Button variant="outline" disabled={current >= totalPages} onClick={() => setPage(current + 1)}>
+                  Next
+                </Button>
+              </div>
+            )}
+
+            <AdminVehicleDetailsDialog
+              vehicle={viewing}
+              activePhoto={activePhoto}
+              failedPhotoUrls={failedPhotoUrls}
+              onActivePhotoChange={setActivePhoto}
+              onPhotoError={(url) =>
+                setFailedPhotoUrls((current) => (current.includes(url) ? current : [...current, url]))
+              }
+              onEdit={(vehicle) => {
+                setViewing(null);
+                setActivePhoto(0);
+                setFailedPhotoUrls([]);
+                setEditing(vehicle);
+                setFormOpen(true);
+              }}
+              onDelete={(vehicle) => {
+                setViewing(null);
+                setActivePhoto(0);
+                setFailedPhotoUrls([]);
+                setToDelete(vehicle);
+              }}
+              onOpenChange={(open) => {
+                if (!open) {
+                  setViewing(null);
+                  setActivePhoto(0);
+                  setFailedPhotoUrls([]);
+                }
+              }}
+            />
+
+            <VehicleFormDialog open={formOpen} onOpenChange={setFormOpen} vehicle={editing} onSaved={refresh} />
+
+            <CsvImportDialog open={importOpen} onOpenChange={setImportOpen} onImported={refresh} />
+
+            <AlertDialog open={toDelete !== null} onOpenChange={(o) => !o && setToDelete(null)}>
+              <AlertDialogContent>
+                <AlertDialogHeader>
+                  <AlertDialogTitle>Delete this vehicle?</AlertDialogTitle>
+
+                  <AlertDialogDescription>
+                    Are you sure you want to delete this vehicle? This action cannot be undone.
+                    {toDelete && (
+                      <span className="mt-3 block font-medium text-foreground">
+                        {toDelete.year} {toDelete.make} {toDelete.model}
+                        <span className="block font-mono text-xs">{toDelete.vin}</span>
+                      </span>
+                    )}
+                  </AlertDialogDescription>
+                </AlertDialogHeader>
+
+                <AlertDialogFooter>
+                  <AlertDialogCancel disabled={deleting}>Cancel</AlertDialogCancel>
+
+                  <AlertDialogAction
+                    disabled={deleting}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      void confirmDelete();
+                    }}
+                  >
+                    Delete vehicle
+                  </AlertDialogAction>
+                </AlertDialogFooter>
+              </AlertDialogContent>
+            </AlertDialog>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function AdminVehicleDetailsDialog({
+  vehicle,
+  activePhoto,
+  failedPhotoUrls,
+  onActivePhotoChange,
+  onPhotoError,
+  onEdit,
+  onDelete,
+  onOpenChange,
+}: {
+  vehicle: Row | null;
+  activePhoto: number;
+  failedPhotoUrls: string[];
+  onActivePhotoChange: (index: number) => void;
+  onPhotoError: (url: string) => void;
+  onEdit: (vehicle: Row) => void;
+  onDelete: (vehicle: Row) => void;
+  onOpenChange: (open: boolean) => void;
+}) {
+  if (!vehicle) {
+    return null;
+  }
+
+  const photos = [...(vehicle.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
+  const selectedPhoto = photos[activePhoto];
+  const features = vehicle.features ?? [];
+  const title = vehicleTitle(vehicle);
+
+  const specs: [string, string][] = [
+    ["VIN", vehicle.vin],
+    ["Stock number", vehicle.stock_number],
+    ["Mileage", formatMiles(vehicle.mileage)],
+    ["Body style", vehicle.body_style],
+    ["Exterior color", vehicle.exterior_color ?? "—"],
+    ["Interior color", vehicle.interior_color ?? "—"],
+    ["Transmission", vehicle.transmission ?? "—"],
+    ["Drivetrain", vehicle.drivetrain ?? "—"],
+    ["Fuel type", vehicle.fuel_type ?? "—"],
+    ["Engine", vehicle.engine ?? "—"],
+    [
+      "Combined MPG",
+      vehicle.mpg_combined === null || vehicle.mpg_combined === undefined ? "—" : String(vehicle.mpg_combined),
+    ],
+  ];
+
+  const statusClasses = {
+    available: "bg-emerald-100 text-emerald-700",
+    sold: "bg-slate-200 text-slate-700",
+    pending: "bg-amber-100 text-amber-700",
+    reserved: "bg-blue-100 text-blue-700",
+    draft: "bg-violet-100 text-violet-700",
+  } as const;
+
+  return (
+    <Dialog open={vehicle !== null} onOpenChange={onOpenChange}>
+      <DialogContent className="max-h-[92vh] max-w-6xl overflow-y-auto p-0">
+        <DialogHeader className="border-b border-border px-5 py-4 pr-12 sm:px-6">
+          <div className="flex flex-wrap items-start justify-between gap-3">
+            <div>
+              <DialogTitle className="font-display text-2xl font-bold">{title}</DialogTitle>
+              <DialogDescription className="mt-1">
+                Admin inventory details · Stock #{vehicle.stock_number}
+              </DialogDescription>
+            </div>
+
+            <span
+              className={`inline-flex rounded-full px-3 py-1 text-xs font-semibold capitalize ${
+                statusClasses[vehicle.status as keyof typeof statusClasses] ?? "bg-muted text-muted-foreground"
+              }`}
             >
-              <Trash2 className="size-4" />
-              Delete
-            </Button>
-          ) : (
-            <span />
-          )}
-          <Button onClick={() => void submit()} disabled={saving}>
-            {saving ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />}
-            {saveLabel ?? (vehicle ? "Save changes" : "Add vehicle")}
-          </Button>
-        </DialogFooter>
+              {vehicle.status}
+            </span>
+          </div>
+        </DialogHeader>
+
+        <div className="grid gap-8 p-5 sm:p-6 lg:grid-cols-[minmax(0,1.35fr)_minmax(300px,0.65fr)]">
+          <div className="min-w-0">
+            <div className="flex min-h-[300px] items-center justify-center overflow-hidden rounded-xl border border-border bg-muted sm:min-h-[420px]">
+              {selectedPhoto && !failedPhotoUrls.includes(selectedPhoto.url) ? (
+                isVideoUrl(selectedPhoto.url) ? (
+                  <video
+                    key={selectedPhoto.url}
+                    src={selectedPhoto.url}
+                    controls
+                    autoPlay
+                    playsInline
+                    preload="metadata"
+                    onError={() => onPhotoError(selectedPhoto.url)}
+                    className="max-h-[520px] w-full bg-black object-contain"
+                  />
+                ) : (
+                  <img
+                    src={selectedPhoto.url}
+                    alt={`${title} photo ${activePhoto + 1}`}
+                    onError={() => onPhotoError(selectedPhoto.url)}
+                    className="max-h-[520px] w-full object-contain"
+                  />
+                )
+              ) : (
+                <div className="flex min-h-[300px] w-full flex-col items-center justify-center gap-2 text-muted-foreground sm:min-h-[420px]">
+                  <Camera className="size-9" />
+                  <span className="text-sm">No vehicle photo available</span>
+                </div>
+              )}
+            </div>
+
+            {photos.length > 1 && (
+              <div className="mt-3 grid grid-cols-4 gap-2 sm:grid-cols-6">
+                {photos.map((photo, index) => (
+                  <button
+                    key={`${photo.url}-${index}`}
+                    type="button"
+                    onClick={() => onActivePhotoChange(index)}
+                    aria-label={`View photo ${index + 1} of ${photos.length}`}
+                    aria-pressed={index === activePhoto}
+                    className={`relative aspect-[4/3] overflow-hidden rounded-md border-2 bg-muted transition hover:opacity-90 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] ${
+                      index === activePhoto ? "border-[#F7941D]" : "border-transparent"
+                    }`}
+                  >
+                    {failedPhotoUrls.includes(photo.url) ? (
+                      <span className="flex size-full items-center justify-center">
+                        <Camera className="size-4 text-muted-foreground" />
+                      </span>
+                    ) : isVideoUrl(photo.url) ? (
+                      <>
+                        <video
+                          src={photo.url}
+                          muted
+                          playsInline
+                          preload="metadata"
+                          className="size-full bg-black object-cover"
+                        />
+                        <span className="absolute inset-0 flex items-center justify-center bg-black/30">
+                          <Play className="size-4 text-white" />
+                        </span>
+                      </>
+                    ) : (
+                      <img
+                        src={photo.url}
+                        alt={`${title} thumbnail ${index + 1}`}
+                        onError={() => onPhotoError(photo.url)}
+                        loading="lazy"
+                        className="size-full object-cover"
+                      />
+                    )}
+                  </button>
+                ))}
+              </div>
+            )}
+
+            <section className="mt-8">
+              <h3 className="font-display text-lg font-bold text-foreground">Specifications</h3>
+              <dl className="mt-3 grid gap-x-8 sm:grid-cols-2">
+                {specs.map(([label, value]) => (
+                  <div key={label} className="flex min-w-0 justify-between gap-4 border-b border-border py-2.5 text-sm">
+                    <dt className="shrink-0 text-muted-foreground">{label}</dt>
+                    <dd className="min-w-0 break-words text-right font-medium text-foreground">{value}</dd>
+                  </div>
+                ))}
+              </dl>
+            </section>
+
+            {features.length > 0 && (
+              <section className="mt-8">
+                <h3 className="font-display text-lg font-bold text-foreground">Equipment</h3>
+                <ul className="mt-3 grid gap-2 sm:grid-cols-2">
+                  {features.map((feature) => (
+                    <li key={feature} className="flex items-start gap-2 text-sm text-foreground">
+                      <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
+                      <span>{feature}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
+
+            {vehicle.description && (
+              <section className="mt-8">
+                <h3 className="font-display text-lg font-bold text-foreground">About this vehicle</h3>
+                <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
+                  {vehicle.description}
+                </p>
+              </section>
+            )}
+          </div>
+
+          <aside className="h-fit space-y-5 rounded-xl border border-border bg-card p-5 lg:sticky lg:top-0">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">Vehicle</p>
+              <h2 className="mt-2 font-display text-2xl font-bold text-foreground">{title}</h2>
+              <p className="mt-2 text-sm text-muted-foreground">
+                {formatMiles(vehicle.mileage)} · Stock #{vehicle.stock_number}
+              </p>
+            </div>
+
+            <div className="border-t border-border pt-5">
+              <p className="text-xs font-medium text-muted-foreground">Price</p>
+              <p className="mt-1 font-display text-3xl font-extrabold text-foreground">
+                {formatUsd(Number(vehicle.price_cents))}
+              </p>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3 border-t border-border pt-5 text-sm">
+              <div className="rounded-lg bg-muted/60 p-3">
+                <p className="text-xs text-muted-foreground">Year</p>
+                <p className="mt-1 font-semibold text-foreground">{vehicle.year}</p>
+              </div>
+              <div className="rounded-lg bg-muted/60 p-3">
+                <p className="text-xs text-muted-foreground">Body style</p>
+                <p className="mt-1 font-semibold text-foreground">{vehicle.body_style}</p>
+              </div>
+              <div className="rounded-lg bg-muted/60 p-3">
+                <p className="text-xs text-muted-foreground">Make</p>
+                <p className="mt-1 font-semibold text-foreground">{vehicle.make}</p>
+              </div>
+              <div className="rounded-lg bg-muted/60 p-3">
+                <p className="text-xs text-muted-foreground">Model</p>
+                <p className="mt-1 font-semibold text-foreground">{vehicle.model}</p>
+              </div>
+            </div>
+
+            <div className="grid grid-cols-2 gap-3">
+              <Button
+                type="button"
+                variant="outline"
+                className="border-destructive/40 font-semibold text-destructive hover:border-destructive hover:bg-destructive/10 hover:text-destructive"
+                onClick={() => onDelete(vehicle)}
+              >
+                <Trash2 className="size-4" />
+                Delete
+              </Button>
+
+              <Button
+                type="button"
+                className="rounded-md border border-[#F7941D] bg-[#F7941D] font-semibold text-slate-950 shadow-sm hover:border-[#ea8718] hover:bg-[#ea8718]"
+                onClick={() => onEdit(vehicle)}
+              >
+                Edit vehicle
+              </Button>
+            </div>
+
+            <p className="border-t border-border pt-5 text-xs leading-relaxed text-muted-foreground">
+              Review the vehicle details here, edit the listing, or delete it from inventory.
+            </p>
+          </aside>
+        </div>
       </DialogContent>
     </Dialog>
   );
 }
 
-function Field({ label, children }: { label: string; children: React.ReactNode }) {
+function Filter({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: readonly string[];
+}) {
   return (
     <div className="space-y-1.5">
       <Label>{label}</Label>
-      {children}
-    </div>
-  );
-}
 
-function Choice({
-  value,
-  options,
-  onChange,
-  allowNone,
-}: {
-  value: string;
-  options: readonly string[];
-  onChange: (v: string) => void;
-  allowNone?: boolean;
-}) {
-  return (
-    <Select value={value} onValueChange={onChange}>
-      <SelectTrigger>
-        <SelectValue />
-      </SelectTrigger>
-      <SelectContent>
-        {allowNone && <SelectItem value="none">Not specified</SelectItem>}
-        {options.map((o) => (
-          <SelectItem key={o} value={o} className="capitalize">
-            {o}
-          </SelectItem>
-        ))}
-      </SelectContent>
-    </Select>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+
+        <SelectContent>
+          <SelectItem value="all">All</SelectItem>
+
+          {options.map((o) => (
+            <SelectItem key={o} value={o} className="capitalize">
+              {o}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
