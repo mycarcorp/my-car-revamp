@@ -144,7 +144,7 @@ function RootComponent() {
 
   useEffect(() => {
     if (isAdmin) return;
-    const w = window as unknown as { fbq?: (...args: unknown[]) => void } & Record<string, unknown>;
+    const w = window as unknown as { fbq?: (...args: unknown[]) => void };
     if (!w.fbq) {
       /* eslint-disable */
       // Meta Pixel base code
