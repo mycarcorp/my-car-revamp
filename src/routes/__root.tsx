@@ -121,6 +121,15 @@ function RootShell({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
+        <noscript>
+          <img
+            height="1"
+            width="1"
+            style={{ display: "none" }}
+            alt=""
+            src="https://www.facebook.com/tr?id=913977571315979&ev=PageView&noscript=1"
+          />
+        </noscript>
         {children}
         <Scripts />
       </body>
@@ -132,6 +141,37 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAdmin = pathname.startsWith("/admin");
+
+  useEffect(() => {
+    if (isAdmin) return;
+    const w = window as unknown as { fbq?: (...args: unknown[]) => void };
+    if (!w.fbq) {
+      /* eslint-disable */
+      // Meta Pixel base code
+      (function (f: any, b: Document, e: string, v: string) {
+        if (f.fbq) return;
+        const n: any = (f.fbq = function (...args: unknown[]) {
+          n.callMethod ? n.callMethod.apply(n, args) : n.queue.push(args);
+        });
+        if (!f._fbq) f._fbq = n;
+        n.push = n;
+        n.loaded = true;
+        n.version = "2.0";
+        n.queue = [];
+        const t = b.createElement(e) as HTMLScriptElement;
+        t.async = true;
+        t.src = v;
+        const s = b.getElementsByTagName(e)[0];
+        s?.parentNode?.insertBefore(t, s);
+      })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
+      /* eslint-enable */
+      const fbq = (window as unknown as Record<string, unknown>)["fbq"] as
+        | ((...args: unknown[]) => void)
+        | undefined;
+      fbq?.("init", "913977571315979");
+    }
+    w.fbq?.("track", "PageView");
+  }, [pathname, isAdmin]);
 
   useEffect(() => {
     const widgetId = "6a43bb0bbd10bf7f08bff1e7";
