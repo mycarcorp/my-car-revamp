@@ -34,6 +34,7 @@ export type GhlLeadInput = {
     make?: string | null;
     model?: string | null;
     trim?: string | null;
+    price?: number | string | null;
   } | null;
   details?: Record<string, unknown>;
 };
@@ -102,7 +103,7 @@ export const sendLeadToGhl = createServerFn({ method: "POST" })
         apr: str(d["apr"]),
       };
     } else if (event_type === "check_availability") {
-      payload = { ...base, ...vehicleFields };
+      payload = { ...base, ...vehicleFields, vehicle_price: str(v.price) };
     } else if (event_type === "sell_or_trade") {
       const ymmParts = str(d["year_make_model"]).trim().split(/\s+/).filter(Boolean);
       payload = {
