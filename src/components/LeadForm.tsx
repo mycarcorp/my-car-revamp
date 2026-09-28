@@ -22,6 +22,7 @@ export type LeadVehicleSummary = {
   make?: string | null;
   model?: string | null;
   trim?: string | null;
+  price?: number | string | null;
 };
 
 export type LeadFormProps = {

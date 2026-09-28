@@ -351,6 +351,7 @@ function VehicleDetail() {
                   make: v.make,
                   model: v.model,
                   trim: v.trim,
+                  price: v.price_cents != null ? (Number(v.price_cents) / 100).toFixed(2) : null,
                 }}
                 submitLabel="Check availability"
                 messageLabel="Questions about this vehicle"
