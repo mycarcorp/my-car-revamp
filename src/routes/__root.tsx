@@ -165,7 +165,7 @@ function RootComponent() {
         s?.parentNode?.insertBefore(t, s);
       })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
       /* eslint-enable */
-      w.fbq?.("init", "913977571315979");
+      (window as unknown as { fbq?: (...args: unknown[]) => void }).fbq?.("init", "913977571315979");
     }
     w.fbq?.("track", "PageView");
   }, [pathname, isAdmin]);
