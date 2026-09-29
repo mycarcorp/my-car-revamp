@@ -12,7 +12,7 @@ import {
 } from "lucide-react";
 import { LeadForm } from "@/components/LeadForm";
 import { siteSettingsQuery } from "@/lib/queries";
-import contactAgent from "@/assets/contact-agent.jpg";
+import contactAgent from "@/assets/contact-hero.jpg";
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
