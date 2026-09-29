@@ -17,17 +17,81 @@ import { similarVehiclesQuery, siteSettingsQuery, vehicleBySlugQuery, type Vehic
 
 const SITE_URL = "https://mycarcorp.com";
 
+/**
+ * Build the canonical public URL for a vehicle detail page.
+ */
 function getVehicleUrl(slug: string) {
   return `${SITE_URL}/inventory/${encodeURIComponent(slug)}`;
 }
 
+/**
+ * Converts relative MyCar URLs into absolute public URLs.
+ *
+ * Examples:
+ * /api/public/vehicle-photos/example/photo-1.jpg
+ * becomes:
+ * https://mycarcorp.com/api/public/vehicle-photos/example/photo-1.jpg
+ *
+ * Existing absolute URLs remain unchanged.
+ */
+function toAbsoluteUrl(url: string) {
+  const cleanUrl = url.trim();
+
+  if (!cleanUrl) {
+    return null;
+  }
+
+  if (cleanUrl.startsWith("https://") || cleanUrl.startsWith("http://")) {
+    return cleanUrl;
+  }
+
+  if (cleanUrl.startsWith("//")) {
+    return `https:${cleanUrl}`;
+  }
+
+  if (cleanUrl.startsWith("/")) {
+    return `${SITE_URL}${cleanUrl}`;
+  }
+
+  return `${SITE_URL}/${cleanUrl}`;
+}
+
+/**
+ * Returns actual vehicle image URLs for SEO/schema.
+ *
+ * Video URLs are excluded because Product.image should contain
+ * vehicle images rather than video files.
+ *
+ * Relative vehicle image URLs are converted to absolute URLs so
+ * Google can crawl them correctly.
+ */
 function getVehicleImages(vehicle: VehicleWithPhotos) {
   return [...(vehicle.vehicle_photos ?? [])]
     .sort((a, b) => a.position - b.position)
-    .filter((photo) => typeof photo.url === "string" && photo.url.startsWith("https://") && !isVideoUrl(photo.url))
-    .map((photo) => photo.url);
+    .map((photo) => {
+      if (typeof photo.url !== "string") {
+        return null;
+      }
+
+      const absoluteUrl = toAbsoluteUrl(photo.url);
+
+      if (!absoluteUrl) {
+        return null;
+      }
+
+      if (isVideoUrl(absoluteUrl)) {
+        return null;
+      }
+
+      return absoluteUrl;
+    })
+    .filter((url): url is string => Boolean(url));
 }
 
+/**
+ * Use the inventory description when one exists.
+ * Otherwise provide a factual fallback based only on vehicle data.
+ */
 function getVehicleDescription(vehicle: VehicleWithPhotos) {
   const customDescription = typeof vehicle.description === "string" ? vehicle.description.trim() : "";
 
@@ -46,6 +110,10 @@ function getVehicleDescription(vehicle: VehicleWithPhotos) {
   return parts.join(" ");
 }
 
+/**
+ * Ensure Google always receives a valid ISO currency code.
+ * MyCar inventory is priced in USD, so USD is the fallback.
+ */
 function getPriceCurrency(vehicle: VehicleWithPhotos) {
   const currency = typeof vehicle.currency === "string" ? vehicle.currency.trim().toUpperCase() : "";
 
@@ -177,6 +245,10 @@ function VehicleDetail() {
 
   const photos = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
 
+  /*
+   * These are absolute, crawlable image URLs used by
+   * Product/Vehicle structured data.
+   */
   const schemaImages = getVehicleImages(v);
 
   const canonicalUrl = getVehicleUrl(slug);
@@ -313,14 +385,14 @@ function VehicleDetail() {
   ];
 
   /*
-   * Vehicle/Product structured data.
+   * Vehicle + Product structured data.
    *
-   * Google can understand Vehicle as a Schema.org entity, while Product
-   * provides the commerce/product context used by Google's product
-   * structured-data systems.
-   *
-   * Only actual vehicle photos are included. Video URLs are intentionally
-   * excluded from the image property.
+   * Important:
+   * - Uses actual vehicle inventory data.
+   * - Uses absolute vehicle image URLs.
+   * - Excludes videos from Product.image.
+   * - Includes USD fallback for priceCurrency.
+   * - Does not fabricate shipping or return policies.
    */
   const jsonLd = {
     "@context": "https://schema.org",
@@ -335,6 +407,10 @@ function VehicleDetail() {
 
     description: schemaDescription,
 
+    /*
+     * Google Merchant/Product structured data needs actual
+     * product images. These URLs are now always absolute.
+     */
     ...(schemaImages.length > 0
       ? {
           image: schemaImages,
