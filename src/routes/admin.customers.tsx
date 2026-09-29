@@ -1,5 +1,5 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import {
   CalendarDays,
@@ -12,18 +12,23 @@ import {
   HandCoins,
   Mail,
   MessageSquare,
+  Loader2,
   Phone,
   Repeat2,
   Search,
   ShieldCheck,
+  Trash2,
   Users,
 } from "lucide-react";
+import { toast } from "sonner";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { AdminTeamSection } from "@/components/admin/AdminTeamSection";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { useAuth } from "@/hooks/useAuth";
+import { supabase } from "@/integrations/supabase/app-client";
 import { listCustomers } from "@/lib/admin-customers.functions";
 import { listLeads, type AdminLeadRow } from "@/lib/admin-leads.functions";
 
@@ -299,6 +304,7 @@ function getPreferredTime(lead: AdminLeadRow) {
 }
 
 function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts: AccountProfile[] }) {
+  const queryClient = useQueryClient();
   const [type, setType] = useState<LeadFilterType>("all");
   const [dateFilter, setDateFilter] = useState<DateFilterType>("all");
   const [selectedCalendarDate, setSelectedCalendarDate] = useState<string | null>(null);
@@ -310,6 +316,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
   });
   const [search, setSearch] = useState("");
   const [selectedLead, setSelectedLead] = useState<AdminLeadRow | null>(null);
+  const [deletingLeadId, setDeletingLeadId] = useState<string | number | null>(null);
 
   const { data, isLoading, error } = useQuery({
     queryKey: ["admin", "leads", "customers-page"],
@@ -324,6 +331,40 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
   });
 
   const leads = data ?? [];
+
+  async function removeLead(lead: AdminLeadRow) {
+    const confirmed = window.confirm(
+      `Remove the ${getLeadTypeLabel(lead).toLowerCase()} lead from ${lead.full_name || "this customer"}? This cannot be undone.`,
+    );
+
+    if (!confirmed) return;
+
+    setDeletingLeadId(lead.id);
+
+    try {
+      const { data: removedRows, error: removeError } = await supabase
+        .from("leads")
+        .delete()
+        .eq("id", lead.id)
+        .select("id");
+
+      if (removeError) throw removeError;
+
+      if (!removedRows?.length) {
+        throw new Error(
+          "The lead was not removed. Confirm that authenticated admins have DELETE access to the leads table.",
+        );
+      }
+
+      setSelectedLead(null);
+      await queryClient.invalidateQueries({ queryKey: ["admin", "leads"] });
+      toast.success("Lead removed successfully.");
+    } catch (removeError) {
+      toast.error(removeError instanceof Error ? removeError.message : "Could not remove this lead.");
+    } finally {
+      setDeletingLeadId(null);
+    }
+  }
 
   const leadsToday = useMemo(() => {
     const now = new Date();
@@ -744,8 +785,10 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
         lead={selectedLead}
         account={selectedLead ? findAccountForLead(selectedLead, accounts) : undefined}
         open={Boolean(selectedLead)}
+        deleting={selectedLead ? deletingLeadId === selectedLead.id : false}
+        onDelete={(lead) => void removeLead(lead)}
         onOpenChange={(open) => {
-          if (!open) setSelectedLead(null);
+          if (!open && !deletingLeadId) setSelectedLead(null);
         }}
       />
     </>
@@ -919,11 +962,15 @@ function LeadDetailsDialog({
   lead,
   account,
   open,
+  deleting,
+  onDelete,
   onOpenChange,
 }: {
   lead: AdminLeadRow | null;
   account?: AccountProfile | undefined;
   open: boolean;
+  deleting: boolean;
+  onDelete: (lead: AdminLeadRow) => void;
   onOpenChange: (open: boolean) => void;
 }) {
   if (!lead) return null;
@@ -1031,6 +1078,31 @@ function LeadDetailsDialog({
                       </div>
                     </div>
                   ) : null}
+
+                  <div className="border-t border-border pt-4">
+                    <Button
+                      type="button"
+                      variant="destructive"
+                      className="w-full justify-center gap-2"
+                      disabled={deleting}
+                      onClick={() => onDelete(lead)}
+                    >
+                      {deleting ? (
+                        <>
+                          <Loader2 className="size-4 animate-spin" aria-hidden="true" />
+                          Removing…
+                        </>
+                      ) : (
+                        <>
+                          <Trash2 className="size-4" aria-hidden="true" />
+                          Remove lead
+                        </>
+                      )}
+                    </Button>
+                    <p className="mt-2 text-center text-[11px] leading-4 text-muted-foreground">
+                      Permanently removes this submission.
+                    </p>
+                  </div>
                 </div>
               </section>
             </aside>
