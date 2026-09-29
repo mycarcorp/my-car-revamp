@@ -12,6 +12,7 @@ import {
 } from "lucide-react";
 import { LeadForm } from "@/components/LeadForm";
 import { siteSettingsQuery } from "@/lib/queries";
+import contactAgent from "@/assets/contact-agent.jpg";
 
 export const Route = createFileRoute("/contact")({
   head: () => ({
@@ -75,12 +76,16 @@ function ContactPage() {
             </div>
           </div>
 
-          <div className="relative hidden h-36 lg:block" aria-hidden="true">
-            <div className="absolute bottom-0 right-4 flex h-28 w-80 items-center justify-center rounded-[32px] border border-white/10 bg-white/5 shadow-2xl backdrop-blur-sm">
-              <CarFront className="size-24 text-white/90" strokeWidth={1.25} />
-            </div>
-            <div className="absolute right-0 top-0 flex size-16 items-center justify-center rounded-2xl bg-[#F7941D] text-[#07111b] shadow-xl">
-              <Phone className="size-7" />
+          <div className="relative hidden lg:block">
+            <img
+              src={contactAgent}
+              alt="MyCar team member answering a customer call"
+              width={1024}
+              height={768}
+              className="h-56 w-full rounded-3xl border border-white/10 object-cover shadow-2xl"
+            />
+            <div className="absolute -left-4 bottom-4 flex items-center gap-2 rounded-2xl bg-[#F7941D] px-4 py-2.5 text-sm font-semibold text-[#07111b] shadow-xl">
+              <Phone className="size-4" /> {phone}
             </div>
           </div>
         </div>
