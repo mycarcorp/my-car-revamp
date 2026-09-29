@@ -153,14 +153,13 @@ function ContactPage() {
                 <Clock3 className="size-4 text-[#F7941D]" />
                 Business hours
               </div>
+              
               <div className="mt-4 space-y-2 text-sm">
                 <HoursRow label="Monday–Friday" value={hours["mon_fri"] ?? "—"} />
                 <HoursRow label="Saturday" value={hours["sat"] ?? "—"} />
                 <HoursRow label="Sunday" value={hours["sun"] ?? "—"} />
               </div>
-            </div>
-
-            <div className="overflow-hidden rounded-2xl bg-[#07111b] p-5 text-white shadow-sm">
+              <div className="overflow-hidden rounded-2xl bg-[#07111b] p-5 text-white shadow-sm">
               <div className="flex items-center gap-4">
                 <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/10">
                   <CarFront className="size-8 text-[#F7941D]" />
@@ -222,4 +221,3 @@ function HoursRow({ label, value }: { label: string; value: string }) {
       <span className="text-right font-medium text-slate-800">{value}</span>
     </div>
   );
-}
