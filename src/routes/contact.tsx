@@ -1,67 +1,3 @@
-import { createFileRoute } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { CarFront, Clock3, Mail, MapPin, MessageCircle, Phone } from "lucide-react";
-import { LeadForm } from "@/components/LeadForm";
-import { siteSettingsQuery } from "@/lib/queries";
-
-export const Route = createFileRoute("/contact")({
-  head: () => ({
-    meta: [
-      { title: "Contact MyCar — Fredericksburg, VA Used Car Dealer" },
-      {
-        name: "description",
-        content:
-          "Call, email or message MyCar in Fredericksburg, Virginia. Ask about a vehicle, financing, or your trade — we answer every message.",
-      },
-      { property: "og:title", content: "Contact MyCar — Fredericksburg, VA" },
-      {
-        property: "og:description",
-        content: "Call, email or message our Fredericksburg dealership team.",
-      },
-      { property: "og:url", content: "https://mycarcorp.com/contact" },
-      { property: "og:type", content: "website" },
-    ],
-    links: [{ rel: "canonical", href: "https://mycarcorp.com/contact" }],
-  }),
-  component: ContactPage,
-});
-
-function ContactPage() {
-  const { data: settings } = useQuery(siteSettingsQuery());
-  const hours = (settings?.hours ?? {}) as Record<string, string>;
-  const phone = settings?.phone ?? "(540) 426-3322";
-  const email = settings?.email ?? "mycar@mycarcorp.com";
-  const address = settings?.address_line ?? "Fredericksburg, VA";
-  const phoneHref = phone.replace(/\D/g, "");
-  const mapHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
-
-  return (
-    <main className="bg-slate-50/70">
-      <section className="relative isolate overflow-hidden bg-[#07111b]">
-        <img
-          src="https://images.unsplash.com/photo-1503376780353-7e6692767b70?auto=format&fit=crop&w=1800&q=85"
-          alt="Vehicle ready for customers at MyCar"
-          className="absolute inset-0 h-full w-full object-cover object-center opacity-55"
-          width={1800}
-          height={700}
-        />
-        <div className="absolute inset-0 bg-gradient-to-r from-[#07111b] via-[#07111b]/90 to-[#07111b]/30" />
-
-        <div className="relative mx-auto max-w-7xl px-4 py-10 sm:px-6 sm:py-12 lg:px-8">
-          <div className="max-w-2xl">
-            <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-xs font-semibold uppercase tracking-[0.16em] text-white backdrop-blur-sm">
-              <CarFront className="size-4 text-[#F7941D]" />
-              MyCar Fredericksburg
-            </div>
-            <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
-              Let&apos;s talk about your next car
-            </h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-slate-200 sm:text-base">
-              Ask about a vehicle, financing, selling your car, or scheduling a visit. Our local team will point you in
-              the right direction.
-            </p>
-          </div>
-        </div>
       </section>
 
       <section className="mx-auto max-w-7xl px-4 py-6 sm:px-6 lg:px-8 lg:py-8">
@@ -94,3 +30,96 @@ function ContactPage() {
                 icon={Mail}
                 label="Email us"
                 value={email}
+                href={`mailto:${email}`}
+                accent="bg-[#EDBA2B]/15 text-[#A87500]"
+              />
+              <ContactAction
+                icon={MapPin}
+                label="Visit us"
+                value={address}
+                href={mapHref}
+                external
+                accent="bg-[#D25B4C]/12 text-[#B44538]"
+              />
+
+              <div className="rounded-xl border border-slate-200 bg-slate-50 p-4">
+                <div className="flex items-center gap-3">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-lg bg-slate-200/70 text-slate-700">
+                    <Clock3 className="size-[18px]" />
+                  </span>
+                  <div>
+                    <p className="text-xs font-medium text-slate-500">Business hours</p>
+                    <p className="mt-0.5 text-sm font-semibold text-slate-900">
+                      Mon–Fri: {hours["mon_fri"] ?? "—"}
+                    </p>
+                  </div>
+                </div>
+                <div className="mt-3 space-y-1 border-t border-slate-200 pt-3 text-xs text-slate-600">
+                  <p>Saturday: {hours["sat"] ?? "—"}</p>
+                  <p>Sunday: {hours["sun"] ?? "—"}</p>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div className="rounded-2xl border border-slate-200 bg-white shadow-sm">
+            <div className="flex items-start gap-3 border-b border-slate-200 px-5 py-4 sm:px-6">
+              <span className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#F7941D]/15 text-[#D96F00]">
+                <MessageCircle className="size-5" />
+              </span>
+              <div>
+                <h2 className="font-display text-xl font-bold text-slate-950">Send us a message</h2>
+                <p className="mt-1 text-sm text-slate-600">Tell us what you need and we&apos;ll follow up during business hours.</p>
+              </div>
+            </div>
+
+            <div className="p-4 sm:p-6 [&_button[type=submit]]:h-11 [&_button[type=submit]]:w-full [&_button[type=submit]]:bg-[#F7941D] [&_button[type=submit]]:font-semibold [&_button[type=submit]]:text-black [&_button[type=submit]]:hover:bg-[#E88612] [&_input]:h-10 [&_textarea]:min-h-[96px]">
+              <LeadForm
+                leadType="contact"
+                submitLabel="Send message"
+                messageLabel="How can we help?"
+                successTitle="Message sent"
+                successBody="We reply during business hours, usually within a couple of hours."
+              />
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ContactAction({
+  icon: Icon,
+  label,
+  value,
+  href,
+  external = false,
+  accent,
+}: {
+  icon: typeof Phone;
+  label: string;
+  value: string;
+  href: string;
+  external?: boolean;
+  accent: string;
+}) {
+  return (
+    <a
+      href={href}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noreferrer" : undefined}
+      className="group flex min-w-0 items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-4 transition hover:-translate-y-0.5 hover:border-[#F7941D]/60 hover:bg-white hover:shadow-sm"
+    >
+      <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${accent}`}>
+        <Icon className="size-[18px]" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-xs font-medium text-slate-500">{label}</span>
+        <span className="mt-0.5 block truncate text-sm font-semibold text-slate-900 group-hover:text-[#C96500]">
+          {value}
+        </span>
+      </span>
+    </a>
+  );
+}
