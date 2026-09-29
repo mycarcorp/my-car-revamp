@@ -14,7 +14,12 @@ import {
 } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
+import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { Textarea } from "@/components/ui/textarea";
+import { LeadForm } from "@/components/LeadForm";
 import { VehicleCard } from "@/components/VehicleCard";
 import { useAuth } from "@/hooks/useAuth";
 import { ctaButtonClass } from "@/lib/ui";
@@ -69,6 +74,36 @@ export const Route = createFileRoute("/")({
 
 const BODY_STYLES = ["SUV", "Sedan", "Truck", "Coupe", "Hatchback", "Convertible", "Minivan", "Wagon"];
 
+type CarFinderForm = {
+  fullName: string;
+  email: string;
+  phone: string;
+  make: string;
+  model: string;
+  minYear: string;
+  maxYear: string;
+  bodyStyle: string;
+  maxBudget: string;
+  financingNeeded: string;
+  features: string;
+  message: string;
+};
+
+const EMPTY_CAR_FINDER_FORM: CarFinderForm = {
+  fullName: "",
+  email: "",
+  phone: "",
+  make: "",
+  model: "",
+  minYear: "",
+  maxYear: "",
+  bodyStyle: "",
+  maxBudget: "",
+  financingNeeded: "unsure",
+  features: "",
+  message: "",
+};
+
 const makeVehicleImages: Record<string, string> = {
   tesla: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
   chevrolet:
@@ -118,6 +153,8 @@ function Home() {
   const { data: facets, isLoading: facetsLoading } = useQuery(facetsQuery());
   const { data: areas } = useQuery(serviceAreasQuery());
   const [term, setTerm] = useState("");
+  const [carFinderOpen, setCarFinderOpen] = useState(false);
+  const [carFinder, setCarFinder] = useState<CarFinderForm>(EMPTY_CAR_FINDER_FORM);
   const [marqueePaused, setMarqueePaused] = useState(false);
   const [reduceMotion, setReduceMotion] = useState(false);
   const badges = (settings?.trust_badges ?? []) as { label: string; enabled: boolean }[];
@@ -127,6 +164,10 @@ function Home() {
       .split(/\s+/)[0] ||
     user?.email?.split("@")[0] ||
     "there";
+
+  const updateCarFinder = (field: keyof CarFinderForm, value: string) => {
+    setCarFinder((current) => ({ ...current, [field]: value }));
+  };
 
   useEffect(() => {
     const media = window.matchMedia("(prefers-reduced-motion: reduce)");
@@ -355,8 +396,8 @@ function Home() {
                 <Button asChild variant="outline">
                   <Link to="/search">View all inventory</Link>
                 </Button>
-                <Button asChild className={ctaButtonClass}>
-                  <Link to="/contact">Use Car Finder</Link>
+                <Button type="button" className={ctaButtonClass} onClick={() => setCarFinderOpen(true)}>
+                  Use Car Finder
                 </Button>
               </div>
             </div>
@@ -429,8 +470,8 @@ function Home() {
               <Button asChild variant="outline">
                 <Link to="/search">View all inventory</Link>
               </Button>
-              <Button asChild className={ctaButtonClass}>
-                <Link to="/contact">Use Car Finder</Link>
+              <Button type="button" className={ctaButtonClass} onClick={() => setCarFinderOpen(true)}>
+                Use Car Finder
               </Button>
             </div>
           </div>
@@ -612,6 +653,222 @@ function Home() {
           ))}
         </div>
       </section>
+
+      <Dialog open={carFinderOpen} onOpenChange={setCarFinderOpen}>
+        <DialogContent className="max-h-[92vh] overflow-y-auto p-0 sm:max-w-3xl">
+          <DialogHeader className="border-b border-border px-5 py-5 text-left sm:px-6">
+            <div className="flex size-11 items-center justify-center rounded-full bg-[#F7941D]/15">
+              <Search className="size-5 text-[#D96F00]" />
+            </div>
+            <DialogTitle className="pt-2 font-display text-2xl">Let us find your next vehicle</DialogTitle>
+            <DialogDescription className="max-w-2xl leading-6">
+              Tell us what you&apos;re looking for. Inventory changes often, and our team can contact you when we find a
+              suitable match.
+            </DialogDescription>
+          </DialogHeader>
+
+          <div className="px-5 pb-6 sm:px-6">
+            <LeadForm
+              leadType="contact"
+              submitLabel="Send My Car Finder Request"
+              successTitle="Your Car Finder request was received"
+              successBody="Our team will review your preferences and contact you when we find a suitable match."
+              messageLabel="Anything else we should know?"
+              collectDetails={() => ({
+                request_type: "car_finder",
+                source: "MyCar homepage — Car Finder",
+                full_name: carFinder.fullName,
+                customer_name: carFinder.fullName,
+                email: carFinder.email,
+                customer_email: carFinder.email,
+                phone: carFinder.phone,
+                customer_phone: carFinder.phone,
+                preferred_make: carFinder.make,
+                preferred_model: carFinder.model,
+                preferred_year_min: carFinder.minYear,
+                preferred_year_max: carFinder.maxYear,
+                preferred_body_style: carFinder.bodyStyle,
+                maximum_budget: carFinder.maxBudget,
+                financing_needed: carFinder.financingNeeded,
+                must_have_features: carFinder.features,
+                message: carFinder.message,
+              })}
+            >
+              <div className="space-y-6 pt-5">
+                <section>
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-foreground">Your contact information</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      We&apos;ll only use this to follow up about your request.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="car-finder-name">Full name</Label>
+                      <Input
+                        id="car-finder-name"
+                        value={carFinder.fullName}
+                        onChange={(event) => updateCarFinder("fullName", event.target.value)}
+                        placeholder="First and last name"
+                        autoComplete="name"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="car-finder-email">Email</Label>
+                      <Input
+                        id="car-finder-email"
+                        type="email"
+                        value={carFinder.email}
+                        onChange={(event) => updateCarFinder("email", event.target.value)}
+                        placeholder="name@example.com"
+                        autoComplete="email"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="car-finder-phone">Phone</Label>
+                      <Input
+                        id="car-finder-phone"
+                        type="tel"
+                        value={carFinder.phone}
+                        onChange={(event) => updateCarFinder("phone", event.target.value)}
+                        placeholder="(540) 000-0000"
+                        autoComplete="tel"
+                        required
+                      />
+                    </div>
+                  </div>
+                </section>
+
+                <section className="border-t border-border pt-5">
+                  <div className="mb-4">
+                    <h3 className="text-sm font-semibold text-foreground">Vehicle preferences</h3>
+                    <p className="mt-1 text-xs text-muted-foreground">
+                      Provide what you know—you can leave optional fields blank.
+                    </p>
+                  </div>
+                  <div className="grid gap-4 sm:grid-cols-2">
+                    <div className="space-y-2">
+                      <Label htmlFor="car-finder-make">Preferred make</Label>
+                      <Input
+                        id="car-finder-make"
+                        value={carFinder.make}
+                        onChange={(event) => updateCarFinder("make", event.target.value)}
+                        placeholder="Example: Toyota"
+                        required
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="car-finder-model">Preferred model</Label>
+                      <Input
+                        id="car-finder-model"
+                        value={carFinder.model}
+                        onChange={(event) => updateCarFinder("model", event.target.value)}
+                        placeholder="Example: RAV4"
+                      />
+                    </div>
+                    <div className="grid grid-cols-2 gap-3">
+                      <div className="space-y-2">
+                        <Label htmlFor="car-finder-min-year">Minimum year</Label>
+                        <Input
+                          id="car-finder-min-year"
+                          type="number"
+                          inputMode="numeric"
+                          min="1980"
+                          max="2030"
+                          value={carFinder.minYear}
+                          onChange={(event) => updateCarFinder("minYear", event.target.value)}
+                          placeholder="2018"
+                        />
+                      </div>
+                      <div className="space-y-2">
+                        <Label htmlFor="car-finder-max-year">Maximum year</Label>
+                        <Input
+                          id="car-finder-max-year"
+                          type="number"
+                          inputMode="numeric"
+                          min="1980"
+                          max="2030"
+                          value={carFinder.maxYear}
+                          onChange={(event) => updateCarFinder("maxYear", event.target.value)}
+                          placeholder="2026"
+                        />
+                      </div>
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Body style</Label>
+                      <Select
+                        value={carFinder.bodyStyle}
+                        onValueChange={(value) => updateCarFinder("bodyStyle", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue placeholder="Select a body style" />
+                        </SelectTrigger>
+                        <SelectContent>
+                          {BODY_STYLES.map((style) => (
+                            <SelectItem key={style} value={style}>
+                              {style}
+                            </SelectItem>
+                          ))}
+                          <SelectItem value="Other">Other / Not sure</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2">
+                      <Label htmlFor="car-finder-budget">Maximum budget</Label>
+                      <Input
+                        id="car-finder-budget"
+                        type="number"
+                        inputMode="numeric"
+                        min="0"
+                        value={carFinder.maxBudget}
+                        onChange={(event) => updateCarFinder("maxBudget", event.target.value)}
+                        placeholder="Example: 25000"
+                      />
+                    </div>
+                    <div className="space-y-2">
+                      <Label>Do you need financing?</Label>
+                      <Select
+                        value={carFinder.financingNeeded}
+                        onValueChange={(value) => updateCarFinder("financingNeeded", value)}
+                      >
+                        <SelectTrigger>
+                          <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                          <SelectItem value="yes">Yes</SelectItem>
+                          <SelectItem value="no">No</SelectItem>
+                          <SelectItem value="unsure">Not sure yet</SelectItem>
+                        </SelectContent>
+                      </Select>
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="car-finder-features">Must-have features</Label>
+                      <Input
+                        id="car-finder-features"
+                        value={carFinder.features}
+                        onChange={(event) => updateCarFinder("features", event.target.value)}
+                        placeholder="Example: AWD, third-row seating, backup camera"
+                      />
+                    </div>
+                    <div className="space-y-2 sm:col-span-2">
+                      <Label htmlFor="car-finder-message">Additional notes</Label>
+                      <Textarea
+                        id="car-finder-message"
+                        value={carFinder.message}
+                        onChange={(event) => updateCarFinder("message", event.target.value)}
+                        placeholder="Tell us about mileage, color, monthly payment, or anything else that matters."
+                        rows={4}
+                      />
+                    </div>
+                  </div>
+                </section>
+              </div>
+            </LeadForm>
+          </div>
+        </DialogContent>
+      </Dialog>
 
       {/* FOOTER */}
     </>
