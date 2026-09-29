@@ -114,8 +114,8 @@ function getMakeVehicleImage(make: string) {
 function Home() {
   const { user } = useAuth();
   const { data: settings } = useQuery(siteSettingsQuery());
-  const { data: featured } = useQuery(featuredVehiclesQuery());
-  const { data: facets } = useQuery(facetsQuery());
+  const { data: featured, isLoading: featuredLoading } = useQuery(featuredVehiclesQuery());
+  const { data: facets, isLoading: facetsLoading } = useQuery(facetsQuery());
   const { data: areas } = useQuery(serviceAreasQuery());
   const [term, setTerm] = useState("");
   const [marqueePaused, setMarqueePaused] = useState(false);
@@ -281,10 +281,48 @@ function Home() {
 
       {/* BODY STYLES */}
       <section className="mx-auto max-w-7xl px-4 pb-14 mt-6">
-        <h2 className="font-display text-2xl font-bold">Popular vehicle styles</h2>
+        <div className="flex flex-wrap items-end justify-between gap-3">
+          <div>
+            <h2 className="font-display text-2xl font-bold">Popular vehicle styles</h2>
+            <p className="mt-1 text-sm text-muted-foreground">
+              Counts reflect vehicles currently available in our live inventory.
+            </p>
+          </div>
+          <Link to="/search" className="text-sm font-semibold text-primary hover:underline">
+            View all inventory
+          </Link>
+        </div>
         <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
           {BODY_STYLES.map((style) => {
             const count = facets?.bodies.find((b) => b.value === style)?.count ?? 0;
+
+            if (facetsLoading || !facets) {
+              return (
+                <div
+                  key={style}
+                  className="flex min-h-[126px] animate-pulse flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card p-4 text-center"
+                  aria-label={`Checking ${style} inventory`}
+                >
+                  <div className="size-6 rounded bg-muted" />
+                  <span className="text-sm font-semibold">{style}</span>
+                  <span className="text-xs text-muted-foreground">Checking stock…</span>
+                </div>
+              );
+            }
+
+            if (count === 0) {
+              return (
+                <div
+                  key={style}
+                  className="flex min-h-[126px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 p-4 text-center"
+                >
+                  <Car className="size-6 text-muted-foreground" />
+                  <span className="text-sm font-semibold">{style}</span>
+                  <span className="text-xs leading-4 text-muted-foreground">None currently</span>
+                </div>
+              );
+            }
+
             return (
               <Link
                 key={style}
@@ -294,11 +332,35 @@ function Home() {
               >
                 <Car className="size-6 text-primary" />
                 <span className="text-sm font-semibold">{style}</span>
-                <span className="text-xs text-muted-foreground">{count} available</span>
+                <span className="text-xs text-muted-foreground">
+                  {count.toLocaleString()} {count === 1 ? "vehicle" : "vehicles"}
+                </span>
               </Link>
             );
           })}
         </div>
+
+        {!facetsLoading &&
+          facets &&
+          BODY_STYLES.some((style) => (facets.bodies.find((body) => body.value === style)?.count ?? 0) === 0) && (
+            <div className="mt-5 flex flex-col gap-4 rounded-xl border border-border bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <h3 className="font-display text-base font-bold">Don&apos;t see the vehicle style you need?</h3>
+                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
+                  Inventory changes often. Browse everything currently available or tell us what you&apos;re looking for
+                  and our team will help you find it.
+                </p>
+              </div>
+              <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
+                <Button asChild variant="outline">
+                  <Link to="/search">View all inventory</Link>
+                </Button>
+                <Button asChild className={ctaButtonClass}>
+                  <Link to="/contact">Use Car Finder</Link>
+                </Button>
+              </div>
+            </div>
+          )}
       </section>
 
       {/* DUAL CTA */}
@@ -339,22 +401,38 @@ function Home() {
             View all inventory
           </Link>
         </div>
-        {featured && featured.length > 0 ? (
+        {featuredLoading ? (
+          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4" aria-label="Loading inventory">
+            {Array.from({ length: 4 }).map((_, index) => (
+              <div key={index} className="h-[340px] animate-pulse rounded-xl bg-muted" />
+            ))}
+          </div>
+        ) : featured && featured.length > 0 ? (
           <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {featured.map((v) => (
               <VehicleCard key={v.id} vehicle={v} settings={settings} />
             ))}
           </div>
         ) : (
-          <div className="mt-6 rounded-xl border border-dashed border-border p-10 text-center">
-            <p className="font-medium">Inventory is being loaded.</p>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Our current stock list is being imported. Call {settings?.phone ?? "(540) 426-3322"} and we'll tell you
-              exactly what's on the lot today.
+          <div className="mt-6 rounded-xl border border-dashed border-border bg-surface/40 px-6 py-10 text-center">
+            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
+              <Car className="size-6 text-muted-foreground" />
+            </div>
+            <h3 className="mt-4 font-display text-lg font-bold">
+              {facets?.total === 0 ? "No vehicles currently available" : "Fresh arrivals are being updated"}
+            </h3>
+            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
+              Inventory changes frequently. Browse the complete inventory or use Car Finder to tell us exactly what
+              you&apos;re looking for, and our team will help with the next step.
             </p>
-            <Button asChild className={`${ctaButtonClass} mt-4`}>
-              <Link to="/contact">Ask about a specific vehicle</Link>
-            </Button>
+            <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
+              <Button asChild variant="outline">
+                <Link to="/search">View all inventory</Link>
+              </Button>
+              <Button asChild className={ctaButtonClass}>
+                <Link to="/contact">Use Car Finder</Link>
+              </Button>
+            </div>
           </div>
         )}
       </section>
