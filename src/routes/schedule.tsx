@@ -26,6 +26,8 @@ type AppointmentType = "test_drive" | "trade_appraisal" | "financing" | "general
 
 type ScheduleSearch = {
   vehicle?: string | undefined;
+  stock?: string | undefined;
+  vin?: string | undefined;
   type?: AppointmentType | undefined;
 };
 
@@ -35,6 +37,8 @@ const isAppointmentType = (value: unknown): value is AppointmentType =>
 export const Route = createFileRoute("/schedule")({
   validateSearch: (raw: Record<string, unknown>): ScheduleSearch => ({
     vehicle: typeof raw["vehicle"] === "string" && raw["vehicle"].trim() ? raw["vehicle"].trim() : undefined,
+    stock: typeof raw["stock"] === "string" && raw["stock"].trim() ? raw["stock"].trim() : undefined,
+    vin: typeof raw["vin"] === "string" && raw["vin"].trim() ? raw["vin"].trim() : undefined,
     type: isAppointmentType(raw["type"]) ? raw["type"] : undefined,
   }),
 
@@ -119,6 +123,34 @@ const APPOINTMENT_OPTIONS: {
   },
 ];
 
+type ScheduleTrackingEvent =
+  "schedule_page_view" | "appointment_type_selected" | "appointment_form_started" | "appointment_vehicle_selected";
+
+function trackScheduleEvent(event: ScheduleTrackingEvent, properties: Record<string, unknown> = {}) {
+  if (typeof window === "undefined") return;
+
+  const payload = {
+    event,
+    page_path: window.location.pathname,
+    page_url: window.location.href,
+    ...properties,
+  };
+
+  window.dispatchEvent(new CustomEvent("mycar:analytics", { detail: payload }));
+
+  const analyticsWindow = window as Window & {
+    dataLayer?: Array<Record<string, unknown>>;
+  };
+
+  analyticsWindow.dataLayer?.push(payload);
+}
+
+function displayHours(value: unknown) {
+  const text = String(value ?? "").trim();
+
+  return text && text !== "—" ? text : "Call to confirm";
+}
+
 function SchedulePage() {
   const params = Route.useSearch();
   const { data: settings } = useQuery(siteSettingsQuery());
@@ -134,10 +166,12 @@ function SchedulePage() {
   const [type, setType] = useState<AppointmentType>(params.type ?? "test_drive");
   const [date, setDate] = useState("");
   const [time, setTime] = useState(TIMES[0]);
-  const [selectedVehicleId, setSelectedVehicleId] = useState(params.vehicle ?? "");
+  const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [vehiclePickerOpen, setVehiclePickerOpen] = useState(false);
   const [vehicleSearch, setVehicleSearch] = useState("");
   const autoScrolledVehicleRef = useRef(false);
+  const formStartedRef = useRef(false);
+  const pageTrackedRef = useRef(false);
 
   const selectedVehicle = useMemo(
     () => inventory.find((item) => item.id === selectedVehicleId),
@@ -165,11 +199,45 @@ function SchedulePage() {
   }, [params.type]);
 
   useEffect(() => {
-    if (params.vehicle) setSelectedVehicleId(params.vehicle);
-  }, [params.vehicle]);
+    if (pageTrackedRef.current) return;
+
+    pageTrackedRef.current = true;
+    trackScheduleEvent("schedule_page_view", {
+      appointment_type: params.type ?? "test_drive",
+      has_vehicle_parameter: Boolean(params.vehicle || params.stock || params.vin),
+    });
+  }, [params.stock, params.type, params.vehicle, params.vin]);
 
   useEffect(() => {
-    if (!params.vehicle || !selectedVehicle || autoScrolledVehicleRef.current) return;
+    const requestedVehicle = params.vehicle?.trim().toLowerCase();
+    const requestedStock = params.stock?.trim().toLowerCase();
+    const requestedVin = params.vin?.trim().toLowerCase();
+
+    if (!requestedVehicle && !requestedStock && !requestedVin) return;
+
+    const match = inventory.find((item) => {
+      const id = String(item.id ?? "")
+        .trim()
+        .toLowerCase();
+      const stock = String(item.stock_number ?? "")
+        .trim()
+        .toLowerCase();
+      const vin = String(item.vin ?? "")
+        .trim()
+        .toLowerCase();
+
+      return (
+        (requestedVehicle && (id === requestedVehicle || stock === requestedVehicle || vin === requestedVehicle)) ||
+        (requestedStock && stock === requestedStock) ||
+        (requestedVin && vin === requestedVin)
+      );
+    });
+
+    if (match) setSelectedVehicleId(match.id);
+  }, [inventory, params.stock, params.vehicle, params.vin]);
+
+  useEffect(() => {
+    if ((!params.vehicle && !params.stock && !params.vin) || !selectedVehicle || autoScrolledVehicleRef.current) return;
 
     autoScrolledVehicleRef.current = true;
 
@@ -181,7 +249,7 @@ function SchedulePage() {
     }, 150);
 
     return () => window.clearTimeout(timer);
-  }, [params.vehicle, selectedVehicle]);
+  }, [params.stock, params.vehicle, params.vin, selectedVehicle]);
 
   const today = new Date();
   const localToday = new Date(today.getTime() - today.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
@@ -195,6 +263,9 @@ function SchedulePage() {
 
   const chooseAppointment = (appointmentType: AppointmentType) => {
     setType(appointmentType);
+    trackScheduleEvent("appointment_type_selected", {
+      appointment_type: appointmentType,
+    });
 
     window.setTimeout(() => {
       scrollToForm();
@@ -205,6 +276,23 @@ function SchedulePage() {
     setSelectedVehicleId(item.id);
     setVehiclePickerOpen(false);
     setVehicleSearch("");
+    trackScheduleEvent("appointment_vehicle_selected", {
+      vehicle_id: item.id,
+      vehicle_vin: item.vin ?? "",
+      vehicle_stock_number: item.stock_number ?? "",
+      appointment_type: type,
+    });
+  };
+
+  const markFormStarted = () => {
+    if (formStartedRef.current) return;
+
+    formStartedRef.current = true;
+    trackScheduleEvent("appointment_form_started", {
+      appointment_type: type,
+      vehicle_id: selectedVehicle?.id ?? "",
+      vehicle_stock_number: selectedVehicle?.stock_number ?? "",
+    });
   };
 
   const openVehiclePicker = () => {
@@ -418,17 +506,17 @@ function SchedulePage() {
               <ul className="mt-6 space-y-4 text-sm text-slate-300">
                 <li className="flex items-center justify-between gap-6 border-b border-white/10 pb-3">
                   <span>Monday – Friday</span>
-                  <span className="font-semibold text-white">{hours["mon_fri"] ?? "—"}</span>
+                  <span className="font-semibold text-white">{displayHours(hours["mon_fri"])}</span>
                 </li>
 
                 <li className="flex items-center justify-between gap-6 border-b border-white/10 pb-3">
                   <span>Saturday</span>
-                  <span className="font-semibold text-white">{hours["sat"] ?? "—"}</span>
+                  <span className="font-semibold text-white">{displayHours(hours["sat"])}</span>
                 </li>
 
                 <li className="flex items-center justify-between gap-6">
                   <span>Sunday</span>
-                  <span className="font-semibold text-white">{hours["sun"] ?? "—"}</span>
+                  <span className="font-semibold text-white">{displayHours(hours["sun"])}</span>
                 </li>
               </ul>
 
@@ -541,6 +629,8 @@ function SchedulePage() {
 
             {/* FORM */}
             <div
+              onFocusCapture={markFormStarted}
+              onPointerDown={markFormStarted}
               className="
                 order-1 rounded-2xl border border-border bg-card p-6 shadow-sm
                 lg:order-2 lg:p-8
@@ -560,7 +650,7 @@ function SchedulePage() {
                 leadType="appointment"
                 submitLabel="Request Appointment"
                 successTitle="Appointment requested"
-                successBody="We'll confirm your time by phone or email shortly."
+                successBody="Your request was received. Our team will confirm the final date and time by phone or email shortly."
                 messageLabel="Anything we should prepare?"
                 vehicleId={selectedVehicle?.id ?? null}
                 vehicle={
@@ -578,8 +668,14 @@ function SchedulePage() {
                 }
                 collectDetails={() => ({
                   appointment_type: type,
+                  appointment_stage: "requested",
                   preferred_date: date,
                   preferred_time: time,
+                  request_source:
+                    params.vehicle || params.stock || params.vin ? "vehicle_detail_page" : "schedule_page",
+                  requested_vehicle_parameter: params.vehicle ?? "",
+                  requested_stock_parameter: params.stock ?? "",
+                  requested_vin_parameter: params.vin ?? "",
                   vehicle,
                   vehicle_id: selectedVehicle?.id ?? "",
                   vehicle_vin: selectedVehicle?.vin ?? "",
@@ -594,7 +690,17 @@ function SchedulePage() {
                   <div className="space-y-2">
                     <Label htmlFor="appointment-type">Appointment type</Label>
 
-                    <Select value={type} onValueChange={(value) => setType(value as AppointmentType)}>
+                    <Select
+                      value={type}
+                      onValueChange={(value) => {
+                        const nextType = value as AppointmentType;
+                        setType(nextType);
+                        trackScheduleEvent("appointment_type_selected", {
+                          appointment_type: nextType,
+                          source: "appointment_form",
+                        });
+                      }}
+                    >
                       <SelectTrigger id="appointment-type">
                         <SelectValue />
                       </SelectTrigger>
