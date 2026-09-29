@@ -3,7 +3,7 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { ctaButtonClass } from "@/lib/ui";
 import { formatDate } from "@/lib/format";
 import { publicBlogList } from "@/lib/legacy-blog.functions";
-import { publicAutoseoList } from "@/lib/autoseo-blog.functions";
+import { publicAutoseoList, type AutoseoPost } from "@/lib/autoseo-blog.functions";
 
 type Card = {
   key: string;
@@ -21,27 +21,274 @@ const PAGE = 12;
 
 const trim = (s: string | null, n = 160) => (s ? (s.length > n ? `${s.slice(0, n).trimEnd()}…` : s) : null);
 
-const slugifyTopic = (value: string) =>
-  value
+/* -------------------------------------------------------------------------- */
+/* AutoSEO intent protection                                                  */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * These words usually do not materially change the primary organic-search
+ * intent of an article.
+ *
+ * Meaningful financing modifiers such as:
+ *
+ * - pre approval
+ * - pre qualification
+ * - bad credit
+ * - interest rates
+ * - down payment
+ *
+ * are intentionally NOT removed.
+ */
+const INTENT_STOP_WORDS = new Set([
+  "a",
+  "an",
+  "and",
+  "are",
+  "at",
+  "be",
+  "best",
+  "by",
+  "for",
+  "from",
+  "guide",
+  "how",
+  "in",
+  "is",
+  "it",
+  "my",
+  "of",
+  "on",
+  "the",
+  "to",
+  "what",
+  "when",
+  "where",
+  "why",
+  "with",
+  "your",
+  "you",
+
+  // Local modifiers.
+  "fredericksburg",
+  "virginia",
+  "va",
+]);
+
+const INTENT_SYNONYMS: Record<string, string> = {
+  automobiles: "car",
+  automobile: "car",
+  cars: "car",
+  vehicles: "vehicle",
+  loans: "loan",
+  rates: "rate",
+  payments: "payment",
+  dealerships: "dealership",
+  dealers: "dealer",
+};
+
+function normalizeIntentText(value: string): string {
+  return value
     .toLowerCase()
-    .trim()
-    .replace(/[^a-z0-9]+/g, "-")
-    .replace(/^-+|-+$/g, "");
+    .replace(/\bpre[\s-]?approved\b/g, "pre approval")
+    .replace(/\bpre[\s-]?approve\b/g, "pre approval")
+    .replace(/\bpre[\s-]?approval\b/g, "pre approval")
+    .replace(/\bpre[\s-]?qualified\b/g, "pre qualification")
+    .replace(/\bpre[\s-]?qualify\b/g, "pre qualification")
+    .replace(/\bpre[\s-]?qualification\b/g, "pre qualification")
+    .replace(/&/g, " and ")
+    .replace(/[^a-z0-9]+/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function intentTokens(value: string): string[] {
+  const normalized = normalizeIntentText(value);
+
+  if (!normalized) return [];
+
+  return normalized
+    .split(" ")
+    .map((token) => INTENT_SYNONYMS[token] ?? token)
+    .filter((token) => token.length > 1 && !INTENT_STOP_WORDS.has(token));
+}
+
+function normalizePrimaryIntent(value: string): string {
+  return Array.from(new Set(intentTokens(value)))
+    .sort()
+    .join(" ");
+}
+
+/**
+ * AutoSEO keyword data is preferred because it represents the target query.
+ * The title is used as the fallback.
+ */
+function derivePrimaryIntent(post: { title: string; meta_keywords?: string | null; tags?: string | null }): string {
+  const keywords = String(post.meta_keywords ?? "").trim();
+
+  if (keywords) {
+    const firstKeyword =
+      keywords
+        .split(",")
+        .map((item) => item.trim())
+        .find(Boolean) ?? keywords;
+
+    const normalizedKeyword = normalizePrimaryIntent(firstKeyword);
+
+    if (normalizedKeyword) {
+      return normalizedKeyword;
+    }
+  }
+
+  const normalizedTitle = normalizePrimaryIntent(post.title);
+
+  if (normalizedTitle) {
+    return normalizedTitle;
+  }
+
+  return normalizePrimaryIntent(post.tags ?? "");
+}
+
+function intentSimilarity(a: string, b: string): number {
+  if (!a || !b) return 0;
+
+  if (a === b) return 1;
+
+  const setA = new Set(a.split(" ").filter(Boolean));
+
+  const setB = new Set(b.split(" ").filter(Boolean));
+
+  if (!setA.size || !setB.size) {
+    return 0;
+  }
+
+  let intersection = 0;
+
+  for (const token of setA) {
+    if (setB.has(token)) {
+      intersection += 1;
+    }
+  }
+
+  const union = new Set([...setA, ...setB]).size;
+
+  return union ? intersection / union : 0;
+}
+
+/**
+ * High threshold on purpose.
+ *
+ * Broadly related financing articles should remain separate. We only remove
+ * an article from the public index when it very strongly overlaps another
+ * AutoSEO article's primary intent.
+ */
+function intentsOverlap(a: string, b: string): boolean {
+  if (!a || !b) return false;
+
+  if (a === b) return true;
+
+  return intentSimilarity(a, b) >= 0.82;
+}
+
+function articleTimestamp(article: AutoseoPost): number {
+  const value = article.published_at ?? article.created_at ?? "";
+
+  const time = value ? new Date(value).getTime() : 0;
+
+  return Number.isFinite(time) ? time : 0;
+}
+
+/**
+ * Keep one AutoSEO article per primary search intent.
+ *
+ * The oldest established URL owns the intent. This matches the behavior in
+ * the individual /blog/$slug route and sitemap.
+ *
+ * Original incoming order is restored after ownership is determined so the
+ * blog page can still sort cards normally afterward.
+ */
+function dedupeAutoseoByIntent(articles: AutoseoPost[]): AutoseoPost[] {
+  const chronological = [...articles].sort((a, b) => {
+    const aTime = articleTimestamp(a);
+
+    const bTime = articleTimestamp(b);
+
+    if (aTime !== bTime) {
+      return aTime - bTime;
+    }
+
+    return a.id - b.id;
+  });
+
+  const owners: Array<{
+    id: number;
+    intent: string;
+  }> = [];
+
+  for (const article of chronological) {
+    const intent = derivePrimaryIntent(article);
+
+    /**
+     * If an article does not have enough information to determine an intent,
+     * keep it. We never want uncertainty to accidentally hide valid content.
+     */
+    if (!intent) {
+      owners.push({
+        id: article.id,
+        intent: `__slug:${article.slug}`,
+      });
+
+      continue;
+    }
+
+    const existingOwner = owners.find(
+      (owner) => !owner.intent.startsWith("__slug:") && intentsOverlap(intent, owner.intent),
+    );
+
+    if (!existingOwner) {
+      owners.push({
+        id: article.id,
+        intent,
+      });
+    }
+  }
+
+  const ownerIds = new Set(owners.map((owner) => owner.id));
+
+  return articles.filter((article) => ownerIds.has(article.id));
+}
+
+/* -------------------------------------------------------------------------- */
+/* Route                                                                      */
+/* -------------------------------------------------------------------------- */
 
 export const Route = createFileRoute("/blog/")({
   loader: async () => {
-    const [posts, articles] = await Promise.all([publicBlogList(), publicAutoseoList()]);
+    const [posts, rawArticles] = await Promise.all([publicBlogList(), publicAutoseoList()]);
+
+    /**
+     * Remove newer AutoSEO articles that strongly overlap an already
+     * established AutoSEO search intent.
+     *
+     * Legacy/manual posts remain untouched.
+     */
+    const articles = dedupeAutoseoByIntent(rawArticles);
 
     const cards: Card[] = [
       ...posts.map((p) => ({
         key: `mc-${p.id}`,
         slug: p.slug,
         title: p.title,
+
         excerpt: trim(p.excerpt ?? p.meta_description ?? null),
+
         image: p.image_url ?? null,
+
         date: p.published_at ?? p.created_at ?? null,
+
         readTime: p.read_time ?? null,
+
         category: p.category ?? null,
+
         featured: Boolean(p.is_featured),
       })),
 
@@ -49,16 +296,24 @@ export const Route = createFileRoute("/blog/")({
         key: `as-${a.id}`,
         slug: a.slug,
         title: a.title,
+
         excerpt: trim(a.meta_description),
+
         image: a.hero_image_url,
+
         date: a.published_at ?? a.created_at,
+
         readTime: a.reading_time,
+
         category: (a.tags ?? "").split(",")[0]?.trim() || null,
+
         featured: false,
       })),
     ].sort((a, b) => new Date(b.date ?? 0).getTime() - new Date(a.date ?? 0).getTime());
 
-    return { cards };
+    return {
+      cards,
+    };
   },
 
   errorComponent: () => (
@@ -77,7 +332,9 @@ export const Route = createFileRoute("/blog/")({
 
   pendingComponent: () => (
     <div className="mx-auto grid max-w-6xl gap-6 px-4 py-16 sm:grid-cols-2 sm:px-8 lg:grid-cols-3 lg:px-12">
-      {Array.from({ length: 6 }).map((_, i) => (
+      {Array.from({
+        length: 6,
+      }).map((_, i) => (
         <div key={i} className="animate-pulse overflow-hidden rounded-xl border border-border bg-card">
           <div className="aspect-[16/9] w-full bg-muted" />
 
@@ -136,6 +393,10 @@ export const Route = createFileRoute("/blog/")({
   component: BlogIndex,
 });
 
+/* -------------------------------------------------------------------------- */
+/* Blog index                                                                 */
+/* -------------------------------------------------------------------------- */
+
 function BlogIndex() {
   const { cards } = Route.useLoaderData();
 
@@ -148,6 +409,7 @@ function BlogIndex() {
   const shown = rest.slice(0, visible);
 
   const topics = Array.from(new Set(cards.map((c) => c.category).filter(Boolean))) as string[];
+
   const heroImage =
     featured?.image ?? "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=85";
 
@@ -157,10 +419,12 @@ function BlogIndex() {
         behavior: "smooth",
         block: "start",
       });
+
       return;
     }
 
     const target = cards.find((card) => card.category === topic);
+
     if (!target) return;
 
     setVisible(Math.max(PAGE, rest.length));
@@ -255,6 +519,7 @@ function BlogIndex() {
               className="blog-topic-carousel relative overflow-hidden border-y border-border bg-background py-4"
             >
               <div className="pointer-events-none absolute inset-y-0 left-0 z-10 w-12 bg-gradient-to-r from-background to-transparent sm:w-20" />
+
               <div className="pointer-events-none absolute inset-y-0 right-0 z-10 w-12 bg-gradient-to-l from-background to-transparent sm:w-20" />
 
               <div className="blog-topic-marquee gap-3 px-3">
@@ -304,7 +569,9 @@ function BlogIndex() {
               <Link
                 id={`post-${featured.key}`}
                 to="/blog/$slug"
-                params={{ slug: featured.slug }}
+                params={{
+                  slug: featured.slug,
+                }}
                 className="group grid scroll-mt-28 cursor-pointer overflow-hidden rounded-2xl border border-border bg-card transition duration-300 hover:shadow-lg md:grid-cols-[1.35fr_1fr]"
               >
                 {featured.image ? (
@@ -334,6 +601,7 @@ function BlogIndex() {
 
                   <p className="mt-auto pt-6 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
                     {formatDate(featured.date)}
+
                     {featured.readTime ? ` · ${featured.readTime} min read` : ""}
                   </p>
                 </div>
@@ -353,7 +621,9 @@ function BlogIndex() {
                   id={`post-${p.key}`}
                   key={p.key}
                   to="/blog/$slug"
-                  params={{ slug: p.slug }}
+                  params={{
+                    slug: p.slug,
+                  }}
                   className="flex h-full scroll-mt-28 cursor-pointer flex-col overflow-hidden rounded-xl border border-border bg-card transition duration-300 hover:-translate-y-1 hover:shadow-lg"
                 >
                   {p.image ? (
@@ -383,6 +653,7 @@ function BlogIndex() {
 
                     <p className="mt-auto pt-5 text-xs uppercase tracking-wide text-muted-foreground">
                       {formatDate(p.date)}
+
                       {p.readTime ? ` · ${p.readTime} min read` : ""}
                     </p>
                   </div>
