@@ -15,48 +15,186 @@ import { supabase } from "@/integrations/supabase/app-client";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 import { similarVehiclesQuery, siteSettingsQuery, vehicleBySlugQuery, type VehicleWithPhotos } from "@/lib/queries";
 
+const SITE_URL = "https://mycarcorp.com";
+
+function getVehicleUrl(slug: string) {
+  return `${SITE_URL}/inventory/${encodeURIComponent(slug)}`;
+}
+
+function getVehicleImages(vehicle: VehicleWithPhotos) {
+  return [...(vehicle.vehicle_photos ?? [])]
+    .sort((a, b) => a.position - b.position)
+    .filter((photo) => typeof photo.url === "string" && photo.url.startsWith("https://") && !isVideoUrl(photo.url))
+    .map((photo) => photo.url);
+}
+
+function getVehicleDescription(vehicle: VehicleWithPhotos) {
+  const customDescription = typeof vehicle.description === "string" ? vehicle.description.trim() : "";
+
+  if (customDescription) {
+    return customDescription;
+  }
+
+  const mileage = vehicle.mileage != null ? formatMiles(vehicle.mileage) : null;
+
+  const parts = [
+    `Used ${vehicleTitle(vehicle)}`,
+    mileage ? `with ${mileage}` : null,
+    "available at MyCar in Fredericksburg, VA.",
+  ].filter(Boolean);
+
+  return parts.join(" ");
+}
+
+function getPriceCurrency(vehicle: VehicleWithPhotos) {
+  const currency = typeof vehicle.currency === "string" ? vehicle.currency.trim().toUpperCase() : "";
+
+  return /^[A-Z]{3}$/.test(currency) ? currency : "USD";
+}
+
 export const Route = createFileRoute("/inventory/$slug")({
   loader: async ({ context, params }) => {
     const vehicle = await context.queryClient.ensureQueryData(vehicleBySlugQuery(params.slug));
-    if (!vehicle) throw notFound();
-    return { vehicle };
+
+    if (!vehicle) {
+      throw notFound();
+    }
+
+    return {
+      vehicle,
+      slug: params.slug,
+    };
   },
+
   head: ({ loaderData }) => {
     if (!loaderData) {
       return {
-        meta: [{ title: "Vehicle unavailable — MyCar" }, { name: "robots", content: "noindex" }],
+        meta: [
+          {
+            title: "Vehicle unavailable — MyCar",
+          },
+          {
+            name: "robots",
+            content: "noindex",
+          },
+        ],
       };
     }
+
     const v = loaderData.vehicle as VehicleWithPhotos;
+
     const title = `${vehicleTitle(v)} for sale in Fredericksburg, VA — MyCar`;
-    const description = `${vehicleTitle(v)} with ${formatMiles(v.mileage)} at ${formatUsd(Number(v.price_cents))}. Stock #${v.stock_number}. VIN ${v.vin}.`;
-    const image = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position)[0]?.url;
+
+    const description = `${vehicleTitle(v)} with ${formatMiles(v.mileage)} at ${formatUsd(
+      Number(v.price_cents),
+    )}. Stock #${v.stock_number}. VIN ${v.vin}.`;
+
+    const canonicalUrl = getVehicleUrl(loaderData.slug);
+
+    const images = getVehicleImages(v);
+
+    const image = images[0];
+
     const meta: Array<Record<string, string>> = [
-      { title },
-      { name: "description", content: description },
-      { property: "og:title", content: title },
-      { property: "og:description", content: description },
-      { property: "og:type", content: "website" },
+      {
+        title,
+      },
+      {
+        name: "description",
+        content: description,
+      },
+      {
+        name: "robots",
+        content: "index,follow,max-image-preview:large,max-snippet:-1,max-video-preview:-1",
+      },
+      {
+        property: "og:title",
+        content: title,
+      },
+      {
+        property: "og:description",
+        content: description,
+      },
+      {
+        property: "og:type",
+        content: "website",
+      },
+      {
+        property: "og:url",
+        content: canonicalUrl,
+      },
+      {
+        name: "twitter:card",
+        content: image ? "summary_large_image" : "summary",
+      },
+      {
+        name: "twitter:title",
+        content: title,
+      },
+      {
+        name: "twitter:description",
+        content: description,
+      },
     ];
-    if (image?.startsWith("https://")) {
-      meta.push({ property: "og:image", content: image }, { name: "twitter:image", content: image });
+
+    if (image) {
+      meta.push(
+        {
+          property: "og:image",
+          content: image,
+        },
+        {
+          name: "twitter:image",
+          content: image,
+        },
+      );
     }
-    return { meta };
+
+    return {
+      meta,
+      links: [
+        {
+          rel: "canonical",
+          href: canonicalUrl,
+        },
+      ],
+    };
   },
+
   component: VehicleDetail,
 });
 
 function VehicleDetail() {
-  const { vehicle } = Route.useLoaderData();
+  const { vehicle, slug } = Route.useLoaderData();
+
   const v = vehicle as VehicleWithPhotos;
+
   const { data: settings } = useQuery(siteSettingsQuery());
+
   const { data: similar } = useQuery(similarVehiclesQuery(v.body_style, v.id));
+
   const { user } = useAuth();
+
   const photos = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
+
+  const schemaImages = getVehicleImages(v);
+
+  const canonicalUrl = getVehicleUrl(slug);
+
+  const schemaDescription = getVehicleDescription(v);
+
+  const priceCurrency = getPriceCurrency(v);
+
+  const numericPrice = Number(v.price_cents) / 100;
+
   const [active, setActive] = useState(0);
+
   const [failedPhotoIds, setFailedPhotoIds] = useState<string[]>([]);
+
   const markFailed = (id: string) => setFailedPhotoIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
+
   const [saved, setSaved] = useState(false);
+
   const [savingBusy, setSavingBusy] = useState(false);
 
   const payment = settings
@@ -69,10 +207,12 @@ function VehicleDetail() {
 
   useEffect(() => {
     let active = true;
+
     if (!user) {
       setSaved(false);
       return;
     }
+
     void (async () => {
       const { data } = await supabase
         .from("saved_vehicles")
@@ -80,8 +220,12 @@ function VehicleDetail() {
         .eq("user_id", user.id)
         .eq("vehicle_id", v.id)
         .maybeSingle();
-      if (active) setSaved(!!data);
+
+      if (active) {
+        setSaved(!!data);
+      }
     })();
+
     return () => {
       active = false;
     };
@@ -89,37 +233,68 @@ function VehicleDetail() {
 
   async function mirrorSave(action: "save" | "unsave") {
     const { data: session } = await supabase.auth.getSession();
+
     const accessToken = session.session?.access_token;
-    if (!accessToken) return;
-    await mirrorSavedVehicleToLegacy({ data: { accessToken, vehicleId: v.id, action } }).catch(() => undefined);
+
+    if (!accessToken) {
+      return;
+    }
+
+    await mirrorSavedVehicleToLegacy({
+      data: {
+        accessToken,
+        vehicleId: v.id,
+        action,
+      },
+    }).catch(() => undefined);
   }
 
   async function toggleSave() {
     if (!user) {
       toast.info("Sign in to save this vehicle to your account.");
+
       return;
     }
+
     setSavingBusy(true);
+
     if (saved) {
       const { error } = await supabase.from("saved_vehicles").delete().eq("user_id", user.id).eq("vehicle_id", v.id);
+
       setSavingBusy(false);
+
       if (error) {
         toast.error("Could not remove this vehicle.");
+
         return;
       }
+
       setSaved(false);
+
       void mirrorSave("unsave");
+
       toast.success("Removed from your saved vehicles.");
+
       return;
     }
-    const { error } = await supabase.from("saved_vehicles").insert({ user_id: user.id, vehicle_id: v.id });
+
+    const { error } = await supabase.from("saved_vehicles").insert({
+      user_id: user.id,
+      vehicle_id: v.id,
+    });
+
     setSavingBusy(false);
+
     if (error && !error.message.includes("duplicate")) {
       toast.error("Could not save this vehicle.");
+
       return;
     }
+
     setSaved(true);
+
     void mirrorSave("save");
+
     toast.success("Saved to your account.");
   }
 
@@ -137,28 +312,111 @@ function VehicleDetail() {
     ["Combined MPG", v.mpg_combined ? String(v.mpg_combined) : "—"],
   ];
 
+  /*
+   * Vehicle/Product structured data.
+   *
+   * Google can understand Vehicle as a Schema.org entity, while Product
+   * provides the commerce/product context used by Google's product
+   * structured-data systems.
+   *
+   * Only actual vehicle photos are included. Video URLs are intentionally
+   * excluded from the image property.
+   */
   const jsonLd = {
     "@context": "https://schema.org",
-    "@type": "Vehicle",
+
+    "@type": ["Product", "Vehicle"],
+
+    "@id": `${canonicalUrl}#vehicle`,
+
+    url: canonicalUrl,
+
     name: vehicleTitle(v),
+
+    description: schemaDescription,
+
+    ...(schemaImages.length > 0
+      ? {
+          image: schemaImages,
+        }
+      : {}),
+
+    sku: v.stock_number,
+
     vehicleIdentificationNumber: v.vin,
-    brand: { "@type": "Brand", name: v.make },
+
+    brand: {
+      "@type": "Brand",
+      name: v.make,
+    },
+
     model: v.model,
+
     vehicleModelDate: String(v.year),
+
     bodyType: v.body_style,
-    mileageFromOdometer: { "@type": "QuantitativeValue", value: v.mileage, unitCode: "SMI" },
+
+    mileageFromOdometer: {
+      "@type": "QuantitativeValue",
+      value: Number(v.mileage),
+      unitCode: "SMI",
+    },
+
+    ...(v.exterior_color
+      ? {
+          color: v.exterior_color,
+        }
+      : {}),
+
+    ...(v.fuel_type
+      ? {
+          fuelType: v.fuel_type,
+        }
+      : {}),
+
+    ...(v.transmission
+      ? {
+          vehicleTransmission: v.transmission,
+        }
+      : {}),
+
     offers: {
       "@type": "Offer",
-      price: (Number(v.price_cents) / 100).toFixed(2),
-      priceCurrency: v.currency,
+
+      url: canonicalUrl,
+
+      price: Number.isFinite(numericPrice) ? numericPrice.toFixed(2) : undefined,
+
+      priceCurrency,
+
       availability: v.status === "available" ? "https://schema.org/InStock" : "https://schema.org/LimitedAvailability",
-      seller: { "@type": "AutoDealer", name: "MyCar", areaServed: "Fredericksburg, VA" },
+
+      itemCondition: "https://schema.org/UsedCondition",
+
+      seller: {
+        "@type": "AutoDealer",
+
+        name: "MyCar",
+
+        url: SITE_URL,
+
+        areaServed: {
+          "@type": "City",
+          name: "Fredericksburg",
+          addressRegion: "VA",
+        },
+      },
     },
   };
 
   return (
     <div className="mx-auto max-w-7xl px-4 py-10">
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: JSON.stringify(jsonLd),
+        }}
+      />
 
       <nav className="text-sm text-muted-foreground">
         <Link to="/search" className="hover:text-primary">
@@ -193,10 +451,12 @@ function VehicleDetail() {
             ) : (
               <div className="flex h-[280px] w-full flex-col items-center justify-center gap-2 text-muted-foreground">
                 <Camera className="size-8" />
+
                 <span className="text-sm">Photos of this vehicle are being uploaded</span>
               </div>
             )}
           </div>
+
           {photos.length > 1 && (
             <div className="mx-auto mt-3 grid w-full max-w-2xl grid-cols-4 gap-2 sm:grid-cols-6">
               {photos.map((p, i) => (
@@ -216,6 +476,7 @@ function VehicleDetail() {
                         preload="metadata"
                         className="size-full bg-black object-cover"
                       />
+
                       <span className="absolute inset-0 flex items-center justify-center bg-black/30">
                         <Play className="size-5 text-white" />
                       </span>
@@ -235,10 +496,12 @@ function VehicleDetail() {
 
           <section className="mt-10">
             <h2 className="font-display text-xl font-bold">Specifications</h2>
+
             <dl className="mt-4 grid gap-x-8 gap-y-3 sm:grid-cols-2">
               {specs.map(([k, val]) => (
                 <div key={k} className="flex justify-between border-b border-border py-2 text-sm">
                   <dt className="text-muted-foreground">{k}</dt>
+
                   <dd className="font-medium">{val}</dd>
                 </div>
               ))}
@@ -248,6 +511,7 @@ function VehicleDetail() {
           {v.features.length > 0 && (
             <section className="mt-10">
               <h2 className="font-display text-xl font-bold">Equipment</h2>
+
               <ul className="mt-4 grid gap-2 sm:grid-cols-2">
                 {v.features.map((f) => (
                   <li key={f} className="flex items-center gap-2 text-sm">
@@ -261,6 +525,7 @@ function VehicleDetail() {
           {v.description && (
             <section className="mt-10">
               <h2 className="font-display text-xl font-bold">About this vehicle</h2>
+
               <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">{v.description}</p>
             </section>
           )}
@@ -282,17 +547,24 @@ function VehicleDetail() {
             <div className="flex items-start justify-between gap-4">
               <div>
                 <h1 className="font-display text-2xl font-bold">{vehicleTitle(v)}</h1>
+
                 <p className="mt-1 text-sm text-muted-foreground">
                   {formatMiles(v.mileage)} · Stock #{v.stock_number}
                 </p>
               </div>
+
               {v.status !== "available" && <Badge variant="secondary">Sale pending</Badge>}
             </div>
 
             <p className="mt-5 font-display text-3xl font-extrabold">{formatUsd(Number(v.price_cents))}</p>
+
             {payment != null && settings && (
               <div className="mt-2 rounded-lg bg-surface p-3 text-sm">
-                <p className="font-semibold text-primary">Est. ${payment}/mo</p>
+                <p className="font-semibold text-primary">
+                  Est. ${payment}
+                  /mo
+                </p>
+
                 <p className="mt-1 text-xs text-muted-foreground">
                   {settings.finance_term_months} months at {Number(settings.finance_apr)}% APR with{" "}
                   {Number(settings.finance_down_percent)}% down. {settings.finance_disclosure}
@@ -304,9 +576,11 @@ function VehicleDetail() {
               <Button asChild size="lg">
                 <a href="#availability">Check availability</a>
               </Button>
+
               <Button asChild variant="outline">
                 <Link to="/finance">Get pre-qualified</Link>
               </Button>
+
               <Button asChild variant="outline">
                 <Link
                   to="/schedule"
@@ -318,13 +592,17 @@ function VehicleDetail() {
                   Schedule a test drive
                 </Link>
               </Button>
+
               <Button asChild variant="outline">
                 <Link to="/sell">Value my trade</Link>
               </Button>
+
               <Button variant="ghost" onClick={toggleSave} disabled={savingBusy}>
                 <Heart className={saved ? "size-4 fill-accent text-accent" : "size-4"} />
+
                 {saved ? "Saved — remove" : "Save this vehicle"}
               </Button>
+
               <a
                 href={`tel:${(settings?.phone ?? "").replace(/\D/g, "")}`}
                 className="mt-1 flex items-center justify-center gap-2 text-sm font-semibold"
@@ -336,9 +614,11 @@ function VehicleDetail() {
 
           <div id="availability" className="rounded-xl border border-border bg-card p-6">
             <h2 className="font-display text-lg font-bold">Check availability</h2>
+
             <p className="mt-1 text-sm text-muted-foreground">
               We'll confirm this vehicle is still on the lot and answer any questions.
             </p>
+
             <div className="mt-4">
               <LeadForm
                 leadType="availability"
@@ -366,6 +646,7 @@ function VehicleDetail() {
       {similar && similar.length > 0 && (
         <section className="mt-16">
           <h2 className="font-display text-2xl font-bold">Similar vehicles</h2>
+
           <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {similar.map((s) => (
               <VehicleCard key={s.id} vehicle={s} settings={settings} />
