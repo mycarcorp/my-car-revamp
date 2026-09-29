@@ -222,3 +222,4 @@ function HoursRow({ label, value }: { label: string; value: string }) {
       <span className="text-right font-medium text-slate-800">{value}</span>
     </div>
   );
+}
