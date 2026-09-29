@@ -48,13 +48,13 @@ function ContactPage() {
         <aside className="space-y-4 rounded-xl border border-border bg-surface p-6 text-sm">
           <div className="flex items-start gap-3">
             <Phone className="mt-0.5 size-4 text-accent" />
-            <a href={tel:${(settings?.phone ?? "").replace(/\D/g, "")}} className="font-semibold">
+            <a href={`tel:${(settings?.phone ?? "").replace(/\D/g, "")}`} className="font-semibold">
               {settings?.phone}
             </a>
           </div>
           <div className="flex items-start gap-3">
             <Mail className="mt-0.5 size-4 text-accent" />
-            <a href={mailto:${settings?.email}}>{settings?.email}</a>
+            <a href={`mailto:${settings?.email ?? ""}`}>{settings?.email}</a>
           </div>
           <div className="flex items-start gap-3">
             <MapPin className="mt-0.5 size-4 text-accent" />
