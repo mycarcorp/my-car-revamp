@@ -158,3 +158,65 @@ function ContactPage() {
                 <HoursRow label="Saturday" value={hours["sat"] ?? "—"} />
                 <HoursRow label="Sunday" value={hours["sun"] ?? "—"} />
               </div>
+              <div className="overflow-hidden rounded-2xl bg-[#07111b] p-5 text-white shadow-sm">
+              <div className="flex items-center gap-4">
+                <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/10">
+                  <CarFront className="size-8 text-[#F7941D]" />
+                </div>
+                <div>
+                  <p className="font-semibold">Looking for a specific car?</p>
+                  <p className="mt-1 text-xs leading-5 text-slate-300">
+                    Tell us the make and model in your message and we&apos;ll check the lot.
+                  </p>
+                </div>
+              </div>
+            </div>
+          </aside>
+        </div>
+      </section>
+    </main>
+  );
+}
+
+function ContactCard({
+  icon: Icon,
+  label,
+  value,
+  href,
+  iconClass,
+  external = false,
+}: {
+  icon: LucideIcon;
+  label: string;
+  value: string;
+  href: string;
+  iconClass: string;
+  external?: boolean;
+}) {
+  return (
+    <a
+      href={href}
+      target={external ? "_blank" : undefined}
+      rel={external ? "noreferrer" : undefined}
+      className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition-all hover:-translate-y-0.5 hover:border-[#F7941D]/60 hover:bg-white hover:shadow-sm"
+    >
+      <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${iconClass}`}>
+        <Icon className="size-[18px]" />
+      </span>
+      <span className="min-w-0">
+        <span className="block text-[11px] font-medium text-slate-500">{label}</span>
+        <span className="mt-0.5 block truncate text-sm font-semibold text-slate-900 group-hover:text-[#C96500]">
+          {value}
+        </span>
+      </span>
+    </a>
+  );
+}
+
+function HoursRow({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
+      <span className="text-slate-500">{label}</span>
+      <span className="text-right font-medium text-slate-800">{value}</span>
+    </div>
+  );
