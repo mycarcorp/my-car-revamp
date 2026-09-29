@@ -307,6 +307,40 @@ export function SiteHeader() {
             RIGHT SIDE ACTIONS
             ===================================================== */}
         <div className="ml-auto flex items-center gap-2">
+          {/* =====================================================
+              DESKTOP CONTACT BUTTON
+              ===================================================== */}
+          <Button
+            asChild
+            size="sm"
+            variant="outline"
+            className={`
+              hidden
+              border-[#F7941D]/70
+              px-4
+              font-semibold
+              transition-all
+              duration-300
+              ease-out
+              lg:inline-flex
+
+              hover:-translate-y-[1px]
+              hover:scale-[1.025]
+              hover:border-[#F7941D]
+              hover:bg-[#F7941D]
+              hover:text-slate-950
+              hover:shadow-md
+
+              focus-visible:ring-[#F7941D]/40
+
+              ${isNavActive("/contact") ? "border-[#F7941D] bg-[#F7941D] text-slate-950" : ""}
+            `}
+          >
+            <Link to="/contact" aria-current={isNavActive("/contact") ? "page" : undefined}>
+              Contact
+            </Link>
+          </Button>
+
           {user ? (
             <>
               {/* SAVED VEHICLES / ACCOUNT */}
@@ -563,7 +597,9 @@ export function SiteHeader() {
               );
             })}
 
-            {/* CONTACT */}
+            {/* =====================================================
+                MOBILE CONTACT LINK
+                ===================================================== */}
             {(() => {
               const active = isNavActive("/contact");
 
