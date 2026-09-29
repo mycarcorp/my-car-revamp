@@ -48,10 +48,16 @@ function ContactPage() {
   return (
     <main className="min-h-[calc(100vh-72px)] bg-[#f7f8fa]">
       <section className="relative isolate overflow-hidden bg-[#07111b]">
-        <div className="absolute -right-24 -top-28 size-[360px] rounded-full bg-[#F7941D]/20 blur-3xl" />
-        <div className="absolute -bottom-40 left-1/3 size-[320px] rounded-full bg-white/5 blur-3xl" />
+        <img
+          src={contactAgent}
+          alt="MyCar team member answering a customer call on the dealership lot"
+          width={1920}
+          height={832}
+          className="absolute inset-0 -z-10 h-full w-full object-cover object-[70%_center]"
+        />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#07111b] via-[#07111b]/80 to-[#07111b]/10" />
 
-        <div className="relative mx-auto grid max-w-7xl items-center gap-8 px-4 py-9 sm:px-6 lg:grid-cols-[1fr_420px] lg:px-8 lg:py-11">
+        <div className="relative mx-auto flex min-h-[340px] max-w-7xl items-center px-4 py-12 sm:px-6 lg:min-h-[420px] lg:px-8">
           <div className="max-w-2xl">
             <div className="inline-flex items-center gap-2 rounded-full border border-white/15 bg-white/10 px-3 py-1.5 text-[11px] font-semibold uppercase tracking-[0.16em] text-white">
               <Headphones className="size-4 text-[#F7941D]" />
@@ -76,18 +82,6 @@ function ContactPage() {
             </div>
           </div>
 
-          <div className="relative hidden lg:block">
-            <img
-              src={contactAgent}
-              alt="MyCar team member answering a customer call"
-              width={1024}
-              height={768}
-              className="h-56 w-full rounded-3xl border border-white/10 object-cover shadow-2xl"
-            />
-            <div className="absolute -left-4 bottom-4 flex items-center gap-2 rounded-2xl bg-[#F7941D] px-4 py-2.5 text-sm font-semibold text-[#07111b] shadow-xl">
-              <Phone className="size-4" /> {phone}
-            </div>
-          </div>
         </div>
       </section>
 
