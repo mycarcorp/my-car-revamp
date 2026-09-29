@@ -43,7 +43,7 @@ function ContactPage() {
   const email = settings?.email ?? "mycar@mycarcorp.com";
   const address = settings?.address_line ?? "Fredericksburg, VA";
   const phoneHref = phone.replace(/\D/g, "");
-  const mapHref = https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)};
+  const mapHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
   return (
     <main className="min-h-[calc(100vh-72px)] bg-[#f7f8fa]">
@@ -126,14 +126,14 @@ function ContactPage() {
                   icon={Phone}
                   label="Call us"
                   value={phone}
-                  href={tel:${phoneHref}}
+                  href={`tel:${phoneHref}`}
                   iconClass="bg-[#809C61]/15 text-[#61794A]"
                 />
                 <ContactCard
                   icon={Mail}
                   label="Email us"
                   value={email}
-                  href={mailto:${email}}
+                  href={`mailto:${email}`}
                   iconClass="bg-[#EDBA2B]/15 text-[#A87500]"
                 />
                 <ContactCard
@@ -202,7 +202,7 @@ function ContactCard({
       rel={external ? "noreferrer" : undefined}
       className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition-all hover:-translate-y-0.5 hover:border-[#F7941D]/60 hover:bg-white hover:shadow-sm"
     >
-      <span className={flex size-9 shrink-0 items-center justify-center rounded-lg ${iconClass}}>
+      <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${iconClass}`}>
         <Icon className="size-[18px]" />
       </span>
       <span className="min-w-0">
