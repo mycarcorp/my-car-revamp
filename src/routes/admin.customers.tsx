@@ -130,6 +130,7 @@ const LEAD_TYPES = [
   { key: "trade", label: "Trade" },
   { key: "appointment", label: "Appointments" },
   { key: "availability", label: "Check Availability" },
+  { key: "car_finder", label: "Car Finder" },
   { key: "contact", label: "Contact" },
 ] as const;
 
@@ -188,7 +189,19 @@ function getTradeIntent(lead: AdminLeadRow) {
   return typeof intent === "string" ? intent.trim().toLowerCase() : "";
 }
 
+function getLeadRequestType(lead: AdminLeadRow) {
+  const value = getFirstDetail(lead, ["request_type", "requestType", "form_type", "formType"]);
+
+  return typeof value === "string" ? normalizeDetailKey(value) : "";
+}
+
+function isCarFinderLead(lead: AdminLeadRow) {
+  return lead.lead_type === "car_finder" || getLeadRequestType(lead) === "car_finder";
+}
+
 function getLeadTypeLabel(lead: AdminLeadRow) {
+  if (isCarFinderLead(lead)) return "Car Finder";
+
   if (lead.lead_type === "trade") {
     return getTradeIntent(lead).includes("sell") ? "Sell" : "Trade";
   }
@@ -198,6 +211,14 @@ function getLeadTypeLabel(lead: AdminLeadRow) {
 
 function matchesLeadType(lead: AdminLeadRow, selectedType: LeadFilterType) {
   if (selectedType === "all") return true;
+
+  if (selectedType === "car_finder") {
+    return isCarFinderLead(lead);
+  }
+
+  if (selectedType === "contact") {
+    return lead.lead_type === "contact" && !isCarFinderLead(lead);
+  }
 
   if (selectedType === "sell") {
     return lead.lead_type === "trade" && getTradeIntent(lead).includes("sell");
@@ -452,6 +473,13 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
       className: "text-[#EDBA2B] bg-[#EDBA2B]/12",
     },
     {
+      key: "car_finder",
+      label: "Car Finder",
+      value: countFor("car_finder"),
+      icon: Search,
+      className: "text-[#809C61] bg-[#809C61]/12",
+    },
+    {
       key: "contact",
       label: "Contact",
       value: countFor("contact"),
@@ -549,7 +577,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
             ) : null}
           </div>
 
-          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-7">
+          <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
             {overviewFilters.map((item) => {
               const Icon = item.icon;
               const active = activeOverviewKey === item.key;
@@ -1174,12 +1202,16 @@ function isHiddenModalField(key: string) {
     "status",
     "lead_type",
     "form_type",
+    "request_type",
     "source",
     "full_name",
+    "customer_name",
     "first_name",
     "last_name",
     "email",
+    "customer_email",
     "phone",
+    "customer_phone",
     "phone_number",
     "message",
     "preferred_contact_method",
@@ -1193,6 +1225,18 @@ function isHiddenModalField(key: string) {
 function detailSectionFor(lead: AdminLeadRow, key: string) {
   const normalized = normalizeDetailKey(key);
   const requestType = getLeadTypeLabel(lead).toLowerCase();
+
+  if (isCarFinderLead(lead)) {
+    if (
+      /(preferred_make|preferred_model|preferred_year|preferred_body|maximum_budget|budget|financing_needed|must_have|feature|vehicle|make|model|year|body_style)/.test(
+        normalized,
+      )
+    ) {
+      return "Car Finder Preferences";
+    }
+
+    return "Car Finder Request";
+  }
 
   if (/(reference|co_signer|cosigner)/.test(normalized)) return "References";
   if (/(address|city|state|province|postal|zip|residence)/.test(normalized)) return "Address Information";
@@ -1249,6 +1293,8 @@ function sectionDescription(title: string) {
     "Vehicle to Sell": "Information about the vehicle the customer wants to sell.",
     "Trade-In Vehicle": "Information about the vehicle offered for trade-in.",
     "Vehicle the Customer Wants": "Preferences for the customer’s next vehicle.",
+    "Car Finder Preferences": "Vehicle preferences submitted through the Car Finder form.",
+    "Car Finder Request": "Additional information submitted with the Car Finder request.",
     "Appointment Details": "Information submitted with the visit request.",
     "Vehicle Inquiry": "Vehicle the customer asked about.",
     "Availability Request": "Details submitted with the availability request.",
@@ -1273,6 +1319,8 @@ function organizeLeadDetails(lead: AdminLeadRow, entries: LeadDetailEntry[]): Le
     "Vehicle to Sell",
     "Trade-In Vehicle",
     "Vehicle the Customer Wants",
+    "Car Finder Preferences",
+    "Car Finder Request",
     "Financing Information",
     "Address Information",
     "Employment & Income",
@@ -1814,6 +1862,15 @@ function formatFieldLabel(key: string) {
     preferred_contact_method: "Preferred Contact Method",
     preferred_date: "Preferred Date",
     preferred_time: "Preferred Time",
+    preferred_make: "Preferred Make",
+    preferred_model: "Preferred Model",
+    preferred_year_min: "Minimum Year",
+    preferred_year_max: "Maximum Year",
+    preferred_body_style: "Body Style",
+    maximum_budget: "Maximum Budget",
+    financing_needed: "Financing Needed",
+    must_have_features: "Must-Have Features",
+    request_type: "Request Type",
     appointment_type: "Appointment Type",
     vehicle_of_interest: "Vehicle of Interest",
     selected_vehicle: "Selected Vehicle",
