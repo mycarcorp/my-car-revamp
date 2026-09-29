@@ -159,7 +159,9 @@ function ContactPage() {
                 <HoursRow label="Saturday" value={hours["sat"] ?? "—"} />
                 <HoursRow label="Sunday" value={hours["sun"] ?? "—"} />
               </div>
-              <div className="overflow-hidden rounded-2xl bg-[#07111b] p-5 text-white shadow-sm">
+            </div>
+
+            <div className="overflow-hidden rounded-2xl bg-[#07111b] p-5 text-white shadow-sm">
               <div className="flex items-center gap-4">
                 <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/10">
                   <CarFront className="size-8 text-[#F7941D]" />
