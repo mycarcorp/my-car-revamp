@@ -1,48 +1,87 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import {
-  CarFront,
-  Clock3,
-  Headphones,
-  Mail,
-  MapPin,
-  Phone,
-  ShieldCheck,
-  type LucideIcon,
-} from "lucide-react";
+import { CarFront, Clock3, Headphones, Mail, MapPin, Phone, ShieldCheck, type LucideIcon } from "lucide-react";
 import { LeadForm } from "@/components/LeadForm";
 import { siteSettingsQuery } from "@/lib/queries";
 import contactAgent from "@/assets/contact-hero.jpg";
 
+const DEFAULT_PHONE = "(540) 426-3322";
+const DEFAULT_EMAIL = "mycar@mycarcorp.com";
+const DEFAULT_ADDRESS = "Fredericksburg, VA";
+
+/**
+ * Prevent missing database/configuration values from being rendered
+ * publicly as "undefined", "null", or other empty placeholders.
+ */
+function cleanSetting(value: unknown, fallback = ""): string {
+  if (typeof value !== "string") {
+    return fallback;
+  }
+
+  const cleaned = value.trim();
+
+  if (!cleaned || cleaned.toLowerCase() === "undefined" || cleaned.toLowerCase() === "null") {
+    return fallback;
+  }
+
+  return cleaned;
+}
+
 export const Route = createFileRoute("/contact")({
   head: () => ({
     meta: [
-      { title: "Contact MyCar — Fredericksburg, VA Used Car Dealer" },
+      {
+        title: "Contact MyCar — Fredericksburg, VA Used Car Dealer",
+      },
       {
         name: "description",
         content:
           "Call, email or message MyCar in Fredericksburg, Virginia. Ask about a vehicle, financing, or your trade — we answer every message.",
       },
-      { property: "og:title", content: "Contact MyCar — Fredericksburg, VA" },
+      {
+        property: "og:title",
+        content: "Contact MyCar — Fredericksburg, VA",
+      },
       {
         property: "og:description",
         content: "Call, email or message our Fredericksburg dealership team.",
       },
-      { property: "og:url", content: "https://mycarcorp.com/contact" },
-      { property: "og:type", content: "website" },
+      {
+        property: "og:url",
+        content: "https://mycarcorp.com/contact",
+      },
+      {
+        property: "og:type",
+        content: "website",
+      },
     ],
-    links: [{ rel: "canonical", href: "https://mycarcorp.com/contact" }],
+    links: [
+      {
+        rel: "canonical",
+        href: "https://mycarcorp.com/contact",
+      },
+    ],
   }),
   component: ContactPage,
 });
 
 function ContactPage() {
   const { data: settings } = useQuery(siteSettingsQuery());
-  const hours = (settings?.hours ?? {}) as Record<string, string>;
-  const phone = settings?.phone ?? "(540) 426-3322";
-  const email = settings?.email ?? "mycar@mycarcorp.com";
-  const address = settings?.address_line ?? "Fredericksburg, VA";
+
+  const rawHours = (settings?.hours ?? {}) as Record<string, unknown>;
+
+  const phone = cleanSetting(settings?.phone, DEFAULT_PHONE);
+  const email = cleanSetting(settings?.email, DEFAULT_EMAIL);
+  const address = cleanSetting(settings?.address_line, DEFAULT_ADDRESS);
+
+  const hours = {
+    mon_fri: cleanSetting(rawHours["mon_fri"], "—"),
+    sat: cleanSetting(rawHours["sat"], "—"),
+    sun: cleanSetting(rawHours["sun"], "—"),
+  };
+
   const phoneHref = phone.replace(/\D/g, "");
+
   const mapHref = `https://www.google.com/maps/search/?api=1&query=${encodeURIComponent(address)}`;
 
   return (
@@ -55,6 +94,7 @@ function ContactPage() {
           height={832}
           className="absolute inset-0 -z-10 h-full w-full object-cover object-[70%_center]"
         />
+
         <div className="absolute inset-0 -z-10 bg-gradient-to-r from-[#07111b] via-[#07111b]/80 to-[#07111b]/10" />
 
         <div className="relative mx-auto flex min-h-[340px] max-w-7xl items-center px-4 py-12 sm:px-6 lg:min-h-[420px] lg:px-8">
@@ -67,21 +107,24 @@ function ContactPage() {
             <h1 className="mt-4 font-display text-3xl font-bold tracking-tight text-white sm:text-4xl">
               How can we help?
             </h1>
+
             <p className="mt-3 max-w-xl text-sm leading-6 text-slate-300 sm:text-base">
-              Questions about a vehicle, financing, selling your car, or planning a visit? Reach the people who
-              actually work the lot.
+              Questions about a vehicle, financing, selling your car, or planning a visit? Reach the people who actually
+              work the lot.
             </p>
 
             <div className="mt-5 flex flex-wrap gap-x-5 gap-y-2 text-xs font-medium text-slate-300">
               <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="size-4 text-[#809C61]" /> Local dealership team
+                <ShieldCheck className="size-4 text-[#809C61]" />
+                Local dealership team
               </span>
+
               <span className="inline-flex items-center gap-1.5">
-                <ShieldCheck className="size-4 text-[#809C61]" /> No-pressure assistance
+                <ShieldCheck className="size-4 text-[#809C61]" />
+                No-pressure assistance
               </span>
             </div>
           </div>
-
         </div>
       </section>
 
@@ -92,8 +135,10 @@ function ContactPage() {
               <div className="flex size-10 shrink-0 items-center justify-center rounded-xl bg-[#F7941D]/15 text-[#C96500]">
                 <Mail className="size-5" />
               </div>
+
               <div>
                 <h2 className="font-display text-xl font-bold text-slate-950">Send us a message</h2>
+
                 <p className="mt-1 text-sm text-slate-600">Share your question and our team will follow up.</p>
               </div>
             </div>
@@ -115,8 +160,10 @@ function ContactPage() {
                 <div className="flex size-10 items-center justify-center rounded-xl bg-slate-900 text-white">
                   <Headphones className="size-5" />
                 </div>
+
                 <div>
                   <h2 className="font-semibold text-slate-950">Contact our team</h2>
+
                   <p className="text-xs text-slate-500">Choose the easiest way to reach us.</p>
                 </div>
               </div>
@@ -129,6 +176,7 @@ function ContactPage() {
                   href={`tel:${phoneHref}`}
                   iconClass="bg-[#809C61]/15 text-[#61794A]"
                 />
+
                 <ContactCard
                   icon={Mail}
                   label="Email us"
@@ -136,6 +184,7 @@ function ContactPage() {
                   href={`mailto:${email}`}
                   iconClass="bg-[#EDBA2B]/15 text-[#A87500]"
                 />
+
                 <ContactCard
                   icon={MapPin}
                   label="Visit the dealership"
@@ -152,11 +201,13 @@ function ContactPage() {
                 <Clock3 className="size-4 text-[#F7941D]" />
                 Business hours
               </div>
-              
+
               <div className="mt-4 space-y-2 text-sm">
-                <HoursRow label="Monday–Friday" value={hours["mon_fri"] ?? "—"} />
-                <HoursRow label="Saturday" value={hours["sat"] ?? "—"} />
-                <HoursRow label="Sunday" value={hours["sun"] ?? "—"} />
+                <HoursRow label="Monday–Friday" value={hours.mon_fri} />
+
+                <HoursRow label="Saturday" value={hours.sat} />
+
+                <HoursRow label="Sunday" value={hours.sun} />
               </div>
             </div>
 
@@ -165,8 +216,10 @@ function ContactPage() {
                 <div className="flex size-14 shrink-0 items-center justify-center rounded-2xl bg-white/10">
                   <CarFront className="size-8 text-[#F7941D]" />
                 </div>
+
                 <div>
                   <p className="font-semibold">Looking for a specific car?</p>
+
                   <p className="mt-1 text-xs leading-5 text-slate-300">
                     Tell us the make and model in your message and we&apos;ll check the lot.
                   </p>
@@ -199,14 +252,16 @@ function ContactCard({
     <a
       href={href}
       target={external ? "_blank" : undefined}
-      rel={external ? "noreferrer" : undefined}
+      rel={external ? "noopener noreferrer" : undefined}
       className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition-all hover:-translate-y-0.5 hover:border-[#F7941D]/60 hover:bg-white hover:shadow-sm"
     >
       <span className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${iconClass}`}>
         <Icon className="size-[18px]" />
       </span>
+
       <span className="min-w-0">
         <span className="block text-[11px] font-medium text-slate-500">{label}</span>
+
         <span className="mt-0.5 block truncate text-sm font-semibold text-slate-900 group-hover:text-[#C96500]">
           {value}
         </span>
@@ -219,6 +274,7 @@ function HoursRow({ label, value }: { label: string; value: string }) {
   return (
     <div className="flex items-center justify-between gap-4 border-b border-slate-100 pb-2 last:border-0 last:pb-0">
       <span className="text-slate-500">{label}</span>
+
       <span className="text-right font-medium text-slate-800">{value}</span>
     </div>
   );
