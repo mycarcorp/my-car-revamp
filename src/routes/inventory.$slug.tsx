@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
-import { Camera, Check, Heart, Phone, Play } from "lucide-react";
+import { ArrowLeft, ArrowRight, Camera, Check, Heart, Phone, Play } from "lucide-react";
 import { isVideoUrl } from "@/lib/vehicle-media";
 
 import { toast } from "sonner";
@@ -13,7 +13,13 @@ import { useAuth } from "@/hooks/useAuth";
 import { mirrorSavedVehicleToLegacy } from "@/lib/legacy-mirror.functions";
 import { supabase } from "@/integrations/supabase/app-client";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
-import { similarVehiclesQuery, siteSettingsQuery, vehicleBySlugQuery, type VehicleWithPhotos } from "@/lib/queries";
+import {
+  allVehiclesQuery,
+  similarVehiclesQuery,
+  siteSettingsQuery,
+  vehicleBySlugQuery,
+  type VehicleWithPhotos,
+} from "@/lib/queries";
 
 const SITE_URL = "https://mycarcorp.com";
 
@@ -239,6 +245,8 @@ function VehicleDetail() {
 
   const { data: settings } = useQuery(siteSettingsQuery());
 
+  const { data: allVehicles } = useQuery(allVehiclesQuery());
+
   const { data: similar } = useQuery(similarVehiclesQuery(v.body_style, v.id));
 
   const { user } = useAuth();
@@ -269,6 +277,23 @@ function VehicleDetail() {
 
   const [savingBusy, setSavingBusy] = useState(false);
 
+  const currentVehicleIndex = allVehicles?.findIndex((vehicle) => vehicle.id === v.id) ?? -1;
+
+  const previousVehicle = currentVehicleIndex > 0 && allVehicles ? allVehicles[currentVehicleIndex - 1] : null;
+
+  const nextVehicle =
+    currentVehicleIndex >= 0 && allVehicles && currentVehicleIndex < allVehicles.length - 1
+      ? allVehicles[currentVehicleIndex + 1]
+      : null;
+
+  const previousVehicleSlug =
+    previousVehicle && typeof previousVehicle.slug === "string" && previousVehicle.slug.trim()
+      ? previousVehicle.slug
+      : null;
+
+  const nextVehicleSlug =
+    nextVehicle && typeof nextVehicle.slug === "string" && nextVehicle.slug.trim() ? nextVehicle.slug : null;
+
   const payment = settings
     ? monthlyPayment(Number(v.price_cents), {
         apr: Number(settings.finance_apr),
@@ -276,6 +301,11 @@ function VehicleDetail() {
         downPercent: Number(settings.finance_down_percent),
       })
     : null;
+
+  useEffect(() => {
+    setActive(0);
+    setFailedPhotoIds([]);
+  }, [v.id]);
 
   useEffect(() => {
     let active = true;
@@ -425,7 +455,6 @@ function VehicleDetail() {
       "@type": "Brand",
       name: v.make,
     },
-
     model: v.model,
 
     vehicleModelDate: String(v.year),
@@ -494,12 +523,52 @@ function VehicleDetail() {
         }}
       />
 
-      <nav className="text-sm text-muted-foreground">
-        <Link to="/search" className="hover:text-primary">
-          Inventory
-        </Link>{" "}
-        / <span className="text-foreground">{vehicleTitle(v)}</span>
-      </nav>
+      <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+        <nav className="text-sm text-muted-foreground">
+          <Link to="/search" className="hover:text-primary">
+            Inventory
+          </Link>{" "}
+          / <span className="text-foreground">{vehicleTitle(v)}</span>
+        </nav>
+
+        <div className="grid grid-cols-2 gap-2 sm:flex sm:items-center">
+          {previousVehicleSlug ? (
+            <Button asChild variant="outline" size="sm" className="justify-center">
+              <Link
+                to="/inventory/$slug"
+                params={{ slug: previousVehicleSlug }}
+                aria-label={`Previous vehicle: ${vehicleTitle(previousVehicle!)}`}
+              >
+                <ArrowLeft className="size-4" />
+                Previous Vehicle
+              </Link>
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" disabled className="justify-center">
+              <ArrowLeft className="size-4" />
+              Previous Vehicle
+            </Button>
+          )}
+
+          {nextVehicleSlug ? (
+            <Button asChild variant="outline" size="sm" className="justify-center">
+              <Link
+                to="/inventory/$slug"
+                params={{ slug: nextVehicleSlug }}
+                aria-label={`Next vehicle: ${vehicleTitle(nextVehicle!)}`}
+              >
+                Next Vehicle
+                <ArrowRight className="size-4" />
+              </Link>
+            </Button>
+          ) : (
+            <Button variant="outline" size="sm" disabled className="justify-center">
+              Next Vehicle
+              <ArrowRight className="size-4" />
+            </Button>
+          )}
+        </div>
+      </div>
 
       <div className="mt-6 grid gap-10 lg:grid-cols-[1.4fr_1fr]">
         <div>
