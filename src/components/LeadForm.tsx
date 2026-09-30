@@ -68,7 +68,19 @@ export function LeadForm({
     setSubmitting(true);
     const phone = String(form.get("phone") ?? "") || null;
     const message = String(form.get("message") ?? "") || null;
-    const details = collectDetails?.() ?? {};
+    const details: Record<string, unknown> = { ...(collectDetails?.() ?? {}) };
+    if (vehicle) {
+      const title = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ");
+      if (title && !details["vehicle_of_interest"]) details["vehicle_of_interest"] = title;
+      if (vehicle.vin) details["vehicle_vin"] = vehicle.vin;
+      if (vehicle.stock_number) details["vehicle_stock_number"] = vehicle.stock_number;
+      if (vehicle.year) details["vehicle_year"] = String(vehicle.year);
+      if (vehicle.make) details["vehicle_make"] = vehicle.make;
+      if (vehicle.model) details["vehicle_model"] = vehicle.model;
+      if (vehicle.trim) details["vehicle_trim"] = vehicle.trim;
+      if (vehicle.price != null && vehicle.price !== "") details["vehicle_price"] = String(vehicle.price);
+      if (typeof window !== "undefined") details["vehicle_url"] = window.location.href;
+    }
     const { error } = await supabase.from("leads").insert({
       lead_type: leadType,
       full_name,
