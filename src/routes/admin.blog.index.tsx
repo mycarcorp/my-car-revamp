@@ -3,11 +3,14 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { toast } from "sonner";
 import { ExternalLink, Pencil, Star, Trash2, Plus, Search } from "lucide-react";
+
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
+
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+
 import {
   AlertDialog,
   AlertDialogAction,
@@ -18,9 +21,10 @@ import {
   AlertDialogHeader,
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog";
+
 import { useAuth } from "@/hooks/useAuth";
 import { formatDate } from "@/lib/format";
-import { sanitizeHtml } from "@/lib/blog-content";
+
 import {
   deleteLegacyPost,
   getBlogSchemaStatus,
@@ -29,18 +33,36 @@ import {
   updateLegacyPost,
   type LegacyBlogPost,
 } from "@/lib/legacy-blog.functions";
+
 import { listAutoseoAdminPosts, type AutoseoAdminPost } from "@/lib/autoseo-blog.functions";
+
+/* -------------------------------------------------------------------------- */
+/* ROUTE                                                                      */
+/* -------------------------------------------------------------------------- */
 
 export const Route = createFileRoute("/admin/blog/")({
   head: () => ({
     meta: [
-      { title: "Blog posts — MyCar admin" },
-      { name: "description", content: "Manage MyCar blog articles." },
-      { name: "robots", content: "noindex" },
+      {
+        title: "Blog posts — MyCar admin",
+      },
+      {
+        name: "description",
+        content: "Manage MyCar blog articles.",
+      },
+      {
+        name: "robots",
+        content: "noindex",
+      },
     ],
   }),
+
   component: AdminBlog,
 });
+
+/* -------------------------------------------------------------------------- */
+/* TYPES                                                                      */
+/* -------------------------------------------------------------------------- */
 
 type Row =
   | {
@@ -56,6 +78,13 @@ type Row =
       post: AutoseoAdminPost;
     };
 
+type PreviewArticle = {
+  source: "manual" | "autoseo";
+  slug: string;
+  title: string;
+  status: string;
+};
+
 const FILTERS = ["all", "manual", "autoseo", "published", "draft"] as const;
 
 type Filter = (typeof FILTERS)[number];
@@ -68,11 +97,19 @@ const FILTER_LABEL: Record<Filter, string> = {
   draft: "Draft",
 };
 
+/* -------------------------------------------------------------------------- */
+/* HELPERS                                                                    */
+/* -------------------------------------------------------------------------- */
+
 const recent = (...dates: Array<string | null | undefined>): string | null =>
   dates.find((date) => Boolean(date)) ?? null;
 
 const autoseoStatus = (post: AutoseoAdminPost): string =>
   (post.status ?? "").trim() || (post.published_at ? "published" : "draft");
+
+/* -------------------------------------------------------------------------- */
+/* PAGE                                                                       */
+/* -------------------------------------------------------------------------- */
 
 function AdminBlog() {
   const { session } = useAuth();
@@ -81,9 +118,7 @@ function AdminBlog() {
 
   const queryClient = useQueryClient();
 
-  const [viewing, setViewing] = useState<LegacyBlogPost | null>(null);
-
-  const [details, setDetails] = useState<AutoseoAdminPost | null>(null);
+  const [preview, setPreview] = useState<PreviewArticle | null>(null);
 
   const [deleting, setDeleting] = useState<LegacyBlogPost | null>(null);
 
@@ -91,15 +126,15 @@ function AdminBlog() {
 
   const [term, setTerm] = useState("");
 
-  /*
-   * ---------------------------------------------------------
-   * Queries
-   * ---------------------------------------------------------
-   */
+  /* ---------------------------------------------------------------------- */
+  /* QUERIES                                                                */
+  /* ---------------------------------------------------------------------- */
 
   const manualQuery = useQuery({
     queryKey: ["admin", "mc_blog"],
+
     enabled: Boolean(accessToken),
+
     queryFn: () =>
       listLegacyPosts({
         data: {
@@ -110,7 +145,9 @@ function AdminBlog() {
 
   const autoseoQuery = useQuery({
     queryKey: ["admin", "autoseo_blog"],
+
     enabled: Boolean(accessToken),
+
     queryFn: () =>
       listAutoseoAdminPosts({
         data: {
@@ -121,22 +158,24 @@ function AdminBlog() {
 
   const { data: schema } = useQuery({
     queryKey: ["admin", "mc_blog", "schema"],
+
     enabled: Boolean(accessToken),
+
     queryFn: () =>
       getBlogSchemaStatus({
         data: {
           accessToken,
         },
       }),
+
     refetchOnMount: "always",
+
     staleTime: 0,
   });
 
-  /*
-   * ---------------------------------------------------------
-   * Helpers
-   * ---------------------------------------------------------
-   */
+  /* ---------------------------------------------------------------------- */
+  /* HELPERS                                                                */
+  /* ---------------------------------------------------------------------- */
 
   const refresh = () =>
     queryClient.invalidateQueries({
@@ -148,16 +187,27 @@ function AdminBlog() {
   };
 
   const openManualPost = (post: LegacyBlogPost) => {
-    setViewing(post);
+    setPreview({
+      source: "manual",
+      slug: post.slug,
+      title: post.title,
+      status: post.status === "published" ? "published" : "draft",
+    });
   };
 
   const openAutoseoPost = (post: AutoseoAdminPost) => {
-    setDetails(post);
+    setPreview({
+      source: "autoseo",
+      slug: post.slug,
+      title: post.title,
+      status: autoseoStatus(post),
+    });
   };
 
   const handleManualRowKeyDown = (event: KeyboardEvent<HTMLLIElement>, post: LegacyBlogPost) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
+
       openManualPost(post);
     }
   };
@@ -165,15 +215,14 @@ function AdminBlog() {
   const handleAutoseoRowKeyDown = (event: KeyboardEvent<HTMLLIElement>, post: AutoseoAdminPost) => {
     if (event.key === "Enter" || event.key === " ") {
       event.preventDefault();
+
       openAutoseoPost(post);
     }
   };
 
-  /*
-   * ---------------------------------------------------------
-   * Mutations
-   * ---------------------------------------------------------
-   */
+  /* ---------------------------------------------------------------------- */
+  /* MUTATIONS                                                              */
+  /* ---------------------------------------------------------------------- */
 
   const remove = useMutation({
     mutationFn: (id: number) =>
@@ -200,21 +249,37 @@ function AdminBlog() {
       updateLegacyPost({
         data: {
           accessToken,
+
           id: post.id,
+
           title: post.title,
+
           slug: post.slug,
+
           category: post.category,
+
           excerpt: post.excerpt,
+
           body: post.body,
+
           image_url: post.image_url,
+
           author_name: post.author_name,
+
           author_initials: post.author_initials,
+
           author_color: post.author_color,
+
           read_time: post.read_time,
+
           status: post.status === "published" ? "draft" : "published",
+
           meta_title: (post.meta_title as string) ?? null,
+
           meta_description: (post.meta_description as string) ?? null,
+
           primary_cta: post.primary_cta ?? null,
+
           heading_styles: post.heading_styles ?? null,
         },
       }),
@@ -244,14 +309,13 @@ function AdminBlog() {
     onError: (error: Error) => toast.error(error.message || "Could not feature this post."),
   });
 
-  /*
-   * ---------------------------------------------------------
-   * Combine Manual + AutoSEO posts
-   * ---------------------------------------------------------
-   */
+  /* ---------------------------------------------------------------------- */
+  /* COMBINE MANUAL + AUTOSEO                                               */
+  /* ---------------------------------------------------------------------- */
 
   const rows = useMemo<Row[]>(() => {
     const manual = manualQuery.data ?? [];
+
     const autoseo = autoseoQuery.data ?? [];
 
     const seen = new Set<string>();
@@ -259,8 +323,8 @@ function AdminBlog() {
     const output: Row[] = [];
 
     /*
-     * Manual posts take priority if the same slug exists
-     * in both Manual and AutoSEO.
+     * Manual posts take priority if
+     * Manual + AutoSEO use the same slug.
      */
 
     for (const post of manual) {
@@ -272,8 +336,11 @@ function AdminBlog() {
 
       output.push({
         source: "manual",
+
         slug: post.slug,
+
         date: recent(post.updated_at, post.published_at, post.created_at),
+
         post,
       });
     }
@@ -291,8 +358,11 @@ function AdminBlog() {
 
       output.push({
         source: "autoseo",
+
         slug: post.slug,
+
         date: recent(post.updated_at, post.published_at, post.created_at),
+
         post,
       });
     }
@@ -300,11 +370,9 @@ function AdminBlog() {
     return output.sort((a, b) => (b.date ?? "").localeCompare(a.date ?? ""));
   }, [manualQuery.data, autoseoQuery.data]);
 
-  /*
-   * ---------------------------------------------------------
-   * Search + filters
-   * ---------------------------------------------------------
-   */
+  /* ---------------------------------------------------------------------- */
+  /* SEARCH + FILTER                                                        */
+  /* ---------------------------------------------------------------------- */
 
   const visible = useMemo(() => {
     const query = term.trim().toLowerCase();
@@ -341,11 +409,15 @@ function AdminBlog() {
 
   const isLoading = manualQuery.isLoading || autoseoQuery.isLoading;
 
-  /*
-   * ---------------------------------------------------------
-   * Render
-   * ---------------------------------------------------------
-   */
+  /* ---------------------------------------------------------------------- */
+  /* PREVIEW URL                                                            */
+  /* ---------------------------------------------------------------------- */
+
+  const previewUrl = preview ? `/blog/${encodeURIComponent(preview.slug)}` : "";
+
+  /* ---------------------------------------------------------------------- */
+  /* RENDER                                                                 */
+  /* ---------------------------------------------------------------------- */
 
   return (
     <div className="w-full">
@@ -362,7 +434,9 @@ function AdminBlog() {
       />
 
       <div className="p-6">
-        {/* Featured migration warning */}
+        {/* -------------------------------------------------------------- */}
+        {/* FEATURED MIGRATION WARNING                                     */}
+        {/* -------------------------------------------------------------- */}
 
         {schema && !schema.hasFeaturedColumn && (
           <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
@@ -370,25 +444,31 @@ function AdminBlog() {
           </p>
         )}
 
-        {/* Manual post query error */}
+        {/* -------------------------------------------------------------- */}
+        {/* MANUAL QUERY ERROR                                             */}
+        {/* -------------------------------------------------------------- */}
 
         {manualQuery.error && (
           <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-            Manual posts couldn't be loaded ({(manualQuery.error as Error).message}). AutoSEO articles below are
-            unaffected.
+            Manual posts couldn't be loaded ({(manualQuery.error as Error).message}
+            ). AutoSEO articles below are unaffected.
           </p>
         )}
 
-        {/* AutoSEO query error */}
+        {/* -------------------------------------------------------------- */}
+        {/* AUTOSEO QUERY ERROR                                            */}
+        {/* -------------------------------------------------------------- */}
 
         {autoseoQuery.error && (
           <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
-            AutoSEO articles couldn't be loaded ({(autoseoQuery.error as Error).message}). Your manual posts below are
-            unaffected.
+            AutoSEO articles couldn't be loaded ({(autoseoQuery.error as Error).message}
+            ). Your manual posts below are unaffected.
           </p>
         )}
 
-        {/* Search + Filters */}
+        {/* -------------------------------------------------------------- */}
+        {/* SEARCH + FILTERS                                               */}
+        {/* -------------------------------------------------------------- */}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="relative min-w-[220px] flex-1">
@@ -416,41 +496,37 @@ function AdminBlog() {
           </div>
         </div>
 
-        {/* Loading */}
+        {/* -------------------------------------------------------------- */}
+        {/* LOADING                                                        */}
+        {/* -------------------------------------------------------------- */}
 
         {isLoading ? (
           <div className="mt-6 space-y-2">
             <div className="h-20 animate-pulse rounded-lg bg-muted" />
+
             <div className="h-20 animate-pulse rounded-lg bg-muted" />
+
             <div className="h-20 animate-pulse rounded-lg bg-muted" />
           </div>
         ) : visible.length === 0 ? (
           <p className="mt-6 text-sm text-muted-foreground">No posts to show.</p>
         ) : (
-          /*
-           * -------------------------------------------------
-           * Blog list
-           *
-           * Entire row is now clickable.
-           * Buttons stop propagation so actions do not
-           * accidentally open the preview.
-           * -------------------------------------------------
-           */
+          /* ------------------------------------------------------------ */
+          /* BLOG LIST                                                    */
+          /* ------------------------------------------------------------ */
 
           <ul className="mt-6 divide-y divide-border overflow-hidden rounded-lg border border-border bg-background">
             {visible.map((row) =>
               row.source === "manual" ? (
-                /*
-                 * -----------------------------------------
-                 * MANUAL POST
-                 * -----------------------------------------
-                 */
+                /* ------------------------------------------------------ */
+                /* MANUAL POST                                           */
+                /* ------------------------------------------------------ */
 
                 <li
                   key={`manual-${row.post.id}`}
                   role="button"
                   tabIndex={0}
-                  aria-label={`View ${row.post.title}`}
+                  aria-label={`Preview ${row.post.title}`}
                   onClick={() => openManualPost(row.post)}
                   onKeyDown={(event) => handleManualRowKeyDown(event, row.post)}
                   className="
@@ -472,10 +548,10 @@ function AdminBlog() {
                     focus-visible:ring-primary
                   "
                 >
-                  {/* Post information */}
+                  {/* Article info */}
 
                   <div className="min-w-0 flex-1">
-                    <p className="flex items-center gap-2 truncate font-medium transition-colors group-hover:text-foreground">
+                    <p className="flex items-center gap-2 truncate font-medium">
                       <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
                         Manual
                       </span>
@@ -492,7 +568,7 @@ function AdminBlog() {
                     </p>
 
                     <p className="mt-1 text-xs text-muted-foreground/70 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                      Click anywhere on this row to preview this article.
+                      Click anywhere on this row to preview the public article.
                     </p>
                   </div>
 
@@ -522,7 +598,7 @@ function AdminBlog() {
                       <Star className={`size-4 ${row.post.is_featured ? "fill-current" : ""}`} />
                     </Button>
 
-                    {/* Published toggle */}
+                    {/* Published */}
 
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-muted-foreground">Published</span>
@@ -537,51 +613,74 @@ function AdminBlog() {
                       />
                     </div>
 
-                    {/* Edit + Delete */}
+                    {/* Edit */}
 
-                    <div className="flex items-center gap-1">
-                      <Button variant="ghost" size="icon" aria-label="Edit post" title="Edit post" asChild>
+                    <Button variant="ghost" size="icon" aria-label="Edit post" title="Edit post" asChild>
+                      <Link
+                        to="/admin/blog/$id/edit"
+                        params={{
+                          id: String(row.post.id),
+                        }}
+                        onClick={(event) => {
+                          event.stopPropagation();
+                        }}
+                      >
+                        <Pencil className="size-4" />
+                      </Link>
+                    </Button>
+
+                    {/* Open live */}
+
+                    {row.post.status === "published" && (
+                      <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Open live article"
+                        title="Open live article"
+                        asChild
+                      >
                         <Link
-                          to="/admin/blog/$id/edit"
+                          to="/blog/$slug"
                           params={{
-                            id: String(row.post.id),
+                            slug: row.post.slug,
                           }}
+                          target="_blank"
                           onClick={(event) => {
                             event.stopPropagation();
                           }}
                         >
-                          <Pencil className="size-4" />
+                          <ExternalLink className="size-4" />
                         </Link>
                       </Button>
+                    )}
 
-                      <Button
-                        variant="ghost"
-                        size="icon"
-                        aria-label="Delete post"
-                        title="Delete post"
-                        onClick={(event) => {
-                          event.stopPropagation();
+                    {/* Delete */}
 
-                          setDeleting(row.post);
-                        }}
-                      >
-                        <Trash2 className="size-4 text-destructive" />
-                      </Button>
-                    </div>
+                    <Button
+                      variant="ghost"
+                      size="icon"
+                      aria-label="Delete post"
+                      title="Delete post"
+                      onClick={(event) => {
+                        event.stopPropagation();
+
+                        setDeleting(row.post);
+                      }}
+                    >
+                      <Trash2 className="size-4 text-destructive" />
+                    </Button>
                   </div>
                 </li>
               ) : (
-                /*
-                 * -----------------------------------------
-                 * AUTOSEO POST
-                 * -----------------------------------------
-                 */
+                /* ------------------------------------------------------ */
+                /* AUTOSEO ARTICLE                                       */
+                /* ------------------------------------------------------ */
 
                 <li
                   key={`autoseo-${row.post.id}`}
                   role="button"
                   tabIndex={0}
-                  aria-label={`View details for ${row.post.title}`}
+                  aria-label={`Preview ${row.post.title}`}
                   onClick={() => openAutoseoPost(row.post)}
                   onKeyDown={(event) => handleAutoseoRowKeyDown(event, row.post)}
                   className="
@@ -610,6 +709,7 @@ function AdminBlog() {
                       <img
                         src={row.post.hero_image_url}
                         alt={row.post.hero_image_alt ?? row.post.title}
+                        loading="lazy"
                         className="
                           size-12
                           shrink-0
@@ -619,7 +719,6 @@ function AdminBlog() {
                           duration-200
                           group-hover:scale-[1.04]
                         "
-                        loading="lazy"
                       />
                     ) : null}
 
@@ -642,8 +741,8 @@ function AdminBlog() {
                         {row.post.reading_time ? ` · ${row.post.reading_time} min read` : ""}
                       </p>
 
-                      <p className="mt-1 text-xs text-muted-foreground/80">
-                        Managed by AutoSEO. Click this row to review article details.
+                      <p className="mt-1 text-xs text-muted-foreground/70 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
+                        Click anywhere on this row to preview the public article.
                       </p>
                     </div>
                   </div>
@@ -654,8 +753,8 @@ function AdminBlog() {
                     <Button
                       variant="ghost"
                       size="icon"
-                      aria-label="View live article"
-                      title="View live article"
+                      aria-label="Open live article"
+                      title="Open live article"
                       asChild
                     >
                       <Link
@@ -678,137 +777,100 @@ function AdminBlog() {
           </ul>
         )}
 
-        {/* --------------------------------------------------
-         * Manual post preview
-         * -------------------------------------------------- */}
+        {/* ---------------------------------------------------------------- */}
+        {/* PUBLIC BLOG PREVIEW MODAL                                        */}
+        {/* ---------------------------------------------------------------- */}
 
         <Dialog
-          open={viewing !== null}
+          open={preview !== null}
           onOpenChange={(open) => {
             if (!open) {
-              setViewing(null);
+              setPreview(null);
             }
           }}
         >
-          <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{viewing?.title}</DialogTitle>
+          <DialogContent
+            className="
+              flex
+              h-[94vh]
+              w-[96vw]
+              max-w-[1500px]
+              flex-col
+              gap-0
+              overflow-hidden
+              p-0
+            "
+          >
+            {/* Modal header */}
 
-              <DialogDescription>
-                /{viewing?.slug}
-                {viewing?.author_name ? ` · ${viewing.author_name}` : ""}
-                {viewing?.status === "published"
-                  ? ` · published ${formatDate(viewing?.published_at ?? null)}`
-                  : " · draft"}
-              </DialogDescription>
+            <DialogHeader className="shrink-0 border-b border-border bg-background px-6 py-4 pr-14">
+              <div className="flex flex-wrap items-center justify-between gap-4">
+                <div className="min-w-0">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <span
+                      className={
+                        preview?.source === "autoseo"
+                          ? "rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
+                          : "rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
+                      }
+                    >
+                      {preview?.source === "autoseo" ? "AutoSEO" : "Manual"}
+                    </span>
+
+                    <span
+                      className={
+                        preview?.status === "published"
+                          ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400"
+                          : "rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400"
+                      }
+                    >
+                      {preview?.status ?? ""}
+                    </span>
+                  </div>
+
+                  <DialogTitle className="mt-2 truncate text-left text-base sm:text-lg">{preview?.title}</DialogTitle>
+
+                  <DialogDescription className="mt-1 truncate text-left">
+                    /blog/
+                    {preview?.slug}
+                  </DialogDescription>
+                </div>
+
+                {preview && (
+                  <Button variant="outline" size="sm" asChild>
+                    <Link
+                      to="/blog/$slug"
+                      params={{
+                        slug: preview.slug,
+                      }}
+                      target="_blank"
+                    >
+                      <ExternalLink className="size-4" />
+                      Open live
+                    </Link>
+                  </Button>
+                )}
+              </div>
             </DialogHeader>
 
-            {viewing?.image_url && (
-              <img
-                src={viewing.image_url}
-                alt={viewing.title}
-                className="w-full rounded-md object-cover"
-                loading="lazy"
-              />
-            )}
+            {/* Actual public blog page */}
 
-            {viewing?.excerpt && <p className="text-sm text-muted-foreground">{viewing.excerpt}</p>}
-
-            <div
-              className="prose prose-sm max-w-none whitespace-pre-line dark:prose-invert"
-              dangerouslySetInnerHTML={{
-                __html: sanitizeHtml(viewing?.body ?? ""),
-              }}
-            />
+            <div className="min-h-0 flex-1 bg-background">
+              {previewUrl && (
+                <iframe
+                  key={previewUrl}
+                  src={previewUrl}
+                  title={preview?.title ? `Preview of ${preview.title}` : "Blog preview"}
+                  className="h-full w-full border-0 bg-background"
+                />
+              )}
+            </div>
           </DialogContent>
         </Dialog>
 
-        {/* --------------------------------------------------
-         * AutoSEO details
-         * -------------------------------------------------- */}
-
-        <Dialog
-          open={details !== null}
-          onOpenChange={(open) => {
-            if (!open) {
-              setDetails(null);
-            }
-          }}
-        >
-          <DialogContent className="max-h-[90vh] max-w-2xl overflow-y-auto">
-            <DialogHeader>
-              <DialogTitle>{details?.title}</DialogTitle>
-
-              <DialogDescription>
-                /{details?.slug}
-                {" · "}
-                Managed by AutoSEO. Edit this article in AutoSEO.
-              </DialogDescription>
-            </DialogHeader>
-
-            {details?.hero_image_url && (
-              <img
-                src={details.hero_image_url}
-                alt={details.hero_image_alt ?? details.title}
-                className="w-full rounded-md object-cover"
-                loading="lazy"
-              />
-            )}
-
-            <dl className="grid grid-cols-1 gap-x-4 gap-y-2 rounded-lg border border-border bg-muted/20 p-4 text-sm sm:grid-cols-2">
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Status</dt>
-
-                <dd className="mt-1 font-medium">{details ? autoseoStatus(details) : ""}</dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Published</dt>
-
-                <dd className="mt-1">{formatDate(details?.published_at ?? null)}</dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Updated</dt>
-
-                <dd className="mt-1">{formatDate(details?.updated_at ?? null)}</dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Language</dt>
-
-                <dd className="mt-1">{details?.language ?? "—"}</dd>
-              </div>
-
-              <div>
-                <dt className="text-xs font-medium uppercase tracking-wide text-muted-foreground">Reading time</dt>
-
-                <dd className="mt-1">{details?.reading_time ? `${details.reading_time} min` : "—"}</dd>
-              </div>
-            </dl>
-
-            {details?.meta_description && (
-              <div className="rounded-lg border border-border p-4">
-                <p className="mb-1 text-xs font-medium uppercase tracking-wide text-muted-foreground">
-                  Meta description
-                </p>
-
-                <p className="text-sm text-muted-foreground">{details.meta_description}</p>
-              </div>
-            )}
-
-            <div
-              className="prose prose-sm max-w-none dark:prose-invert"
-              dangerouslySetInnerHTML={{
-                __html: sanitizeHtml(details?.content_html ?? ""),
-              }}
-            />
-          </DialogContent>
-        </Dialog>
-
-        {/* --------------------------------------------------
-         * Delete manual post
-         * -------------------------------------------------- */}
+        {/* ---------------------------------------------------------------- */}
+        {/* DELETE MANUAL POST                                               */}
+        {/* ---------------------------------------------------------------- */}
 
         <AlertDialog
           open={deleting !== null}
