@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
-import { useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { toast } from "sonner";
 import {
   ExternalLink,
@@ -125,6 +125,14 @@ type ExtendedAutoseoPost = AutoseoAdminPost & {
   infographic_url?: string | null;
 };
 
+type QualityIssueFocus = {
+  code: string;
+  message: string;
+  severity: "blocking" | "warning";
+  matchedText: string | null;
+  requiresSource: boolean;
+};
+
 const FILTERS = ["all", "manual", "autoseo", "published", "draft"] as const;
 
 type Filter = (typeof FILTERS)[number];
@@ -209,7 +217,6 @@ const getAutoseoFaqs = (post: AutoseoAdminPost): Faq[] => {
 
 /* -------------------------------------------------------------------------- */
 /* PUBLIC AUTOSEO ARTICLE STYLES                                              */
-/* -------------------------------------------------------------------------- */
 
 const AUTOSEO_PROSE_CSS = [
   ".admin-autoseo-article{max-width:720px;}",
@@ -265,6 +272,8 @@ function AdminBlog() {
   const [deleting, setDeleting] = useState<LegacyBlogPost | null>(null);
 
   const [editingAutoseo, setEditingAutoseo] = useState<AutoseoAdminPost | null>(null);
+
+  const [editingIssue, setEditingIssue] = useState<QualityIssueFocus | null>(null);
 
   const [filter, setFilter] = useState<Filter>("all");
 
@@ -992,6 +1001,7 @@ function AdminBlog() {
                           size="sm"
                           onClick={() => {
                             const post = preview.post;
+                            setEditingIssue(null);
                             setPreview(null);
                             setEditingAutoseo(post);
                           }}
@@ -1025,6 +1035,13 @@ function AdminBlog() {
                       reviewer={session?.user?.email ?? "MyCar staff"}
                       onEdit={() => {
                         const post = preview.post;
+                        setEditingIssue(null);
+                        setPreview(null);
+                        setEditingAutoseo(post);
+                      }}
+                      onEditIssue={(issue) => {
+                        const post = preview.post;
+                        setEditingIssue(issue);
                         setPreview(null);
                         setEditingAutoseo(post);
                       }}
@@ -1051,6 +1068,7 @@ function AdminBlog() {
           onOpenChange={(open) => {
             if (!open) {
               setEditingAutoseo(null);
+              setEditingIssue(null);
             }
           }}
         >
@@ -1067,12 +1085,29 @@ function AdminBlog() {
                 key={editingAutoseo.id}
                 post={editingAutoseo}
                 accessToken={accessToken}
+                focusIssue={editingIssue}
                 onSaved={async () => {
+                  const editedPost = editingAutoseo;
+
                   setEditingAutoseo(null);
-                  setPreview(null);
+                  setEditingIssue(null);
+
                   await refresh();
+
+                  const refreshedPosts = queryClient.getQueryData<AutoseoAdminPost[]>(["admin", "autoseo_blog"]) ?? [];
+
+                  const refreshedPost =
+                    refreshedPosts.find((candidate) => candidate.id === editedPost.id) ?? editedPost;
+
+                  setPreview({
+                    source: "autoseo",
+                    post: refreshedPost,
+                  });
                 }}
-                onCancel={() => setEditingAutoseo(null)}
+                onCancel={() => {
+                  setEditingAutoseo(null);
+                  setEditingIssue(null);
+                }}
               />
             )}
           </DialogContent>
@@ -1130,12 +1165,14 @@ function AutoseoQualityReviewPanel({
   accessToken,
   reviewer,
   onEdit,
+  onEditIssue,
   onChanged,
 }: {
   post: AutoseoAdminPost;
   accessToken: string;
   reviewer: string;
   onEdit: () => void;
+  onEditIssue: (issue: QualityIssueFocus) => void;
   onChanged: () => void | Promise<void>;
 }) {
   const [notes, setNotes] = useState(post.review_notes ?? "");
@@ -1289,6 +1326,26 @@ function AutoseoQualityReviewPanel({
                     {item.requires_source && (
                       <p className="mt-2 text-xs font-semibold">Authoritative source required.</p>
                     )}
+
+                    <div className="mt-3">
+                      <Button
+                        type="button"
+                        size="sm"
+                        variant={item.severity === "blocking" ? "destructive" : "outline"}
+                        onClick={() =>
+                          onEditIssue({
+                            code: item.code,
+                            message: item.message,
+                            severity: item.severity,
+                            matchedText: item.matched_text ?? null,
+                            requiresSource: Boolean(item.requires_source),
+                          })
+                        }
+                      >
+                        <Pencil className="size-3.5" />
+                        {item.matched_text ? "Go to issue" : "Review in editor"}
+                      </Button>
+                    </div>
                   </div>
                 ))}
               </div>
@@ -1402,11 +1459,13 @@ function AutoseoQualityReviewPanel({
 function AutoseoEditForm({
   post,
   accessToken,
+  focusIssue,
   onSaved,
   onCancel,
 }: {
   post: AutoseoAdminPost;
   accessToken: string;
+  focusIssue: QualityIssueFocus | null;
   onSaved: () => void | Promise<void>;
   onCancel: () => void;
 }) {
@@ -1421,6 +1480,89 @@ function AutoseoEditForm({
   const [tags, setTags] = useState(post.tags ?? "");
   const [language, setLanguage] = useState(post.language ?? "en");
   const [faqJson, setFaqJson] = useState(JSON.stringify(getAutoseoFaqs(post), null, 2));
+
+  const titleRef = useRef<HTMLInputElement | null>(null);
+  const contentHtmlRef = useRef<HTMLTextAreaElement | null>(null);
+  const metaDescriptionRef = useRef<HTMLTextAreaElement | null>(null);
+  const metaKeywordsRef = useRef<HTMLInputElement | null>(null);
+  const tagsRef = useRef<HTMLInputElement | null>(null);
+
+  useEffect(() => {
+    if (!focusIssue) {
+      return;
+    }
+
+    const matchedText = focusIssue.matchedText?.trim();
+
+    const candidates: Array<{
+      value: string;
+      element: HTMLInputElement | HTMLTextAreaElement | null;
+      label: string;
+    }> = [
+      {
+        value: title,
+        element: titleRef.current,
+        label: "Title",
+      },
+      {
+        value: contentHtml,
+        element: contentHtmlRef.current,
+        label: "Article HTML",
+      },
+      {
+        value: metaDescription,
+        element: metaDescriptionRef.current,
+        label: "Meta description",
+      },
+      {
+        value: metaKeywords,
+        element: metaKeywordsRef.current,
+        label: "Meta keywords",
+      },
+      {
+        value: tags,
+        element: tagsRef.current,
+        label: "Tags",
+      },
+    ];
+
+    const focusElement = (element: HTMLInputElement | HTMLTextAreaElement | null, start?: number, end?: number) => {
+      if (!element) {
+        return;
+      }
+
+      element.scrollIntoView({
+        behavior: "smooth",
+        block: "center",
+      });
+
+      window.setTimeout(() => {
+        element.focus();
+
+        if (typeof start === "number" && typeof end === "number") {
+          element.setSelectionRange(start, end);
+        }
+      }, 250);
+    };
+
+    if (matchedText) {
+      const needle = matchedText.toLowerCase();
+
+      for (const candidate of candidates) {
+        const index = candidate.value.toLowerCase().indexOf(needle);
+
+        if (index >= 0) {
+          focusElement(candidate.element, index, index + matchedText.length);
+
+          return;
+        }
+      }
+    }
+
+    // If the exact scanner text is not present anymore, still take the
+    // reviewer to the main article editor so the issue can be investigated.
+    focusElement(contentHtmlRef.current);
+  }, [focusIssue, title, contentHtml, metaDescription, metaKeywords, tags]);
 
   const save = useMutation({
     mutationFn: async () => {
@@ -1492,10 +1634,47 @@ function AutoseoEditForm({
 
   return (
     <div className="space-y-6">
+      {focusIssue && (
+        <div
+          className={`rounded-xl border p-4 ${
+            focusIssue.severity === "blocking"
+              ? "border-red-200 bg-red-50 text-red-900"
+              : "border-amber-200 bg-amber-50 text-amber-900"
+          }`}
+        >
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide opacity-70">Fixing quality issue</p>
+
+              <p className="mt-1 font-semibold">
+                {focusIssue.severity === "blocking" ? "Blocking" : "Warning"} · {focusIssue.code}
+              </p>
+            </div>
+
+            {focusIssue.matchedText && (
+              <span className="rounded-md bg-background/70 px-2 py-1 text-xs font-medium">
+                Matched: “{focusIssue.matchedText}”
+              </span>
+            )}
+          </div>
+
+          <p className="mt-3 text-sm leading-6">{focusIssue.message}</p>
+
+          {focusIssue.requiresSource && (
+            <p className="mt-2 text-xs font-semibold">This claim requires an authoritative source.</p>
+          )}
+
+          <p className="mt-3 text-xs">
+            The matching text is automatically selected below when it can be found. Correct it, save the article, then
+            run the quality scan again.
+          </p>
+        </div>
+      )}
+
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <label className="text-sm font-medium">Title</label>
-          <Input value={title} onChange={(event) => setTitle(event.target.value)} />
+          <Input ref={titleRef} value={title} onChange={(event) => setTitle(event.target.value)} />
         </div>
 
         <div className="space-y-2">
@@ -1507,6 +1686,7 @@ function AutoseoEditForm({
       <div className="space-y-2">
         <label className="text-sm font-medium">Article HTML</label>
         <Textarea
+          ref={contentHtmlRef}
           value={contentHtml}
           onChange={(event) => setContentHtml(event.target.value)}
           className="min-h-[360px] font-mono text-xs"
@@ -1534,6 +1714,7 @@ function AutoseoEditForm({
       <div className="space-y-2">
         <label className="text-sm font-medium">Meta description</label>
         <Textarea
+          ref={metaDescriptionRef}
           value={metaDescription}
           onChange={(event) => setMetaDescription(event.target.value)}
           className="min-h-[100px]"
@@ -1543,12 +1724,12 @@ function AutoseoEditForm({
       <div className="grid gap-4 md:grid-cols-2">
         <div className="space-y-2">
           <label className="text-sm font-medium">Meta keywords</label>
-          <Input value={metaKeywords} onChange={(event) => setMetaKeywords(event.target.value)} />
+          <Input ref={metaKeywordsRef} value={metaKeywords} onChange={(event) => setMetaKeywords(event.target.value)} />
         </div>
 
         <div className="space-y-2">
           <label className="text-sm font-medium">Tags</label>
-          <Input value={tags} onChange={(event) => setTags(event.target.value)} />
+          <Input ref={tagsRef} value={tags} onChange={(event) => setTags(event.target.value)} />
         </div>
       </div>
 
