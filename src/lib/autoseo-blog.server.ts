@@ -29,6 +29,7 @@ export type AutoseoPost = {
   seo_indexable?: boolean | null;
   status?: string | null;
   published_url?: string | null;
+  is_featured?: boolean | null;
 };
 
 export type AutoseoIntentInfo = {
@@ -103,7 +104,16 @@ const SELECT =
  * its own intent-aware filtering in the next update.
  */
 export async function listAutoseoPosts(): Promise<AutoseoPost[]> {
-  return (await rest(`blog_posts?select=${SELECT}&order=published_at.desc.nullslast,created_at.desc`)) as AutoseoPost[];
+  try {
+    return (await rest(
+      `blog_posts?select=${SELECT}&or=(status.is.null,status.eq.published)&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
+    )) as AutoseoPost[];
+  } catch {
+    // Compatibility fallback for a table that does not yet have `status`.
+    return (await rest(
+      `blog_posts?select=${SELECT}&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
+    )) as AutoseoPost[];
+  }
 }
 
 /**
@@ -116,11 +126,149 @@ export async function listAutoseoAdminRows(): Promise<Array<Record<string, unkno
 }
 
 export async function getAutoseoPost(slug: string): Promise<AutoseoPost | null> {
-  const rows = (await rest(
-    `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(slug)}&limit=1`,
-  )) as AutoseoPost[];
+  try {
+    const rows = (await rest(
+      `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(
+        slug,
+      )}&or=(status.is.null,status.eq.published)&published_at=not.is.null&limit=1`,
+    )) as AutoseoPost[];
 
-  return rows?.[0] ?? null;
+    return rows?.[0] ?? null;
+  } catch {
+    // Compatibility fallback for a table that does not yet have `status`.
+    const rows = (await rest(
+      `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(
+        slug,
+      )}&published_at=not.is.null&limit=1`,
+    )) as AutoseoPost[];
+
+    return rows?.[0] ?? null;
+  }
+}
+
+
+// ---------------------------------------------------------------------------
+// Admin mutations
+// ---------------------------------------------------------------------------
+
+export type AutoseoAdminUpdate = {
+  id: number;
+  title: string;
+  slug: string;
+  content_html: string | null;
+  content_markdown?: string | null;
+  hero_image_url?: string | null;
+  hero_image_alt?: string | null;
+  infographic_url?: string | null;
+  meta_description?: string | null;
+  meta_keywords?: string | null;
+  tags?: string | null;
+  faq_schema?: Array<{ question: string; answer: string }> | null;
+  language?: string | null;
+};
+
+async function invalidateBlogSitemap(): Promise<void> {
+  try {
+    (await import("./sitemap-cache.server")).invalidateSitemapCache();
+  } catch {
+    // Best-effort cache invalidation.
+  }
+}
+
+export async function updateAutoseoAdminRow(input: AutoseoAdminUpdate): Promise<void> {
+  const id = Number(input.id);
+  const title = String(input.title ?? "").trim();
+  const slug = String(input.slug ?? "").trim();
+
+  if (!Number.isFinite(id) || !title || !slug) {
+    throw new Error("AutoSEO post requires a valid id, title and slug.");
+  }
+
+  const html = String(input.content_html ?? "");
+  const now = new Date().toISOString();
+
+  await rest(`blog_posts?id=eq.${encodeURIComponent(String(id))}`, {
+    method: "PATCH",
+    prefer: "return=minimal",
+    body: {
+      title,
+      slug,
+      content_html: html || null,
+      content_markdown: input.content_markdown ?? null,
+      hero_image_url: input.hero_image_url ?? null,
+      hero_image_alt: input.hero_image_alt ?? null,
+      infographic_url: input.infographic_url ?? null,
+      meta_description: input.meta_description ?? null,
+      meta_keywords: input.meta_keywords ?? null,
+      tags: input.tags ?? null,
+      faq_schema: input.faq_schema ?? null,
+      language: input.language ?? "en",
+      reading_time: readingTimeFromHtml(html),
+      updated_at: now,
+    },
+  });
+
+  await invalidateBlogSitemap();
+}
+
+export async function setAutoseoPublished(id: number, published: boolean): Promise<void> {
+  const numericId = Number(id);
+
+  if (!Number.isFinite(numericId)) {
+    throw new Error("Invalid AutoSEO post id.");
+  }
+
+  const existing = (await rest(
+    `blog_posts?select=id,published_at&id=eq.${encodeURIComponent(String(numericId))}&limit=1`,
+  )) as Array<{ id: number; published_at: string | null }>;
+
+  if (!existing?.[0]) {
+    throw new Error("AutoSEO post not found.");
+  }
+
+  const now = new Date().toISOString();
+
+  await rest(`blog_posts?id=eq.${encodeURIComponent(String(numericId))}`, {
+    method: "PATCH",
+    prefer: "return=minimal",
+    body: {
+      status: published ? "published" : "draft",
+      published_at: published ? existing[0].published_at ?? now : existing[0].published_at,
+      is_featured: published ? undefined : false,
+      updated_at: now,
+    },
+  });
+
+  await invalidateBlogSitemap();
+}
+
+export async function setFeaturedAutoseoPost(id: number): Promise<void> {
+  const numericId = Number(id);
+
+  if (!Number.isFinite(numericId)) {
+    throw new Error("Invalid AutoSEO post id.");
+  }
+
+  const now = new Date().toISOString();
+
+  // Match the Manual-post behavior: one featured AutoSEO article at a time.
+  await rest("blog_posts?is_featured=eq.true", {
+    method: "PATCH",
+    prefer: "return=minimal",
+    body: {
+      is_featured: false,
+      updated_at: now,
+    },
+  });
+
+  await rest(`blog_posts?id=eq.${encodeURIComponent(String(numericId))}`, {
+    method: "PATCH",
+    prefer: "return=minimal",
+    body: {
+      is_featured: true,
+      updated_at: now,
+    },
+  });
 }
 
 // ---------------------------------------------------------------------------
@@ -135,6 +283,7 @@ export function readingTimeFromHtml(html: string): number {
 
   return Math.max(1, Math.ceil(words / 200));
 }
+
 
 type WebhookBody = Record<string, unknown>;
 
@@ -163,6 +312,7 @@ const text = (v: unknown): string | null => {
  *
  * Those represent potentially different search intents.
  */
+
 const INTENT_STOP_WORDS = new Set([
   "a",
   "an",
@@ -199,6 +349,8 @@ const INTENT_STOP_WORDS = new Set([
   "va",
 ]);
 
+
+
 const INTENT_SYNONYMS: Record<string, string> = {
   automobiles: "car",
   automobile: "car",
@@ -234,6 +386,7 @@ function normalizeIntentText(value: string): string {
       .trim()
   );
 }
+
 
 function intentTokens(value: string): string[] {
   const normalized = normalizeIntentText(value);
@@ -275,6 +428,8 @@ export function normalizePrimaryIntent(value: string): string {
   return uniqueSorted(intentTokens(value)).join(" ");
 }
 
+
+
 /**
  * AutoSEO normally provides metaKeywords/keywords. Those are our preferred
  * source for the article's primary target query.
@@ -313,6 +468,7 @@ export function derivePrimaryIntent(input: {
   return normalizedTags;
 }
 
+
 function tokenSet(value: string): Set<string> {
   return new Set(
     value
@@ -345,6 +501,7 @@ export function intentSimilarity(a: string, b: string): number {
     return 0;
   }
 
+  
   let intersection = 0;
 
   for (const token of setA) {
@@ -414,6 +571,7 @@ async function findExistingIntentOwner(input: {
     return null;
   }
 
+  
   let existing: AutoseoPost[];
 
   try {
@@ -485,6 +643,7 @@ export async function getAutoseoIntentInfo(article: AutoseoPost): Promise<Autose
 
   const ownerDate = new Date(owner.post.published_at ?? owner.post.created_at ?? 0).getTime();
 
+  
   /**
    * Prefer the older established URL as the owner.
    *
@@ -519,6 +678,7 @@ export function dedupeAutoseoPostsByIntent(posts: AutoseoPost[]): AutoseoPost[] 
 
     const bTime = new Date(b.published_at ?? b.created_at ?? 0).getTime();
 
+    
     return aTime - bTime;
   });
 
@@ -557,6 +717,8 @@ export function dedupeAutoseoPostsByIntent(posts: AutoseoPost[]): AutoseoPost[] 
   return posts.filter((post) => ownerIds.has(post.id));
 }
 
+
+
 // ---------------------------------------------------------------------------
 // Image mirror
 // ---------------------------------------------------------------------------
@@ -587,6 +749,7 @@ async function ensureImageBucket(): Promise<void> {
 
   const c = creds();
 
+  
   const res = await fetch(`${c.url}/storage/v1/bucket`, {
     method: "POST",
     headers: {
@@ -615,6 +778,8 @@ async function ensureImageBucket(): Promise<void> {
 
   throw new Error(`Could not prepare image bucket (${res.status}): ${detail.slice(0, 200)}`);
 }
+
+
 
 /**
  * Copy a remote image into storage and return its public URL.
@@ -656,6 +821,7 @@ async function mirrorImage(
       throw new Error("image too large");
     }
 
+    
     const fromUrl = new URL(remoteUrl).pathname.split(".").pop()?.toLowerCase() ?? "";
 
     const ext = EXT_BY_TYPE[contentType] ?? (/^[a-z0-9]{2,5}$/.test(fromUrl) ? fromUrl : "jpg");
@@ -691,6 +857,7 @@ async function mirrorImage(
   }
 }
 
+
 // ---------------------------------------------------------------------------
 // Upsert
 // ---------------------------------------------------------------------------
@@ -725,6 +892,7 @@ async function upsertRow(row: Record<string, unknown>): Promise<void> {
         throw error;
       }
 
+      
       console.error(`[autoseo] blog_posts has no "${missing}" column — skipping that field.`);
 
       const { [missing]: _drop, ...remaining } = payload;
@@ -754,6 +922,7 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{
   const faq = body["faqSchema"];
 
   const now = new Date().toISOString();
+
 
   const metaKeywords =
     text(body["metaKeywords"]) ??
@@ -790,6 +959,7 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{
     tags,
   });
 
+  
   const canonicalSlug = existingOwner?.post.slug ?? slug;
 
   const seoIndexable = !existingOwner;
@@ -827,6 +997,7 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{
 
     meta_description: text(body["metaDescription"]),
 
+    
     meta_keywords: metaKeywords,
 
     tags,
@@ -863,6 +1034,8 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{
     seo_indexable: seoIndexable,
   };
 
+
+  
   await upsertRow(row);
 
   // A new or changed article means the cached sitemap is stale.
@@ -899,6 +1072,8 @@ type SitemapRow = {
  * even before primary_intent/canonical_slug/seo_indexable are added to the
  * Supabase table.
  */
+
+
 export async function sitemapUrls(): Promise<
   Array<{
     slug: string;
@@ -927,7 +1102,7 @@ export async function sitemapUrls(): Promise<
    * article targeting the same intent from receiving another strong
    * indexation signal.
    */
-  const chronological = [...validRows].sort((a, b) => {
+ const chronological = [...validRows].sort((a, b) => {
     const aTime = new Date(a.published_at ?? a.created_at ?? 0).getTime();
 
     const bTime = new Date(b.published_at ?? b.created_at ?? 0).getTime();
@@ -960,6 +1135,7 @@ export async function sitemapUrls(): Promise<
       (owner) => !owner.intent.startsWith("__slug:") && intentsOverlap(intent, owner.intent),
     );
 
+    
     if (!duplicate) {
       owners.push({
         row,
@@ -970,6 +1146,7 @@ export async function sitemapUrls(): Promise<
 
   return owners.map(({ row }) => ({
     slug: row.slug,
-    lastmod: row.updated_at ?? row.published_at,
-  }));
-}
+
+
+  
+  
