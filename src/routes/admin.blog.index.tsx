@@ -13,6 +13,9 @@ import {
   ShieldAlert,
   RefreshCw,
   Flag,
+  Settings,
+  Save,
+  X,
 } from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -51,16 +54,23 @@ import {
 
 import {
   approveAutoseoPostAdmin,
+  createBlogQualityRuleAdmin,
+  disableBlogQualityRuleAdmin,
+  enableBlogQualityRuleAdmin,
   flagAutoseoPostAdmin,
   listAutoseoAdminPosts,
+  listBlogQualityRulesAdmin,
   scanAutoseoQualityAdmin,
   setAutoseoPublishedAdmin,
   setFeaturedAutoseoPostAdmin,
   updateAutoseoAdminPost,
+  updateBlogQualityRuleAdmin,
   type AutoseoAdminPost,
   type AutoseoQualityResult,
   type AutoseoQualityStatus,
   type AutoseoRiskLevel,
+  type BlogQualityRule,
+  type BlogQualityRuleType,
 } from "@/lib/autoseo-blog.functions";
 
 /* -------------------------------------------------------------------------- */
@@ -132,6 +142,77 @@ type QualityIssueFocus = {
   matchedText: string | null;
   requiresSource: boolean;
 };
+
+type QualityRuleDraft = {
+  id: number | null;
+  code: string;
+  name: string;
+  rule_type: BlogQualityRuleType;
+  severity: "blocking" | "warning";
+  phrasesText: string;
+  message: string;
+  requires_source: boolean;
+  requires_human_review: boolean;
+  allow_negated: boolean;
+  is_enabled: boolean;
+  sort_order: number;
+};
+
+const QUALITY_RULE_TYPE_LABEL: Record<BlogQualityRuleType, string> = {
+  blocked_claim: "Blocked claim",
+  high_risk_topic: "High-risk topic",
+  finance_trade_topic: "Finance / trade topic",
+  source_required_topic: "Source-required topic",
+  authoritative_source_domain: "Authoritative source domain",
+};
+
+const QUALITY_RULE_TYPES: BlogQualityRuleType[] = [
+  "blocked_claim",
+  "high_risk_topic",
+  "finance_trade_topic",
+  "source_required_topic",
+  "authoritative_source_domain",
+];
+
+const emptyQualityRuleDraft = (): QualityRuleDraft => ({
+  id: null,
+  code: "",
+  name: "",
+  rule_type: "blocked_claim",
+  severity: "blocking",
+  phrasesText: "",
+  message: "",
+  requires_source: false,
+  requires_human_review: true,
+  allow_negated: false,
+  is_enabled: true,
+  sort_order: 100,
+});
+
+const qualityRuleToDraft = (rule: BlogQualityRule): QualityRuleDraft => ({
+  id: rule.id ?? null,
+  code: rule.code,
+  name: rule.name,
+  rule_type: rule.rule_type,
+  severity: rule.severity,
+  phrasesText: (rule.phrases ?? []).join("\n"),
+  message: rule.message ?? "",
+  requires_source: Boolean(rule.requires_source),
+  requires_human_review: Boolean(rule.requires_human_review),
+  allow_negated: Boolean(rule.allow_negated),
+  is_enabled: Boolean(rule.is_enabled),
+  sort_order: Number(rule.sort_order ?? 100),
+});
+
+const phrasesFromText = (value: string): string[] =>
+  Array.from(
+    new Set(
+      value
+        .split(/\n|,/g)
+        .map((item) => item.trim())
+        .filter(Boolean),
+    ),
+  );
 
 const FILTERS = ["all", "manual", "autoseo", "published", "draft"] as const;
 
@@ -275,6 +356,8 @@ function AdminBlog() {
 
   const [editingIssue, setEditingIssue] = useState<QualityIssueFocus | null>(null);
 
+  const [qualitySettingsOpen, setQualitySettingsOpen] = useState(false);
+
   const [filter, setFilter] = useState<Filter>("all");
 
   const [term, setTerm] = useState("");
@@ -307,6 +390,21 @@ function AdminBlog() {
           accessToken,
         },
       }),
+  });
+
+  const qualityRulesQuery = useQuery({
+    queryKey: ["admin", "blog_quality_rules"],
+
+    enabled: Boolean(accessToken) && qualitySettingsOpen,
+
+    queryFn: () =>
+      listBlogQualityRulesAdmin({
+        data: {
+          accessToken,
+        },
+      }),
+
+    staleTime: 0,
   });
 
   const { data: schema } = useQuery({
@@ -406,7 +504,6 @@ function AdminBlog() {
           accessToken,
 
           id: post.id,
-
           title: post.title,
 
           slug: post.slug,
@@ -599,12 +696,19 @@ function AdminBlog() {
       <AdminPageHeader
         title="Blog"
         actions={
-          <Button asChild size="sm">
-            <Link to="/admin/blog/new">
-              <Plus className="size-4" />
-              New post
-            </Link>
-          </Button>
+          <div className="flex flex-wrap items-center gap-2">
+            <Button type="button" variant="outline" size="sm" onClick={() => setQualitySettingsOpen(true)}>
+              <Settings className="size-4" />
+              Quality Gate Settings
+            </Button>
+
+            <Button asChild size="sm">
+              <Link to="/admin/blog/new">
+                <Plus className="size-4" />
+                New post
+              </Link>
+            </Button>
+          </div>
         }
       />
 
@@ -687,7 +791,7 @@ function AdminBlog() {
                   onClick={() => openManualPost(row.post)}
                   onKeyDown={(event) => handleManualRowKeyDown(event, row.post)}
                   className="
-                      group
+                        group
                       flex
                       cursor-pointer
                       flex-wrap
@@ -922,6 +1026,35 @@ function AdminBlog() {
         )}
 
         {/* ---------------------------------------------------------------- */}
+        {/* QUALITY GATE SETTINGS                                             */}
+        {/* ---------------------------------------------------------------- */}
+
+        <Dialog open={qualitySettingsOpen} onOpenChange={setQualitySettingsOpen}>
+          <DialogContent className="h-[94vh] w-[96vw] max-w-[1280px] overflow-hidden p-0">
+            <DialogHeader className="border-b border-border px-6 py-4 pr-14">
+              <DialogTitle>AutoSEO Quality Gate Settings</DialogTitle>
+              <DialogDescription>
+                Manage the patterns and source domains used by the AutoSEO quality scanner.
+              </DialogDescription>
+            </DialogHeader>
+
+            <div className="min-h-0 flex-1 overflow-y-auto">
+              <QualityGateSettings
+                accessToken={accessToken}
+                rules={qualityRulesQuery.data ?? []}
+                isLoading={qualityRulesQuery.isLoading}
+                error={qualityRulesQuery.error as Error | null}
+                onRefresh={async () => {
+                  await queryClient.invalidateQueries({
+                    queryKey: ["admin", "blog_quality_rules"],
+                  });
+                }}
+              />
+            </div>
+          </DialogContent>
+        </Dialog>
+
+        {/* ---------------------------------------------------------------- */}
         {/* ARTICLE-ONLY PREVIEW MODAL                                       */}
         {/* ---------------------------------------------------------------- */}
 
@@ -971,7 +1104,6 @@ function AdminBlog() {
                             Edit
                           </Link>
                         </Button>
-
                         {preview.post.status === "published" && (
                           <Button variant="outline" size="sm" asChild>
                             <Link to="/blog/$slug" params={{ slug: preview.post.slug }} target="_blank">
@@ -1151,6 +1283,506 @@ function AdminBlog() {
             </AlertDialogFooter>
           </AlertDialogContent>
         </AlertDialog>
+      </div>
+    </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* QUALITY GATE SETTINGS                                                      */
+/* -------------------------------------------------------------------------- */
+
+function QualityGateSettings({
+  accessToken,
+  rules,
+  isLoading,
+  error,
+  onRefresh,
+}: {
+  accessToken: string;
+  rules: BlogQualityRule[];
+  isLoading: boolean;
+  error: Error | null;
+  onRefresh: () => void | Promise<void>;
+}) {
+  const [search, setSearch] = useState("");
+  const [typeFilter, setTypeFilter] = useState<"all" | BlogQualityRuleType>("all");
+  const [editingRule, setEditingRule] = useState<QualityRuleDraft | null>(null);
+
+  const visibleRules = useMemo(() => {
+    const query = search.trim().toLowerCase();
+
+    return [...rules]
+      .sort((a, b) => {
+        const orderDiff = Number(a.sort_order ?? 100) - Number(b.sort_order ?? 100);
+
+        if (orderDiff !== 0) return orderDiff;
+
+        return a.name.localeCompare(b.name);
+      })
+      .filter((rule) => {
+        if (typeFilter !== "all" && rule.rule_type !== typeFilter) {
+          return false;
+        }
+
+        if (!query) {
+          return true;
+        }
+
+        const haystack = [rule.name, rule.code, rule.rule_type, rule.severity, rule.message, ...(rule.phrases ?? [])]
+          .join(" ")
+          .toLowerCase();
+
+        return haystack.includes(query);
+      });
+  }, [rules, search, typeFilter]);
+
+  const enableRule = useMutation({
+    mutationFn: (id: number) =>
+      enableBlogQualityRuleAdmin({
+        data: {
+          accessToken,
+          id,
+        },
+      }),
+
+    onSuccess: async () => {
+      toast.success("Quality rule enabled.");
+      await onRefresh();
+    },
+
+    onError: (mutationError: Error) => {
+      toast.error(mutationError.message || "Could not enable this quality rule.");
+    },
+  });
+
+  const disableRule = useMutation({
+    mutationFn: (id: number) =>
+      disableBlogQualityRuleAdmin({
+        data: {
+          accessToken,
+          id,
+        },
+      }),
+
+    onSuccess: async () => {
+      toast.success("Quality rule disabled.");
+      await onRefresh();
+    },
+
+    onError: (mutationError: Error) => {
+      toast.error(mutationError.message || "Could not disable this quality rule.");
+    },
+  });
+
+  const toggleRule = (rule: BlogQualityRule) => {
+    if (!rule.id) {
+      toast.error("This fallback rule is not stored in Supabase yet. Run the quality-rules migration first.");
+      return;
+    }
+
+    if (rule.is_enabled) {
+      disableRule.mutate(rule.id);
+    } else {
+      enableRule.mutate(rule.id);
+    }
+  };
+
+  return (
+    <div className="p-6">
+      <div className="rounded-xl border border-blue-200 bg-blue-50 p-4 text-sm text-blue-900">
+        These rules control what AutoSEO flags. Changes affect future scans immediately. Existing article review results
+        stay as-is until that article is scanned or edited again.
+      </div>
+
+      <div className="mt-5 flex flex-wrap items-center gap-3">
+        <div className="relative min-w-[240px] flex-1">
+          <Search className="pointer-events-none absolute left-3 top-1/2 size-4 -translate-y-1/2 text-muted-foreground" />
+          <Input
+            value={search}
+            onChange={(event) => setSearch(event.target.value)}
+            placeholder="Search rule name, code, phrase or message"
+            className="pl-9"
+          />
+        </div>
+
+        <select
+          value={typeFilter}
+          onChange={(event) => setTypeFilter(event.target.value as "all" | BlogQualityRuleType)}
+          className="h-9 rounded-md border border-input bg-background px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring"
+        >
+          <option value="all">All rule types</option>
+          {QUALITY_RULE_TYPES.map((ruleType) => (
+            <option key={ruleType} value={ruleType}>
+              {QUALITY_RULE_TYPE_LABEL[ruleType]}
+            </option>
+          ))}
+        </select>
+
+        <Button type="button" onClick={() => setEditingRule(emptyQualityRuleDraft())}>
+          <Plus className="size-4" />
+          Add Rule
+        </Button>
+      </div>
+
+      {error && (
+        <div className="mt-5 rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-800">
+          Could not load quality-gate rules: {error.message}
+        </div>
+      )}
+
+      {isLoading ? (
+        <div className="mt-6 space-y-3">
+          <div className="h-24 animate-pulse rounded-xl bg-muted" />
+          <div className="h-24 animate-pulse rounded-xl bg-muted" />
+          <div className="h-24 animate-pulse rounded-xl bg-muted" />
+        </div>
+      ) : visibleRules.length === 0 ? (
+        <div className="mt-6 rounded-xl border border-dashed border-border p-8 text-center text-sm text-muted-foreground">
+          No quality rules match the current filters.
+        </div>
+      ) : (
+        <div className="mt-6 space-y-3">
+          {visibleRules.map((rule) => (
+            <div key={rule.id ?? rule.code} className="rounded-xl border border-border bg-background p-4">
+              <div className="flex flex-wrap items-start justify-between gap-4">
+                <div className="min-w-0 flex-1">
+                  <div className="flex flex-wrap items-center gap-2">
+                    <h3 className="font-semibold">{rule.name}</h3>
+
+                    <span className="rounded-full border border-border bg-muted px-2 py-0.5 text-[11px] font-semibold text-muted-foreground">
+                      {QUALITY_RULE_TYPE_LABEL[rule.rule_type]}
+                    </span>
+
+                    {rule.rule_type !== "authoritative_source_domain" && (
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${
+                          rule.severity === "blocking"
+                            ? "border-red-200 bg-red-50 text-red-700"
+                            : "border-amber-200 bg-amber-50 text-amber-800"
+                        }`}
+                      >
+                        {rule.severity === "blocking" ? "Blocking" : "Warning"}
+                      </span>
+                    )}
+
+                    {rule.is_system_rule && (
+                      <span className="rounded-full border border-blue-200 bg-blue-50 px-2 py-0.5 text-[11px] font-semibold text-blue-700">
+                        System rule
+                      </span>
+                    )}
+
+                    {!rule.id && (
+                      <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                        Fallback only
+                      </span>
+                    )}
+                  </div>
+
+                  <p className="mt-1 break-all text-xs text-muted-foreground">{rule.code}</p>
+
+                  {rule.message && <p className="mt-3 text-sm leading-6 text-muted-foreground">{rule.message}</p>}
+
+                  <div className="mt-3 flex flex-wrap gap-2">
+                    {(rule.phrases ?? []).map((phrase) => (
+                      <span
+                        key={phrase}
+                        className="rounded-md border border-border bg-muted/50 px-2 py-1 text-xs text-foreground"
+                      >
+                        {phrase}
+                      </span>
+                    ))}
+                  </div>
+
+                  <div className="mt-4 flex flex-wrap gap-x-5 gap-y-2 text-xs text-muted-foreground">
+                    {rule.requires_source && <span>Requires source</span>}
+                    {rule.requires_human_review && <span>Requires human review</span>}
+                    {rule.allow_negated && <span>Allows negated wording</span>}
+                    <span>Sort: {rule.sort_order}</span>
+                  </div>
+                </div>
+
+                <div className="flex shrink-0 flex-wrap items-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <span className="text-xs font-medium text-muted-foreground">
+                      {rule.is_enabled ? "Enabled" : "Disabled"}
+                    </span>
+
+                    <Switch
+                      checked={rule.is_enabled}
+                      disabled={!rule.id || enableRule.isPending || disableRule.isPending}
+                      onCheckedChange={() => toggleRule(rule)}
+                    />
+                  </div>
+
+                  <Button
+                    type="button"
+                    variant="outline"
+                    size="sm"
+                    disabled={!rule.id}
+                    onClick={() => setEditingRule(qualityRuleToDraft(rule))}
+                  >
+                    <Pencil className="size-4" />
+                    Edit
+                  </Button>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      <Dialog
+        open={editingRule !== null}
+        onOpenChange={(open) => {
+          if (!open) {
+            setEditingRule(null);
+          }
+        }}
+      >
+        <DialogContent className="max-h-[92vh] w-[96vw] max-w-3xl overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle>{editingRule?.id ? "Edit quality rule" : "Add quality rule"}</DialogTitle>
+            <DialogDescription>Use plain words or phrases. Do not enter regular expressions.</DialogDescription>
+          </DialogHeader>
+
+          {editingRule && (
+            <QualityRuleForm
+              accessToken={accessToken}
+              draft={editingRule}
+              onDraftChange={setEditingRule}
+              onSaved={async () => {
+                setEditingRule(null);
+                await onRefresh();
+              }}
+              onCancel={() => setEditingRule(null)}
+            />
+          )}
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function QualityRuleForm({
+  accessToken,
+  draft,
+  onDraftChange,
+  onSaved,
+  onCancel,
+}: {
+  accessToken: string;
+  draft: QualityRuleDraft;
+  onDraftChange: (draft: QualityRuleDraft) => void;
+  onSaved: () => void | Promise<void>;
+  onCancel: () => void;
+}) {
+  const phrases = phrasesFromText(draft.phrasesText);
+
+  const save = useMutation({
+    mutationFn: async () => {
+      if (!draft.name.trim()) {
+        throw new Error("Rule name is required.");
+      }
+
+      if (!draft.code.trim()) {
+        throw new Error("Rule code is required.");
+      }
+
+      if (phrases.length === 0) {
+        throw new Error("Add at least one phrase or domain.");
+      }
+
+      const payload = {
+        accessToken,
+        code: draft.code.trim(),
+        name: draft.name.trim(),
+        rule_type: draft.rule_type,
+        severity: draft.severity,
+        phrases,
+        message: draft.message.trim(),
+        requires_source: draft.requires_source,
+        requires_human_review: draft.requires_human_review,
+        allow_negated: draft.allow_negated,
+        is_enabled: draft.is_enabled,
+        sort_order: draft.sort_order,
+      };
+
+      if (draft.id) {
+        await updateBlogQualityRuleAdmin({
+          data: {
+            ...payload,
+            id: draft.id,
+          },
+        });
+      } else {
+        await createBlogQualityRuleAdmin({
+          data: payload,
+        });
+      }
+    },
+
+    onSuccess: async () => {
+      toast.success(draft.id ? "Quality rule updated." : "Quality rule created.");
+      await onSaved();
+    },
+
+    onError: (error: Error) => {
+      toast.error(error.message || "Could not save this quality rule.");
+    },
+  });
+
+  const setField = <K extends keyof QualityRuleDraft>(key: K, value: QualityRuleDraft[K]) => {
+    onDraftChange({
+      ...draft,
+      [key]: value,
+    });
+  };
+
+  const isDomainRule = draft.rule_type === "authoritative_source_domain";
+  return (
+    <div className="space-y-5">
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Rule name</label>
+          <Input
+            value={draft.name}
+            onChange={(event) => setField("name", event.target.value)}
+            placeholder="Certified Pre-Owned / CPO"
+          />
+        </div>
+
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Rule code</label>
+          <Input
+            value={draft.code}
+            onChange={(event) => setField("code", event.target.value)}
+            placeholder="cpo_claim"
+          />
+          <p className="text-xs text-muted-foreground">Use a stable internal code such as cpo_claim.</p>
+        </div>
+      </div>
+
+      <div className="grid gap-4 md:grid-cols-2">
+        <div className="space-y-2">
+          <label className="text-sm font-medium">Rule type</label>
+          <select
+            value={draft.rule_type}
+            onChange={(event) => setField("rule_type", event.target.value as BlogQualityRuleType)}
+            className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring"
+          >
+            {QUALITY_RULE_TYPES.map((ruleType) => (
+              <option key={ruleType} value={ruleType}>
+                {QUALITY_RULE_TYPE_LABEL[ruleType]}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        {!isDomainRule && (
+          <div className="space-y-2">
+            <label className="text-sm font-medium">Severity</label>
+            <select
+              value={draft.severity}
+              onChange={(event) => setField("severity", event.target.value as "warning" | "blocking")}
+              className="h-10 w-full rounded-md border border-input bg-background px-3 text-sm shadow-sm outline-none focus:ring-2 focus:ring-ring"
+            >
+              <option value="blocking">Blocking</option>
+              <option value="warning">Warning</option>
+            </select>
+          </div>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">{isDomainRule ? "Authoritative domain" : "Words / phrases"}</label>
+        <Textarea
+          value={draft.phrasesText}
+          onChange={(event) => setField("phrasesText", event.target.value)}
+          className="min-h-[160px] font-mono text-xs"
+          placeholder={isDomainRule ? "uscourts.gov" : "certified pre-owned\\ncertified preowned\\nCPO"}
+        />
+        <p className="text-xs text-muted-foreground">
+          One phrase per line. Commas also work. The scanner matches these as plain text, not regex.
+        </p>
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Reviewer message</label>
+        <Textarea
+          value={draft.message}
+          onChange={(event) => setField("message", event.target.value)}
+          className="min-h-[100px]"
+          placeholder="Explain why this rule exists and what the reviewer should verify."
+        />
+      </div>
+
+      <div className="grid gap-3 rounded-xl border border-border bg-muted/20 p-4 md:grid-cols-2">
+        <label className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background p-3">
+          <span>
+            <span className="block text-sm font-medium">Enabled</span>
+            <span className="mt-1 block text-xs text-muted-foreground">Use this rule in quality scans.</span>
+          </span>
+          <Switch checked={draft.is_enabled} onCheckedChange={(value) => setField("is_enabled", value)} />
+        </label>
+
+        {!isDomainRule && (
+          <>
+            <label className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background p-3">
+              <span>
+                <span className="block text-sm font-medium">Requires source</span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Mark matching claims as needing source verification.
+                </span>
+              </span>
+              <Switch checked={draft.requires_source} onCheckedChange={(value) => setField("requires_source", value)} />
+            </label>
+
+            <label className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background p-3">
+              <span>
+                <span className="block text-sm font-medium">Human review</span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Prevent automatic approval when this rule matches.
+                </span>
+              </span>
+              <Switch
+                checked={draft.requires_human_review}
+                onCheckedChange={(value) => setField("requires_human_review", value)}
+              />
+            </label>
+
+            <label className="flex items-center justify-between gap-4 rounded-lg border border-border bg-background p-3">
+              <span>
+                <span className="block text-sm font-medium">Allow negated wording</span>
+                <span className="mt-1 block text-xs text-muted-foreground">
+                  Ignore the phrase when nearby wording clearly says it is not true.
+                </span>
+              </span>
+              <Switch checked={draft.allow_negated} onCheckedChange={(value) => setField("allow_negated", value)} />
+            </label>
+          </>
+        )}
+      </div>
+
+      <div className="space-y-2">
+        <label className="text-sm font-medium">Sort order</label>
+        <Input
+          type="number"
+          value={String(draft.sort_order)}
+          onChange={(event) => setField("sort_order", Number(event.target.value || 100))}
+        />
+      </div>
+
+      <div className="flex flex-wrap justify-end gap-3 border-t border-border pt-4">
+        <Button type="button" variant="outline" onClick={onCancel} disabled={save.isPending}>
+          <X className="size-4" />
+          Cancel
+        </Button>
+
+        <Button type="button" onClick={() => save.mutate()} disabled={save.isPending}>
+          <Save className="size-4" />
+          {save.isPending ? "Saving…" : draft.id ? "Save Rule" : "Create Rule"}
+        </Button>
       </div>
     </div>
   );
@@ -1519,6 +2151,7 @@ function AutoseoEditForm({
         element: metaKeywordsRef.current,
         label: "Meta keywords",
       },
+
       {
         value: tags,
         element: tagsRef.current,
