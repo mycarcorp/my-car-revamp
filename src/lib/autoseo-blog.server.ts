@@ -1,5 +1,3 @@
-// Server-only helpers for the AutoSEO article table `mycarco_db.blog_posts`.
-
 export type AutoseoPost = {
   id: number;
   title: string;
@@ -53,7 +51,6 @@ export type AutoseoIntentInfo = {
 export type AutoseoQualityStatus = "pending" | "needs_review" | "approved" | "flagged";
 
 export type AutoseoRiskLevel = "low" | "medium" | "high";
-
 export type AutoseoQualityFlagSeverity = "warning" | "blocking";
 
 export type AutoseoQualityFlag = {
@@ -230,115 +227,567 @@ export function getApprovedMyCarFacts() {
   return APPROVED_BUSINESS_FACTS;
 }
 
-type ClaimRule = {
+export type BlogQualityRuleType =
+  "blocked_claim" | "high_risk_topic" | "finance_trade_topic" | "source_required_topic" | "authoritative_source_domain";
+
+export type BlogQualityRule = {
+  id?: number;
   code: string;
-  pattern: RegExp;
+  name: string;
+  rule_type: BlogQualityRuleType;
+  severity: AutoseoQualityFlagSeverity;
+  phrases: string[];
   message: string;
-  allowNegated?: boolean;
+  requires_source: boolean;
+  requires_human_review: boolean;
+  allow_negated: boolean;
+  is_enabled: boolean;
+  is_system_rule: boolean;
+  sort_order: number;
+  created_at?: string | null;
+  updated_at?: string | null;
 };
 
-const BLOCKED_CLAIM_RULES: ClaimRule[] = [
+/**
+ * These defaults are intentionally kept in code.
+ *
+ * Database rules are the editable source of truth once the migration exists.
+ * If the table is unavailable, empty, or temporarily unreadable, the scanner
+ * falls back to these defaults so AutoSEO protection never disappears.
+ */
+const DEFAULT_QUALITY_RULES: BlogQualityRule[] = [
   {
     code: "guaranteed_approval",
-    pattern:
-      /\b(?:guaranteed?|100%|everyone\s+(?:is\s+)?approved|everyone\s+gets\s+approved)\b.{0,30}\b(?:approval|approved|financing)\b|\bguaranteed\s+(?:approval|financing)\b/gi,
+    name: "Guaranteed approval / financing",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: [
+      "guaranteed approval",
+      "guaranteed financing",
+      "100% approval",
+      "100% approved",
+      "everyone approved",
+      "everyone is approved",
+      "everyone gets approved",
+    ],
+
     message: "Guaranteed financing or approval claims are not approved My Car facts.",
-    allowNegated: true,
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: true,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 10,
   },
   {
     code: "approval_timing",
-    pattern:
-      /\b(?:instant|immediate|same[-\s]?day|within\s+\d+\s+(?:minute|minutes|hour|hours)|in\s+\d+\s+(?:minute|minutes|hour|hours)|approval\s+times?\s+in\s+minutes)\b.{0,35}\b(?:approval|approved|financing|decision)\b|\bapproval\s+times?\s+(?:are|is)?\s*(?:measured\s+)?in\s+minutes\b/gi,
+    name: "Approval timing",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: [
+      "instant approval",
+      "immediate approval",
+      "same-day approval",
+      "same day approval",
+      "approval in minutes",
+      "approval times in minutes",
+      "approved in minutes",
+    ],
     message: "Specific approval-speed or decision-time claims require verified operational evidence.",
-    allowNegated: true,
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: true,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 20,
   },
   {
     code: "best_lowest_rate",
-    pattern: /\b(?:best|lowest|cheapest)\s+(?:available\s+)?(?:interest\s+)?rates?\b|\b(?:best|lowest)\s+apr\b/gi,
+    name: "Best / lowest rate claims",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: [
+      "best rate",
+      "best rates",
+      "lowest rate",
+      "lowest rates",
+      "cheapest rate",
+      "cheapest rates",
+      "best APR",
+      "lowest APR",
+      "best interest rate",
+      "best interest rates",
+      "lowest interest rate",
+      "lowest interest rates",
+    ],
+
     message: "Best/lowest rate claims are prohibited unless a current, verifiable offer supports them.",
-    allowNegated: true,
+    requires_source: true,
+    requires_human_review: true,
+    allow_negated: true,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 30,
   },
   {
     code: "no_credit_check",
-    pattern: /\bno\s+(?:hard\s+)?credit\s+check\b|\bwithout\s+(?:a\s+)?credit\s+check\b/gi,
+    name: "No credit check",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: ["no credit check", "no hard credit check", "without a credit check", "without credit check"],
     message: "No-credit-check claims are not an approved My Car financing fact.",
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: false,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 40,
   },
   {
     code: "credit_impact_guarantee",
-    pattern:
-      /\b(?:won['’]?t|will\s+not|does\s+not|doesn['’]?t)\s+(?:hurt|affect|impact|lower|drop)\s+(?:your\s+)?credit(?:\s+score)?\b/gi,
+    name: "Guaranteed credit-score impact",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: [
+      "won't hurt your credit",
+      "will not hurt your credit",
+      "does not hurt your credit",
+      "doesn't hurt your credit",
+      "won't affect your credit",
+      "will not affect your credit",
+      "does not affect your credit",
+      "doesn't affect your credit",
+      "won't impact your credit",
+      "will not impact your credit",
+      "does not impact your credit",
+      "doesn't impact your credit",
+    ],
+
     message: "Exact or guaranteed credit-score impact claims require authoritative sourcing and careful context.",
+    requires_source: true,
+    requires_human_review: true,
+    allow_negated: false,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 50,
   },
   {
     code: "cpo_claim",
-    pattern: /\bcertified\s+pre[-\s]?owned\b|\bcpo\b/gi,
+    name: "Certified Pre-Owned / CPO",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: ["certified pre-owned", "certified preowned", "CPO"],
     message: "Certified Pre-Owned/CPO claims are not approved unless the specific program and inventory are verified.",
-    allowNegated: true,
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: true,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 60,
   },
   {
     code: "insurance_claim",
-    pattern: /\bmy\s*car\s+insurance\b|\bmycar\s+insurance\b|\bour\s+insurance\s+(?:plan|program|coverage|product)\b/gi,
-    message: "My Car insurance-product claims are not approved business facts.",
-    allowNegated: true,
-  },
+    name: "My Car insurance product",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: [
+      "My Car Insurance",
+      "MyCar Insurance",
+      "our insurance plan",
+      "our insurance program",
+      "our insurance coverage",
+      "our insurance product",
+    ],
 
+    message: "My Car insurance-product claims are not approved business facts.",
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: true,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 70,
+  },
   {
     code: "inspection_guarantee",
-    pattern:
-      /\b(?:every|all)\s+(?:vehicle|vehicles|car|cars)\b.{0,35}\b(?:fully\s+)?inspected\b|\bfully\s+inspected\s+(?:inventory|vehicles|cars)\b/gi,
+    name: "Inspection guarantee",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: [
+      "every vehicle is inspected",
+      "every vehicle fully inspected",
+      "all vehicles are inspected",
+      "all vehicles fully inspected",
+      "fully inspected inventory",
+      "fully inspected vehicles",
+      "fully inspected cars",
+    ],
     message: "Inspection-process claims require verified inspection terms before publication.",
-    allowNegated: true,
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: true,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 80,
   },
   {
     code: "warranty_claim",
-    pattern:
-      /\b(?:every|all)\s+(?:vehicle|vehicles|car|cars)\b.{0,35}\b(?:comes?\s+with|includes?)\b.{0,20}\bwarrant(?:y|ies)\b|\bwarranty\s+(?:included|guaranteed)\b/gi,
+    name: "Warranty inclusion / guarantee",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: [
+      "every vehicle comes with a warranty",
+      "every car comes with a warranty",
+      "all vehicles come with a warranty",
+      "all cars come with a warranty",
+      "warranty included",
+      "warranty guaranteed",
+    ],
+
     message: "Warranty coverage or inclusion claims require verified warranty terms.",
-    allowNegated: true,
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: true,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 90,
   },
   {
     code: "inventory_promise",
-    pattern:
-      /\b(?:largest|best)\s+inventory\b|\balways\s+(?:in\s+stock|available)\b|\b(?:every|all)\s+(?:vehicle|vehicles|cars?)\s+(?:is|are)\s+available\b/gi,
+    name: "Inventory promise",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: [
+      "largest inventory",
+      "best inventory",
+      "always in stock",
+      "always available",
+      "every vehicle is available",
+      "all vehicles are available",
+      "every car is available",
+      "all cars are available",
+    ],
     message: "Inventory availability and superlative inventory claims cannot be automated without live verification.",
-    allowNegated: true,
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: true,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 100,
   },
+
   {
     code: "under_20k_promise",
-    pattern:
-      /\b(?:all|every|exclusively|only)\b.{0,30}\b(?:vehicles?|cars?|inventory)\b.{0,30}\bunder\s+\$?20[,\s]?000\b|\b(?:vehicles?|cars?|inventory)\b.{0,30}\b(?:all|every|exclusively|only)\b.{0,20}\bunder\s+\$?20[,\s]?000\b/gi,
+    name: "Under $20,000 inventory promise",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: [
+      "all vehicles under $20,000",
+      "every vehicle under $20,000",
+      "all cars under $20,000",
+      "every car under $20,000",
+      "only vehicles under $20,000",
+      "only cars under $20,000",
+      "exclusively vehicles under $20,000",
+      "exclusively cars under $20,000",
+    ],
     message: "Inventory price-range promises require current inventory verification.",
-    allowNegated: true,
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: true,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 110,
   },
   {
     code: "fee_guarantee",
-    pattern: /\bno\s+(?:hidden|surprise)\s+fees?\b/gi,
+    name: "Fee guarantee",
+    rule_type: "blocked_claim",
+    severity: "blocking",
+    phrases: ["no hidden fees", "no hidden fee", "no surprise fees", "no surprise fee"],
     message: "Absolute fee claims require verified pricing and fee policy.",
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: false,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 120,
   },
+
+  {
+    code: "high_risk_topics",
+    name: "High-risk topics",
+    rule_type: "high_risk_topic",
+    severity: "warning",
+    phrases: [
+      "finance",
+      "finances",
+      "financing",
+      "loan",
+      "lender",
+      "APR",
+      "interest rate",
+      "credit score",
+      "credit check",
+      "credit inquiry",
+      "bad credit",
+      "bankruptcy",
+      "pre-approval",
+      "pre-approved",
+      "prequalification",
+      "pre-qualified",
+      "down payment",
+      "monthly payment",
+      "trade-in",
+      "trade value",
+      "appraisal",
+      "sell my car",
+      "vehicle value",
+      "warranty",
+      "insurance",
+      "certified pre-owned",
+      "CPO",
+      "regulation",
+      "law",
+      "legal",
+    ],
+    message: "Sensitive financial, trade, legal, warranty, insurance or CPO topics require additional review.",
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: false,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 200,
+  },
+
+  {
+    code: "finance_trade_topics",
+    name: "Finance and trade topics",
+    rule_type: "finance_trade_topic",
+    severity: "warning",
+    phrases: [
+      "finance",
+      "finances",
+      "financing",
+      "loan",
+      "lender",
+      "APR",
+      "interest rate",
+      "credit",
+      "bad credit",
+      "bankruptcy",
+      "pre-approval",
+      "pre-approved",
+      "prequalification",
+      "pre-qualified",
+      "down payment",
+      "monthly payment",
+      "trade-in",
+      "trade value",
+      "appraisal",
+      "sell my car",
+      "vehicle value",
+    ],
+    message: "Finance and trade articles require human review before indexation during the current rollout.",
+    requires_source: false,
+    requires_human_review: true,
+    allow_negated: false,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 210,
+  },
+
+  {
+    code: "source_required_topics",
+    name: "Source-required topics",
+    rule_type: "source_required_topic",
+    severity: "blocking",
+    phrases: [
+      "current rate",
+      "current rates",
+      "current auto loan rate",
+      "current auto loan rates",
+      "current car loan rate",
+      "current car loan rates",
+      "average APR",
+      "average rate",
+      "average interest rate",
+      "APR",
+      "interest rate",
+      "interest rates",
+      "credit score",
+      "credit inquiry",
+      "credit inquiries",
+      "hard inquiry",
+      "hard inquiries",
+      "soft pull",
+      "rate shopping",
+      "14-day window",
+      "30-day window",
+      "law",
+      "laws",
+      "regulation",
+      "regulations",
+      "statistic",
+      "statistics",
+      "percent",
+      "percentage",
+      "market price",
+      "market prices",
+      "market rate",
+      "market rates",
+      "market data",
+      "market statistics",
+      "market average",
+      "tax",
+      "taxes",
+      "consumer right",
+      "consumer rights",
+    ],
+    message: "Time-sensitive, financial, legal, credit, market or statistical claims require an external source.",
+    requires_source: true,
+    requires_human_review: true,
+    allow_negated: false,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: 220,
+  },
+  ...[
+    ["source_consumerfinance_gov", "Consumer Financial Protection Bureau", "consumerfinance.gov", 300],
+    ["source_ftc_gov", "Federal Trade Commission", "ftc.gov", 310],
+    ["source_federalreserve_gov", "Federal Reserve", "federalreserve.gov", 320],
+    ["source_usa_gov", "USA.gov", "usa.gov", 330],
+    ["source_virginia_gov", "Virginia.gov", "virginia.gov", 340],
+    ["source_dmv_virginia_gov", "Virginia DMV", "dmv.virginia.gov", 350],
+    ["source_uscourts_gov", "U.S. Courts", "uscourts.gov", 360],
+    ["source_myfico_com", "myFICO", "myfico.com", 370],
+    ["source_fico_com", "FICO", "fico.com", 380],
+    ["source_experian_com", "Experian", "experian.com", 390],
+    ["source_equifax_com", "Equifax", "equifax.com", 400],
+    ["source_transunion_com", "TransUnion", "transunion.com", 410],
+  ].map(([code, name, domain, sortOrder]): BlogQualityRule => ({
+    code: String(code),
+    name: String(name),
+    rule_type: "authoritative_source_domain",
+    severity: "warning",
+    phrases: [String(domain)],
+    message: "Preferred authoritative source domain.",
+    requires_source: false,
+    requires_human_review: false,
+    allow_negated: false,
+    is_enabled: true,
+    is_system_rule: true,
+    sort_order: Number(sortOrder),
+  })),
 ];
 
-const HIGH_RISK_TOPIC =
-  /\b(?:financ(?:e|es|ing)|loan|lender|apr|interest\s+rate|credit\s+score|credit\s+check|credit\s+inquiry|bad\s+credit|bankruptcy|pre[-\s]?(?:approval|approved|qualification|qualified)|down\s+payment|monthly\s+payment|trade[-\s]?in|trade\s+value|appraisal|sell\s+my\s+car|vehicle\s+value|warranty|insurance|certified\s+pre[-\s]?owned|cpo|regulation|law|legal)\b/i;
+function normalizeQualityRule(row: Record<string, unknown>): BlogQualityRule | null {
+  const code = String(row["code"] ?? "").trim();
+  const name = String(row["name"] ?? "").trim();
+  const ruleType = String(row["rule_type"] ?? "").trim() as BlogQualityRuleType;
 
-const FINANCE_OR_TRADE_TOPIC =
-  /\b(?:financ(?:e|es|ing)|loan|lender|apr|interest\s+rate|credit|bad\s+credit|bankruptcy|pre[-\s]?(?:approval|approved|qualification|qualified)|down\s+payment|monthly\s+payment|trade[-\s]?in|trade\s+value|appraisal|sell\s+my\s+car|vehicle\s+value)\b/i;
+  if (
+    !code ||
+    !name ||
+    ![
+      "blocked_claim",
+      "high_risk_topic",
+      "finance_trade_topic",
+      "source_required_topic",
+      "authoritative_source_domain",
+    ].includes(ruleType)
+  ) {
+    return null;
+  }
 
-const SOURCE_REQUIRED_TOPIC =
-  /\b(?:current\s+(?:auto|car|used\s+car)?\s*(?:loan\s+)?rates?|average\s+(?:apr|rate|interest\s+rate)|apr|interest\s+rates?|credit\s+score|credit\s+inquir(?:y|ies)|hard\s+inquir(?:y|ies)|soft\s+pull|rate[-\s]?shopping|\d+[-\s]?day\s+window|law|laws|regulation|regulations|statistic|statistics|percent|percentage|market\s+(?:price|prices|rate|rates|data|statistics|average)|tax|taxes|consumer\s+rights?)\b/i;
+  const rawPhrases = row["phrases"];
 
-const AUTHORITATIVE_SOURCE_DOMAINS = [
-  "consumerfinance.gov",
-  "ftc.gov",
-  "federalreserve.gov",
-  "usa.gov",
-  "virginia.gov",
-  "dmv.virginia.gov",
-  "myfico.com",
-  "fico.com",
-  "experian.com",
-  "equifax.com",
-  "transunion.com",
-];
+  const phrases = Array.isArray(rawPhrases)
+    ? rawPhrases.map((value) => String(value ?? "").trim()).filter(Boolean)
+    : [];
+
+  return {
+    id: Number.isFinite(Number(row["id"])) ? Number(row["id"]) : undefined,
+    code,
+    name,
+    rule_type: ruleType,
+    severity: row["severity"] === "warning" ? "warning" : "blocking",
+    phrases,
+    message: String(row["message"] ?? "").trim(),
+    requires_source: Boolean(row["requires_source"]),
+    requires_human_review: Boolean(row["requires_human_review"]),
+    allow_negated: Boolean(row["allow_negated"]),
+    is_enabled: row["is_enabled"] !== false,
+    is_system_rule: row["is_system_rule"] !== false,
+    sort_order: Number.isFinite(Number(row["sort_order"])) ? Number(row["sort_order"]) : 100,
+    created_at: row["created_at"] == null ? null : String(row["created_at"]),
+    updated_at: row["updated_at"] == null ? null : String(row["updated_at"]),
+  };
+}
+
+/**
+ * Read the editable Admin quality-gate rules from Supabase.
+ *
+ * Important:
+ * - Active DB rules are authoritative when the table exists.
+ * - If the migration has not been applied, the database is unavailable, or
+ *   the query returns no valid enabled rows, built-in defaults are returned.
+ * - A disabled DB rule stays disabled because only enabled rows are queried;
+ *   we do not merge defaults over a successful DB response.
+ */
+export async function listActiveBlogQualityRules(): Promise<BlogQualityRule[]> {
+  try {
+    const rows = (await rest("blog_quality_rules?select=*&is_enabled=eq.true&order=sort_order.asc,id.asc")) as Array<
+      Record<string, unknown>
+    >;
+
+    const normalized = (rows ?? [])
+      .map(normalizeQualityRule)
+      .filter((rule): rule is BlogQualityRule => Boolean(rule && rule.is_enabled));
+
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  } catch (error) {
+    console.error(
+      "[autoseo] Quality-rule table unavailable; using built-in defaults:",
+      error instanceof Error ? error.message : error,
+    );
+  }
+
+  return DEFAULT_QUALITY_RULES.map((rule) => ({
+    ...rule,
+    phrases: [...rule.phrases],
+  }));
+}
+
+/**
+ * Staff/Admin pages will use this in the next update to display every rule,
+ * including disabled ones. It also falls back to the defaults before the
+ * migration exists.
+ */
+export async function listAllBlogQualityRules(): Promise<BlogQualityRule[]> {
+  try {
+    const rows = (await rest("blog_quality_rules?select=*&order=sort_order.asc,id.asc")) as Array<
+      Record<string, unknown>
+    >;
+
+    const normalized = (rows ?? []).map(normalizeQualityRule).filter((rule): rule is BlogQualityRule => Boolean(rule));
+
+    if (normalized.length > 0) {
+      return normalized;
+    }
+  } catch (error) {
+    console.error(
+      "[autoseo] Could not list database quality rules; using built-in defaults:",
+      error instanceof Error ? error.message : error,
+    );
+  }
+
+  return DEFAULT_QUALITY_RULES.map((rule) => ({
+    ...rule,
+    phrases: [...rule.phrases],
+  }));
+}
 
 function stripHtml(value: string): string {
   return value
@@ -383,16 +832,6 @@ function extractSourceUrls(html: string): string[] {
   return Array.from(found);
 }
 
-function isAuthoritativeSource(urlValue: string): boolean {
-  try {
-    const hostname = new URL(urlValue).hostname.toLowerCase().replace(/^www\./, "");
-
-    return AUTHORITATIVE_SOURCE_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
-  } catch {
-    return false;
-  }
-}
-
 function isNegated(textValue: string, index: number): boolean {
   const before = textValue.slice(Math.max(0, index - 55), index).toLowerCase();
 
@@ -401,22 +840,86 @@ function isNegated(textValue: string, index: number): boolean {
   );
 }
 
-function firstRuleMatch(textValue: string, rule: ClaimRule): string | null {
-  rule.pattern.lastIndex = 0;
+function normalizePhrase(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[’]/g, "'")
+    .replace(/[-–—_/]+/g, " ")
+    .replace(/[^\p{L}\p{N}$%'.]+/gu, " ")
+    .replace(/\s+/g, " ")
+    .trim();
+}
 
-  let match: RegExpExecArray | null;
+function normalizedSearchText(value: string): {
+  normalized: string;
+  original: string;
+} {
+  return {
+    original: value,
+    normalized: normalizePhrase(value),
+  };
+}
 
-  while ((match = rule.pattern.exec(textValue))) {
-    if (rule.allowNegated && isNegated(textValue, match.index)) {
+/**
+ * Phrase rules are stored as normal human-readable text, not regular
+ * expressions. This is deliberate: Admin users can safely edit them without
+ * being able to break the scanner with invalid regex.
+ */
+function findPhraseMatch(textValue: string, phrases: string[], allowNegated: boolean): string | null {
+  const { normalized } = normalizedSearchText(textValue);
+
+  for (const phrase of phrases) {
+    const needle = normalizePhrase(phrase);
+
+    if (!needle) continue;
+
+    const index = normalized.indexOf(needle);
+
+    if (index < 0) continue;
+
+    /**
+     * Negation detection is performed against the normalized text. The index
+     * can differ slightly from the original HTML-stripped content because
+     * punctuation is collapsed, but the surrounding sentence still remains
+     * sufficient for the defensive negation check.
+     */
+    if (allowNegated && isNegated(normalized, index)) {
       continue;
     }
 
-    return String(match[0] ?? "")
-      .trim()
-      .slice(0, 180);
+    return phrase.slice(0, 180);
   }
 
   return null;
+}
+
+function anyRulePhraseMatch(textValue: string, rules: BlogQualityRule[]): boolean {
+  return rules.some((rule) => Boolean(findPhraseMatch(textValue, rule.phrases, false)));
+}
+
+function authoritativeDomainsFromRules(rules: BlogQualityRule[]): string[] {
+  return rules
+    .filter((rule) => rule.rule_type === "authoritative_source_domain")
+    .flatMap((rule) => rule.phrases)
+    .map(
+      (domain) =>
+        domain
+          .toLowerCase()
+          .replace(/^https?:\/\//, "")
+          .replace(/^www\./, "")
+          .split("/")[0] ?? "",
+    )
+    .filter(Boolean);
+}
+
+function isAuthoritativeSource(urlValue: string, domains: string[]): boolean {
+  try {
+    const hostname = new URL(urlValue).hostname.toLowerCase().replace(/^www\./, "");
+
+    return domains.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
 }
 
 function dedupeFlags(flags: AutoseoQualityFlag[]): AutoseoQualityFlag[] {
@@ -443,6 +946,7 @@ export async function evaluateAutoseoQuality(input: {
   duplicateOf?: string | null;
 }): Promise<AutoseoQualityResult> {
   const html = String(input.contentHtml ?? "");
+
   const searchable = [
     input.title,
     input.slug,
@@ -455,39 +959,49 @@ export async function evaluateAutoseoQuality(input: {
     .replace(/\s+/g, " ")
     .trim();
 
+  const rules = await listActiveBlogQualityRules();
+
+  const blockedClaimRules = rules.filter((rule) => rule.rule_type === "blocked_claim");
+  const highRiskRules = rules.filter((rule) => rule.rule_type === "high_risk_topic");
+  const financeTradeRules = rules.filter((rule) => rule.rule_type === "finance_trade_topic");
+  const sourceRequiredRules = rules.filter((rule) => rule.rule_type === "source_required_topic");
+
   const flags: AutoseoQualityFlag[] = [];
 
-  for (const rule of BLOCKED_CLAIM_RULES) {
-    const matched = firstRuleMatch(searchable, rule);
+  for (const rule of blockedClaimRules) {
+    const matched = findPhraseMatch(searchable, rule.phrases, rule.allow_negated);
 
     if (!matched) continue;
 
     flags.push({
       code: rule.code,
-      severity: "blocking",
-      message: rule.message,
+      severity: rule.severity,
+      message: rule.message || `Quality rule "${rule.name}" was matched.`,
       matched_text: matched,
+      requires_source: rule.requires_source || undefined,
     });
   }
 
   const sourceUrls = extractSourceUrls(html);
-  const sourceRequired = SOURCE_REQUIRED_TOPIC.test(searchable);
-  const hasAuthoritativeSource = sourceUrls.some(isAuthoritativeSource);
+  const sourceRequired = anyRulePhraseMatch(searchable, sourceRequiredRules);
+  const authoritativeDomains = authoritativeDomainsFromRules(rules);
+  const hasAuthoritativeSource = sourceUrls.some((url) => isAuthoritativeSource(url, authoritativeDomains));
 
   if (sourceRequired && sourceUrls.length === 0) {
     flags.push({
       code: "source_required",
       severity: "blocking",
       message:
+        sourceRequiredRules.find((rule) => anyRulePhraseMatch(searchable, [rule]))?.message ||
         "This article contains time-sensitive, financial, legal, credit, market or statistical claims but no external source link was detected.",
       requires_source: true,
     });
-  } else if (sourceRequired && !hasAuthoritativeSource) {
+  } else if (sourceRequired && authoritativeDomains.length > 0 && !hasAuthoritativeSource) {
     flags.push({
       code: "authoritative_source_review",
       severity: "warning",
       message:
-        "Sources were detected, but none match the preferred authoritative domains for financial, credit, legal or regulatory claims. Human source review is required.",
+        "Sources were detected, but none match the currently approved authoritative source domains. Human source review is required.",
       requires_source: true,
     });
   }
@@ -516,8 +1030,16 @@ export async function evaluateAutoseoQuality(input: {
     });
   }
 
-  const financeOrTrade = FINANCE_OR_TRADE_TOPIC.test(searchable);
-  const highRiskTopic = HIGH_RISK_TOPIC.test(searchable);
+  const financeOrTrade = anyRulePhraseMatch(searchable, financeTradeRules);
+  const highRiskTopic = anyRulePhraseMatch(searchable, highRiskRules);
+
+  const matchedRuleRequiresHumanReview = rules.some(
+    (rule) =>
+      rule.requires_human_review &&
+      rule.rule_type !== "authoritative_source_domain" &&
+      Boolean(findPhraseMatch(searchable, rule.phrases, rule.allow_negated)),
+  );
+
   const uniqueFlags = dedupeFlags(flags);
   const hasBlockingFlag = uniqueFlags.some((flag) => flag.severity === "blocking");
 
@@ -527,9 +1049,15 @@ export async function evaluateAutoseoQuality(input: {
       ? "medium"
       : "low";
 
-  // Current rollout rule: every finance/trade article must be human reviewed
-  // before indexation, even when the automated scan finds no unsupported claim.
-  const requiresHumanReview = financeOrTrade || highRiskTopic || uniqueFlags.length > 0;
+  /**
+   * Current rollout rule:
+   * - finance/trade content requires human review,
+   * - high-risk content requires human review,
+   * - any matched Admin rule marked requires_human_review does too,
+   * - any quality flag also requires review.
+   */
+  const requiresHumanReview =
+    financeOrTrade || highRiskTopic || matchedRuleRequiresHumanReview || uniqueFlags.length > 0;
 
   const status: AutoseoQualityStatus = hasBlockingFlag || requiresHumanReview ? "needs_review" : "approved";
 
@@ -758,7 +1286,6 @@ export async function approveAutoseoPost(id: number, reviewer: string, notes?: s
     reviewed_by: reviewedBy,
     updated_at: now,
   });
-
   await writeRevisionLog({
     postId: numericId,
     action: "quality_approved",
@@ -1421,6 +1948,7 @@ async function ensureImageBucket(): Promise<void> {
  * Returns the original URL when anything goes wrong, so an image problem
  * never fails article delivery.
  */
+
 async function mirrorImage(
   remoteUrl: string | null,
   articleId: number,
@@ -1582,6 +2110,7 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{
    * public route/index updates will use the same intent logic even if those
    * optional DB columns do not exist yet.
    */
+
   const existingOwner = await findExistingIntentOwner({
     id,
     title,
