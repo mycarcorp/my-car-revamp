@@ -7,13 +7,23 @@ import type {
   AutoseoQualityResult,
   AutoseoQualityStatus,
   AutoseoRiskLevel,
+  BlogQualityRule,
+  BlogQualityRuleType,
 } from "./autoseo-blog.server";
 
 /* -------------------------------------------------------------------------- */
 /* EXPORTED TYPES                                                             */
 /* -------------------------------------------------------------------------- */
 
-export type { AutoseoPost, AutoseoQualityFlag, AutoseoQualityResult, AutoseoQualityStatus, AutoseoRiskLevel };
+export type {
+  AutoseoPost,
+  AutoseoQualityFlag,
+  AutoseoQualityResult,
+  AutoseoQualityStatus,
+  AutoseoRiskLevel,
+  BlogQualityRule,
+  BlogQualityRuleType,
+};
 
 /**
  * AutoSEO row as shown in the admin list.
@@ -86,6 +96,450 @@ function cleanNotes(value: unknown): string | null {
   return notes ? notes.slice(0, 5000) : null;
 }
 
+const BLOG_QUALITY_RULE_TYPES = [
+  "blocked_claim",
+  "high_risk_topic",
+  "finance_trade_topic",
+  "source_required_topic",
+  "authoritative_source_domain",
+] as const satisfies readonly BlogQualityRuleType[];
+
+function cleanRuleCode(value: unknown): string {
+  const code = String(value ?? "")
+    .trim()
+    .toLowerCase()
+    .replace(/[^a-z0-9_]+/g, "_")
+    .replace(/^_+|_+$/g, "")
+    .slice(0, 100);
+
+  if (!code) {
+    throw new Error("Quality rule code is required.");
+  }
+
+  return code;
+}
+
+function cleanRuleName(value: unknown): string {
+  const name = String(value ?? "")
+    .trim()
+    .slice(0, 200);
+
+  if (!name) {
+    throw new Error("Quality rule name is required.");
+  }
+
+  return name;
+}
+
+function cleanRuleType(value: unknown): BlogQualityRuleType {
+  const ruleType = String(value ?? "").trim() as BlogQualityRuleType;
+
+  if (!BLOG_QUALITY_RULE_TYPES.includes(ruleType)) {
+    throw new Error("Invalid quality rule type.");
+  }
+
+  return ruleType;
+}
+
+function cleanSeverity(value: unknown): "warning" | "blocking" {
+  return value === "warning" ? "warning" : "blocking";
+}
+
+function cleanPhrases(value: unknown): string[] {
+  if (!Array.isArray(value)) {
+    throw new Error("Quality rule phrases must be an array.");
+  }
+
+  const phrases = Array.from(
+    new Set(
+      value
+        .map((item) => String(item ?? "").trim())
+        .filter(Boolean)
+        .map((item) => item.slice(0, 250)),
+    ),
+  ).slice(0, 250);
+
+  if (phrases.length === 0) {
+    throw new Error("Add at least one phrase or domain to this quality rule.");
+  }
+
+  return phrases;
+}
+
+function cleanRuleMessage(value: unknown): string {
+  return String(value ?? "")
+    .trim()
+    .slice(0, 2000);
+}
+
+function cleanSortOrder(value: unknown): number {
+  const sortOrder = Number(value);
+
+  if (!Number.isFinite(sortOrder)) {
+    return 100;
+  }
+
+  return Math.max(-100000, Math.min(100000, Math.trunc(sortOrder)));
+}
+
+function qualityRuleCreds() {
+  const url = process.env["LEGACY_SUPABASE_URL"] ?? process.env["SUPABASE_URL"];
+
+  const key = process.env["LEGACY_SUPABASE_SERVICE_ROLE_KEY"] ?? process.env["SUPABASE_SERVICE_ROLE_KEY"];
+
+  if (!url || !key) {
+    throw new Error("Blog backend credentials are not configured.");
+  }
+
+  return { url, key };
+}
+
+async function qualityRuleRest(
+  path: string,
+  init: {
+    method?: string;
+    body?: unknown;
+    prefer?: string;
+  } = {},
+): Promise<unknown> {
+  const { url, key } = qualityRuleCreds();
+
+  const method = init.method ?? "GET";
+
+  const headers: Record<string, string> = {
+    apikey: key,
+    Authorization: `Bearer ${key}`,
+    "Content-Type": "application/json",
+    [method === "GET" ? "Accept-Profile" : "Content-Profile"]: "mycarco_db",
+  };
+
+  if (init.prefer) {
+    headers["Prefer"] = init.prefer;
+  }
+
+  const response = await fetch(`${url}/rest/v1/${path}`, {
+    method,
+    headers,
+    body: init.body === undefined ? null : JSON.stringify(init.body),
+  });
+
+  const responseText = await response.text();
+
+  if (!response.ok) {
+    throw new Error(`Quality-rule request failed (${response.status}): ${responseText.slice(0, 500)}`);
+  }
+
+  return responseText ? JSON.parse(responseText) : null;
+}
+
+type BlogQualityRuleWriteInput = {
+  code: string;
+  name: string;
+  rule_type: BlogQualityRuleType;
+  severity: "warning" | "blocking";
+  phrases: string[];
+  message: string;
+  requires_source: boolean;
+  requires_human_review: boolean;
+  allow_negated: boolean;
+  is_enabled: boolean;
+  sort_order: number;
+};
+
+function cleanQualityRuleWriteInput(input: {
+  code: unknown;
+  name: unknown;
+  rule_type: unknown;
+  severity?: unknown;
+  phrases: unknown;
+  message?: unknown;
+  requires_source?: unknown;
+  requires_human_review?: unknown;
+  allow_negated?: unknown;
+  is_enabled?: unknown;
+  sort_order?: unknown;
+}): BlogQualityRuleWriteInput {
+  return {
+    code: cleanRuleCode(input.code),
+    name: cleanRuleName(input.name),
+    rule_type: cleanRuleType(input.rule_type),
+    severity: cleanSeverity(input.severity),
+    phrases: cleanPhrases(input.phrases),
+    message: cleanRuleMessage(input.message),
+    requires_source: Boolean(input.requires_source),
+    requires_human_review: Boolean(input.requires_human_review),
+    allow_negated: Boolean(input.allow_negated),
+    is_enabled: input.is_enabled !== false,
+    sort_order: cleanSortOrder(input.sort_order),
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/* QUALITY GATE RULE ADMIN                                                    */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Staff-only list of every quality-gate rule, including disabled rules.
+ *
+ * The server helper falls back to built-in defaults when the migration has
+ * not been applied yet. After the table exists, database rows are returned.
+ */
+export const listBlogQualityRulesAdmin = createServerFn({
+  method: "POST",
+})
+  .inputValidator((input: { accessToken: string }) => ({
+    accessToken: cleanAccessToken(input?.accessToken),
+  }))
+  .handler(async ({ data }): Promise<BlogQualityRule[]> => {
+    const auth = await import("./legacy-blog.server");
+
+    await auth.requireStaff(data.accessToken);
+
+    const m = await import("./autoseo-blog.server");
+
+    return await m.listAllBlogQualityRules();
+  });
+
+/**
+ * Staff-only creation of a custom/system quality-gate rule.
+ *
+ * Phrases are stored as plain strings. Admin users never enter raw regular
+ * expressions, which prevents an invalid regex from breaking article scans.
+ */
+export const createBlogQualityRuleAdmin = createServerFn({
+  method: "POST",
+})
+  .inputValidator(
+    (input: {
+      accessToken: string;
+      code: string;
+      name: string;
+      rule_type: BlogQualityRuleType;
+      severity?: "warning" | "blocking";
+      phrases: string[];
+      message?: string;
+      requires_source?: boolean;
+      requires_human_review?: boolean;
+      allow_negated?: boolean;
+      is_enabled?: boolean;
+      sort_order?: number;
+    }) => ({
+      accessToken: cleanAccessToken(input?.accessToken),
+      ...cleanQualityRuleWriteInput(input),
+    }),
+  )
+
+  .handler(async ({ data }): Promise<BlogQualityRule> => {
+    const auth = await import("./legacy-blog.server");
+
+    await auth.requireStaff(data.accessToken);
+
+    const now = new Date().toISOString();
+
+    const rows = (await qualityRuleRest("blog_quality_rules", {
+      method: "POST",
+      prefer: "return=representation",
+      body: {
+        code: data.code,
+        name: data.name,
+        rule_type: data.rule_type,
+        severity: data.severity,
+        phrases: data.phrases,
+        message: data.message,
+        requires_source: data.requires_source,
+        requires_human_review: data.requires_human_review,
+        allow_negated: data.allow_negated,
+        is_enabled: data.is_enabled,
+        is_system_rule: false,
+        sort_order: data.sort_order,
+        created_at: now,
+        updated_at: now,
+      },
+    })) as BlogQualityRule[];
+
+    const created = rows?.[0];
+
+    if (!created) {
+      throw new Error("Quality rule was created but no row was returned.");
+    }
+
+    return created;
+  });
+
+/**
+ * Staff-only update of an existing quality-gate rule.
+ *
+ * System rules may be edited, but their is_system_rule identity is preserved.
+ */
+export const updateBlogQualityRuleAdmin = createServerFn({
+  method: "POST",
+})
+  .inputValidator(
+    (input: {
+      accessToken: string;
+      id: number;
+      code: string;
+      name: string;
+      rule_type: BlogQualityRuleType;
+      severity?: "warning" | "blocking";
+      phrases: string[];
+      message?: string;
+      requires_source?: boolean;
+      requires_human_review?: boolean;
+      allow_negated?: boolean;
+      is_enabled?: boolean;
+      sort_order?: number;
+    }) => ({
+      accessToken: cleanAccessToken(input?.accessToken),
+      id: cleanId(input?.id),
+      ...cleanQualityRuleWriteInput(input),
+    }),
+  )
+  .handler(async ({ data }): Promise<BlogQualityRule> => {
+    const auth = await import("./legacy-blog.server");
+
+    await auth.requireStaff(data.accessToken);
+
+    const existing = (await qualityRuleRest(
+      `blog_quality_rules?select=id,is_system_rule&id=eq.${encodeURIComponent(String(data.id))}&limit=1`,
+    )) as Array<{
+      id: number;
+      is_system_rule?: boolean;
+    }>;
+
+    if (!existing?.[0]) {
+      throw new Error("Quality rule not found.");
+    }
+
+    const rows = (await qualityRuleRest(`blog_quality_rules?id=eq.${encodeURIComponent(String(data.id))}`, {
+      method: "PATCH",
+      prefer: "return=representation",
+      body: {
+        code: data.code,
+        name: data.name,
+        rule_type: data.rule_type,
+        severity: data.severity,
+        phrases: data.phrases,
+        message: data.message,
+        requires_source: data.requires_source,
+        requires_human_review: data.requires_human_review,
+        allow_negated: data.allow_negated,
+        is_enabled: data.is_enabled,
+        sort_order: data.sort_order,
+        updated_at: new Date().toISOString(),
+      },
+    })) as BlogQualityRule[];
+
+    const updated = rows?.[0];
+
+    if (!updated) {
+      throw new Error("Quality rule was updated but no row was returned.");
+    }
+
+    return updated;
+  });
+
+/**
+ * Staff-only enable / disable switch.
+ *
+ * A disabled rule remains in the database and can be turned back on later.
+ * This is intentionally safer than deleting system protection rules.
+ */
+export const setBlogQualityRuleEnabledAdmin = createServerFn({
+  method: "POST",
+})
+  .inputValidator((input: { accessToken: string; id: number; enabled: boolean }) => ({
+    accessToken: cleanAccessToken(input?.accessToken),
+    id: cleanId(input?.id),
+    enabled: Boolean(input?.enabled),
+  }))
+  .handler(async ({ data }): Promise<BlogQualityRule> => {
+    const auth = await import("./legacy-blog.server");
+
+    await auth.requireStaff(data.accessToken);
+
+    const rows = (await qualityRuleRest(`blog_quality_rules?id=eq.${encodeURIComponent(String(data.id))}`, {
+      method: "PATCH",
+      prefer: "return=representation",
+      body: {
+        is_enabled: data.enabled,
+        updated_at: new Date().toISOString(),
+      },
+    })) as BlogQualityRule[];
+
+    const updated = rows?.[0];
+
+    if (!updated) {
+      throw new Error("Quality rule not found.");
+    }
+
+    return updated;
+  });
+
+/**
+ * Convenience wrappers used by the Admin UI when explicit actions read better
+ * than passing a boolean.
+ */
+export const enableBlogQualityRuleAdmin = createServerFn({
+  method: "POST",
+})
+  .inputValidator((input: { accessToken: string; id: number }) => ({
+    accessToken: cleanAccessToken(input?.accessToken),
+    id: cleanId(input?.id),
+  }))
+  .handler(async ({ data }): Promise<BlogQualityRule> => {
+    const auth = await import("./legacy-blog.server");
+
+    await auth.requireStaff(data.accessToken);
+
+    const rows = (await qualityRuleRest(`blog_quality_rules?id=eq.${encodeURIComponent(String(data.id))}`, {
+      method: "PATCH",
+      prefer: "return=representation",
+      body: {
+        is_enabled: true,
+        updated_at: new Date().toISOString(),
+      },
+    })) as BlogQualityRule[];
+
+    const updated = rows?.[0];
+
+    if (!updated) {
+      throw new Error("Quality rule not found.");
+    }
+
+    return updated;
+  });
+
+export const disableBlogQualityRuleAdmin = createServerFn({
+  method: "POST",
+})
+  .inputValidator((input: { accessToken: string; id: number }) => ({
+    accessToken: cleanAccessToken(input?.accessToken),
+    id: cleanId(input?.id),
+  }))
+  .handler(async ({ data }): Promise<BlogQualityRule> => {
+    const auth = await import("./legacy-blog.server");
+
+    await auth.requireStaff(data.accessToken);
+
+    const rows = (await qualityRuleRest(`blog_quality_rules?id=eq.${encodeURIComponent(String(data.id))}`, {
+      method: "PATCH",
+      prefer: "return=representation",
+      body: {
+        is_enabled: false,
+        updated_at: new Date().toISOString(),
+      },
+    })) as BlogQualityRule[];
+
+    const updated = rows?.[0];
+
+    if (!updated) {
+      throw new Error("Quality rule not found.");
+    }
+
+    return updated;
+  });
+
 /* -------------------------------------------------------------------------- */
 /* PUBLIC AUTOSEO                                                             */
 /* -------------------------------------------------------------------------- */
@@ -101,6 +555,7 @@ function cleanNotes(value: unknown): string | null {
  *
  * so unapproved AutoSEO content cannot reach the public blog collection.
  */
+
 export const publicAutoseoList = createServerFn({
   method: "GET",
 }).handler(async (): Promise<AutoseoPost[]> => {
@@ -152,6 +607,7 @@ export const publicAutoseoPost = createServerFn({
  * - sources
  * - reviewer information
  */
+
 export const listAutoseoAdminPosts = createServerFn({
   method: "POST",
 })
@@ -240,6 +696,7 @@ export const updateAutoseoAdminPost = createServerFn({
       };
     },
   )
+
   .handler(
     async ({
       data,
@@ -409,6 +866,7 @@ export const approveAutoseoPostAdmin = createServerFn({
       notes: cleanNotes(input?.notes),
     }),
   )
+
   .handler(
     async ({
       data,
@@ -566,6 +1024,7 @@ export const setFeaturedAutoseoPostAdmin = createServerFn({
       id: cleanId(input?.id),
     }),
   )
+
   .handler(
     async ({
       data,
