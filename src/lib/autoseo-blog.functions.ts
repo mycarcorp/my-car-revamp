@@ -94,3 +94,17 @@ export const updateAutoseoAdminPost = createServerFn({ method: "POST" })
       id: data.id,
       title: data.title,
       slug: data.slug,
+      content_html: data.content_html,
+      content_markdown: data.content_markdown,
+      hero_image_url: data.hero_image_url,
+      hero_image_alt: data.hero_image_alt,
+      infographic_url: data.infographic_url,
+      meta_description: data.meta_description,
+      meta_keywords: data.meta_keywords,
+      tags: data.tags,
+      faq_schema: data.faq_schema,
+      language: data.language,
+    });
+
+    return { ok: true };
+  });

@@ -2128,5 +2128,9 @@ function ManualArticlePreview({
 
           {post.author_name
             ? ` · ${post.author_name}`
-
-      
+            : ""}
+        </div>
+      </div>
+    </article>
+  );
+}
