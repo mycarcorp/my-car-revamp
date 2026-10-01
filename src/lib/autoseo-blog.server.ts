@@ -30,6 +30,17 @@ export type AutoseoPost = {
   status?: string | null;
   published_url?: string | null;
   is_featured?: boolean | null;
+
+  // Quality-gate fields. Optional at the TypeScript layer so deployments can
+  // roll out the database migration without breaking older environments.
+  quality_status?: AutoseoQualityStatus | null;
+  risk_level?: AutoseoRiskLevel | null;
+  requires_human_review?: boolean | null;
+  quality_flags?: AutoseoQualityFlag[] | null;
+  source_urls?: string[] | null;
+  review_notes?: string | null;
+  reviewed_at?: string | null;
+  reviewed_by?: string | null;
 };
 
 export type AutoseoIntentInfo = {
@@ -37,6 +48,28 @@ export type AutoseoIntentInfo = {
   canonicalSlug: string;
   indexable: boolean;
   duplicateOf: string | null;
+};
+
+export type AutoseoQualityStatus = "pending" | "needs_review" | "approved" | "flagged";
+
+export type AutoseoRiskLevel = "low" | "medium" | "high";
+
+export type AutoseoQualityFlagSeverity = "warning" | "blocking";
+
+export type AutoseoQualityFlag = {
+  code: string;
+  severity: AutoseoQualityFlagSeverity;
+  message: string;
+  matched_text?: string | null;
+  requires_source?: boolean;
+};
+
+export type AutoseoQualityResult = {
+  status: AutoseoQualityStatus;
+  riskLevel: AutoseoRiskLevel;
+  requiresHumanReview: boolean;
+  flags: AutoseoQualityFlag[];
+  sourceUrls: string[];
 };
 
 export const SITE_ORIGIN = "https://mycarcorp.com";
@@ -100,19 +133,31 @@ const SELECT =
 /**
  * Public AutoSEO list.
  *
- * Keep this compatible with the existing table. The blog index will perform
- * its own intent-aware filtering in the next update.
+ * Mandatory quality gate:
+ * - article must be explicitly published
+ * - article must be approved
+ * - article must have a published_at value
+ *
+ * The fallback exists only for deployments where the quality-gate migration
+ * has not been applied yet. Once the columns exist, the first query is the
+ * enforced path.
  */
+
 export async function listAutoseoPosts(): Promise<AutoseoPost[]> {
   try {
     return (await rest(
-      `blog_posts?select=${SELECT}&or=(status.is.null,status.eq.published)&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
+      `blog_posts?select=${SELECT}&status=eq.published&quality_status=eq.approved&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
     )) as AutoseoPost[];
   } catch {
-    // Compatibility fallback for a table that does not yet have `status`.
-    return (await rest(
-      `blog_posts?select=${SELECT}&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
-    )) as AutoseoPost[];
+    try {
+      return (await rest(
+        `blog_posts?select=${SELECT}&status=eq.published&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
+      )) as AutoseoPost[];
+    } catch {
+      return (await rest(
+        `blog_posts?select=${SELECT}&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
+      )) as AutoseoPost[];
+    }
   }
 }
 
@@ -130,22 +175,435 @@ export async function getAutoseoPost(slug: string): Promise<AutoseoPost | null> 
     const rows = (await rest(
       `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(
         slug,
-      )}&or=(status.is.null,status.eq.published)&published_at=not.is.null&limit=1`,
+      )}&status=eq.published&quality_status=eq.approved&published_at=not.is.null&limit=1`,
     )) as AutoseoPost[];
 
     return rows?.[0] ?? null;
   } catch {
-    // Compatibility fallback for a table that does not yet have `status`.
-    const rows = (await rest(
-      `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(
-        slug,
-      )}&published_at=not.is.null&limit=1`,
-    )) as AutoseoPost[];
+    try {
+      const rows = (await rest(
+        `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(
+          slug,
+        )}&status=eq.published&published_at=not.is.null&limit=1`,
+      )) as AutoseoPost[];
 
-    return rows?.[0] ?? null;
+      return rows?.[0] ?? null;
+    } catch {
+      const rows = (await rest(
+        `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(
+          slug,
+        )}&published_at=not.is.null&limit=1`,
+      )) as AutoseoPost[];
+
+      return rows?.[0] ?? null;
+    }
   }
 }
 
+// ---------------------------------------------------------------------------
+// Mandatory AutoSEO quality gate
+// ---------------------------------------------------------------------------
+
+const APPROVED_BUSINESS_FACTS = {
+  businessName: "My Car",
+  address: "4720 Harrison Rd, Fredericksburg, VA 22408",
+  phone: "(540) 426-3322",
+  financing: [
+    "My Car offers vehicle financing options.",
+    "Customers can submit a financing application online.",
+    "Financing is subject to review and approval.",
+    "Actual rates, terms, down payments and payments may vary.",
+  ],
+  trade: [
+    "Customers can request a trade appraisal.",
+    "Customers can provide vehicle information for review when selling or trading a vehicle.",
+  ],
+  appointments: [
+    "Customers can schedule a test drive.",
+    "Customers can schedule a trade appraisal.",
+    "Customers can schedule a financing consultation.",
+    "Customers can schedule a general dealership visit.",
+  ],
+} as const;
+
+export function getApprovedMyCarFacts() {
+  return APPROVED_BUSINESS_FACTS;
+}
+
+type ClaimRule = {
+  code: string;
+  pattern: RegExp;
+  message: string;
+  allowNegated?: boolean;
+};
+
+const BLOCKED_CLAIM_RULES: ClaimRule[] = [
+  {
+    code: "guaranteed_approval",
+    pattern:
+      /\b(?:guaranteed?|100%|everyone\s+(?:is\s+)?approved|everyone\s+gets\s+approved)\b.{0,30}\b(?:approval|approved|financing)\b|\bguaranteed\s+(?:approval|financing)\b/gi,
+    message: "Guaranteed financing or approval claims are not approved My Car facts.",
+    allowNegated: true,
+  },
+  {
+    code: "approval_timing",
+    pattern:
+      /\b(?:instant|immediate|same[-\s]?day|within\s+\d+\s+(?:minute|minutes|hour|hours)|in\s+\d+\s+(?:minute|minutes|hour|hours)|approval\s+times?\s+in\s+minutes)\b.{0,35}\b(?:approval|approved|financing|decision)\b|\bapproval\s+times?\s+(?:are|is)?\s*(?:measured\s+)?in\s+minutes\b/gi,
+    message: "Specific approval-speed or decision-time claims require verified operational evidence.",
+    allowNegated: true,
+  },
+  {
+    code: "best_lowest_rate",
+    pattern: /\b(?:best|lowest|cheapest)\s+(?:available\s+)?(?:interest\s+)?rates?\b|\b(?:best|lowest)\s+apr\b/gi,
+    message: "Best/lowest rate claims are prohibited unless a current, verifiable offer supports them.",
+    allowNegated: true,
+  },
+  {
+    code: "no_credit_check",
+    pattern: /\bno\s+(?:hard\s+)?credit\s+check\b|\bwithout\s+(?:a\s+)?credit\s+check\b/gi,
+    message: "No-credit-check claims are not an approved My Car financing fact.",
+  },
+  {
+    code: "credit_impact_guarantee",
+    pattern:
+      /\b(?:won['’]?t|will\s+not|does\s+not|doesn['’]?t)\s+(?:hurt|affect|impact|lower|drop)\s+(?:your\s+)?credit(?:\s+score)?\b/gi,
+    message: "Exact or guaranteed credit-score impact claims require authoritative sourcing and careful context.",
+  },
+  {
+    code: "cpo_claim",
+    pattern: /\bcertified\s+pre[-\s]?owned\b|\bcpo\b/gi,
+    message: "Certified Pre-Owned/CPO claims are not approved unless the specific program and inventory are verified.",
+    allowNegated: true,
+  },
+  {
+    code: "insurance_claim",
+    pattern: /\bmy\s*car\s+insurance\b|\bmycar\s+insurance\b|\bour\s+insurance\s+(?:plan|program|coverage|product)\b/gi,
+    message: "My Car insurance-product claims are not approved business facts.",
+    allowNegated: true,
+  },
+
+  {
+    code: "inspection_guarantee",
+    pattern:
+      /\b(?:every|all)\s+(?:vehicle|vehicles|car|cars)\b.{0,35}\b(?:fully\s+)?inspected\b|\bfully\s+inspected\s+(?:inventory|vehicles|cars)\b/gi,
+    message: "Inspection-process claims require verified inspection terms before publication.",
+    allowNegated: true,
+  },
+  {
+    code: "warranty_claim",
+    pattern:
+      /\b(?:every|all)\s+(?:vehicle|vehicles|car|cars)\b.{0,35}\b(?:comes?\s+with|includes?)\b.{0,20}\bwarrant(?:y|ies)\b|\bwarranty\s+(?:included|guaranteed)\b/gi,
+    message: "Warranty coverage or inclusion claims require verified warranty terms.",
+    allowNegated: true,
+  },
+  {
+    code: "inventory_promise",
+    pattern:
+      /\b(?:largest|best)\s+inventory\b|\balways\s+(?:in\s+stock|available)\b|\b(?:every|all)\s+(?:vehicle|vehicles|cars?)\s+(?:is|are)\s+available\b/gi,
+    message: "Inventory availability and superlative inventory claims cannot be automated without live verification.",
+    allowNegated: true,
+  },
+  {
+    code: "under_20k_promise",
+    pattern:
+      /\b(?:all|every|exclusively|only)\b.{0,30}\b(?:vehicles?|cars?|inventory)\b.{0,30}\bunder\s+\$?20[,\s]?000\b|\b(?:vehicles?|cars?|inventory)\b.{0,30}\b(?:all|every|exclusively|only)\b.{0,20}\bunder\s+\$?20[,\s]?000\b/gi,
+    message: "Inventory price-range promises require current inventory verification.",
+    allowNegated: true,
+  },
+  {
+    code: "fee_guarantee",
+    pattern: /\bno\s+(?:hidden|surprise)\s+fees?\b/gi,
+    message: "Absolute fee claims require verified pricing and fee policy.",
+  },
+];
+
+const HIGH_RISK_TOPIC =
+  /\b(?:financ(?:e|es|ing)|loan|lender|apr|interest\s+rate|credit\s+score|credit\s+check|credit\s+inquiry|bad\s+credit|bankruptcy|pre[-\s]?(?:approval|approved|qualification|qualified)|down\s+payment|monthly\s+payment|trade[-\s]?in|trade\s+value|appraisal|sell\s+my\s+car|vehicle\s+value|warranty|insurance|certified\s+pre[-\s]?owned|cpo|regulation|law|legal)\b/i;
+
+const FINANCE_OR_TRADE_TOPIC =
+  /\b(?:financ(?:e|es|ing)|loan|lender|apr|interest\s+rate|credit|bad\s+credit|bankruptcy|pre[-\s]?(?:approval|approved|qualification|qualified)|down\s+payment|monthly\s+payment|trade[-\s]?in|trade\s+value|appraisal|sell\s+my\s+car|vehicle\s+value)\b/i;
+
+const SOURCE_REQUIRED_TOPIC =
+  /\b(?:current\s+(?:auto|car|used\s+car)?\s*(?:loan\s+)?rates?|average\s+(?:apr|rate|interest\s+rate)|apr|interest\s+rates?|credit\s+score|credit\s+inquir(?:y|ies)|hard\s+inquir(?:y|ies)|soft\s+pull|rate[-\s]?shopping|\d+[-\s]?day\s+window|law|laws|regulation|regulations|statistic|statistics|percent|percentage|market\s+(?:price|prices|rate|rates|data|statistics|average)|tax|taxes|consumer\s+rights?)\b/i;
+
+const AUTHORITATIVE_SOURCE_DOMAINS = [
+  "consumerfinance.gov",
+  "ftc.gov",
+  "federalreserve.gov",
+  "usa.gov",
+  "virginia.gov",
+  "dmv.virginia.gov",
+  "myfico.com",
+  "fico.com",
+  "experian.com",
+  "equifax.com",
+  "transunion.com",
+];
+
+function stripHtml(value: string): string {
+  return value
+    .replace(/<script\b[^>]*>[\s\S]*?<\/script>/gi, " ")
+    .replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi, " ")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;|&apos;/gi, "'")
+    .replace(/\s+/g, " ")
+    .trim();
+}
+
+function extractSourceUrls(html: string): string[] {
+  const found = new Set<string>();
+
+  const hrefPattern = /href\s*=\s*["'](https?:\/\/[^"'#\s]+[^"']*)["']/gi;
+  const rawPattern = /https?:\/\/[^\s<>'"]+/gi;
+
+  for (const pattern of [hrefPattern, rawPattern]) {
+    pattern.lastIndex = 0;
+
+    let match: RegExpExecArray | null;
+
+    while ((match = pattern.exec(html))) {
+      const candidate = String(match[1] ?? match[0] ?? "").trim();
+
+      try {
+        const url = new URL(candidate);
+
+        if (url.protocol !== "http:" && url.protocol !== "https:") continue;
+        if (url.hostname === "mycarcorp.com" || url.hostname.endsWith(".mycarcorp.com")) continue;
+
+        found.add(url.toString());
+      } catch {
+        // Ignore malformed source URLs.
+      }
+    }
+  }
+
+  return Array.from(found);
+}
+
+function isAuthoritativeSource(urlValue: string): boolean {
+  try {
+    const hostname = new URL(urlValue).hostname.toLowerCase().replace(/^www\./, "");
+
+    return AUTHORITATIVE_SOURCE_DOMAINS.some((domain) => hostname === domain || hostname.endsWith(`.${domain}`));
+  } catch {
+    return false;
+  }
+}
+
+function isNegated(textValue: string, index: number): boolean {
+  const before = textValue.slice(Math.max(0, index - 55), index).toLowerCase();
+
+  return /\b(?:not|never|cannot|can['’]?t|does\s+not|doesn['’]?t|do\s+not|don['’]?t|is\s+not|isn['’]?t|are\s+not|aren['’]?t)\b[^.!?]{0,35}$/.test(
+    before,
+  );
+}
+
+function firstRuleMatch(textValue: string, rule: ClaimRule): string | null {
+  rule.pattern.lastIndex = 0;
+
+  let match: RegExpExecArray | null;
+
+  while ((match = rule.pattern.exec(textValue))) {
+    if (rule.allowNegated && isNegated(textValue, match.index)) {
+      continue;
+    }
+
+    return String(match[0] ?? "")
+      .trim()
+      .slice(0, 180);
+  }
+
+  return null;
+}
+
+function dedupeFlags(flags: AutoseoQualityFlag[]): AutoseoQualityFlag[] {
+  const seen = new Set<string>();
+
+  return flags.filter((flag) => {
+    const key = `${flag.code}:${flag.matched_text ?? ""}`;
+
+    if (seen.has(key)) return false;
+
+    seen.add(key);
+    return true;
+  });
+}
+
+export async function evaluateAutoseoQuality(input: {
+  id: number;
+  title: string;
+  slug: string;
+  contentHtml: string | null;
+  metaDescription?: string | null;
+  metaKeywords?: string | null;
+  tags?: string | null;
+  duplicateOf?: string | null;
+}): Promise<AutoseoQualityResult> {
+  const html = String(input.contentHtml ?? "");
+  const searchable = [
+    input.title,
+    input.slug,
+    input.metaDescription ?? "",
+    input.metaKeywords ?? "",
+    input.tags ?? "",
+    stripHtml(html),
+  ]
+    .join(" ")
+    .replace(/\s+/g, " ")
+    .trim();
+
+  const flags: AutoseoQualityFlag[] = [];
+
+  for (const rule of BLOCKED_CLAIM_RULES) {
+    const matched = firstRuleMatch(searchable, rule);
+
+    if (!matched) continue;
+
+    flags.push({
+      code: rule.code,
+      severity: "blocking",
+      message: rule.message,
+      matched_text: matched,
+    });
+  }
+
+  const sourceUrls = extractSourceUrls(html);
+  const sourceRequired = SOURCE_REQUIRED_TOPIC.test(searchable);
+  const hasAuthoritativeSource = sourceUrls.some(isAuthoritativeSource);
+
+  if (sourceRequired && sourceUrls.length === 0) {
+    flags.push({
+      code: "source_required",
+      severity: "blocking",
+      message:
+        "This article contains time-sensitive, financial, legal, credit, market or statistical claims but no external source link was detected.",
+      requires_source: true,
+    });
+  } else if (sourceRequired && !hasAuthoritativeSource) {
+    flags.push({
+      code: "authoritative_source_review",
+      severity: "warning",
+      message:
+        "Sources were detected, but none match the preferred authoritative domains for financial, credit, legal or regulatory claims. Human source review is required.",
+      requires_source: true,
+    });
+  }
+
+  let duplicateOf = input.duplicateOf ?? null;
+
+  if (duplicateOf === undefined) duplicateOf = null;
+
+  if (!duplicateOf) {
+    const owner = await findExistingIntentOwner({
+      id: input.id,
+      title: input.title,
+      metaKeywords: input.metaKeywords ?? null,
+      tags: input.tags ?? null,
+    });
+
+    duplicateOf = owner?.post.slug ?? null;
+  }
+
+  if (duplicateOf && duplicateOf !== input.slug) {
+    flags.push({
+      code: "duplicate_topic",
+      severity: "blocking",
+      message: `A previously established AutoSEO URL already owns this search intent: /blog/${duplicateOf}.`,
+      matched_text: duplicateOf,
+    });
+  }
+
+  const financeOrTrade = FINANCE_OR_TRADE_TOPIC.test(searchable);
+  const highRiskTopic = HIGH_RISK_TOPIC.test(searchable);
+  const uniqueFlags = dedupeFlags(flags);
+  const hasBlockingFlag = uniqueFlags.some((flag) => flag.severity === "blocking");
+
+  const riskLevel: AutoseoRiskLevel = highRiskTopic
+    ? "high"
+    : uniqueFlags.length > 0 || sourceRequired
+      ? "medium"
+      : "low";
+
+  // Current rollout rule: every finance/trade article must be human reviewed
+  // before indexation, even when the automated scan finds no unsupported claim.
+  const requiresHumanReview = financeOrTrade || highRiskTopic || uniqueFlags.length > 0;
+
+  const status: AutoseoQualityStatus = hasBlockingFlag || requiresHumanReview ? "needs_review" : "approved";
+
+  return {
+    status,
+    riskLevel,
+    requiresHumanReview,
+    flags: uniqueFlags,
+    sourceUrls,
+  };
+}
+
+async function patchBlogPostCompat(id: number, body: Record<string, unknown>): Promise<void> {
+  let payload = { ...body };
+
+  for (let attempt = 0; attempt < 16; attempt += 1) {
+    try {
+      await rest(`blog_posts?id=eq.${encodeURIComponent(String(id))}`, {
+        method: "PATCH",
+        prefer: "return=minimal",
+        body: payload,
+      });
+
+      return;
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error);
+      const missing = /PGRST204/.test(message)
+        ? (/'([^']+)' column/.exec(message)?.[1] ?? /column\s+"?([a-z_]+)"?/i.exec(message)?.[1])
+        : undefined;
+
+      if (!missing || !(missing in payload)) throw error;
+
+      const { [missing]: _drop, ...remaining } = payload;
+      payload = remaining;
+    }
+  }
+
+  throw new Error("Could not update the AutoSEO article after removing unknown columns.");
+}
+
+async function writeRevisionLog(input: {
+  postId: number;
+  action: string;
+  previousStatus?: string | null;
+  newStatus?: string | null;
+  qualityStatus?: AutoseoQualityStatus | null;
+  riskLevel?: AutoseoRiskLevel | null;
+  flags?: AutoseoQualityFlag[] | null;
+  notes?: string | null;
+  changedBy?: string | null;
+}): Promise<void> {
+  try {
+    await rest("blog_revision_log", {
+      method: "POST",
+      prefer: "return=minimal",
+      body: {
+        post_id: input.postId,
+        action: input.action,
+        previous_status: input.previousStatus ?? null,
+        new_status: input.newStatus ?? null,
+        quality_status: input.qualityStatus ?? null,
+        risk_level: input.riskLevel ?? null,
+        flags: input.flags ?? [],
+        notes: input.notes ?? null,
+        changed_by: input.changedBy ?? null,
+      },
+    });
+  } catch (error) {
+    // The revision table is intentionally best-effort so a migration rollout
+    // cannot interrupt AutoSEO ingestion. Once the table exists, logging is
+    // automatic.
+    console.error("[autoseo] Could not write revision log:", error instanceof Error ? error.message : error);
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Admin mutations
@@ -186,26 +644,179 @@ export async function updateAutoseoAdminRow(input: AutoseoAdminUpdate): Promise<
 
   const html = String(input.content_html ?? "");
   const now = new Date().toISOString();
+  const quality = await evaluateAutoseoQuality({
+    id,
+    title,
+    slug,
+    contentHtml: html,
+    metaDescription: input.meta_description ?? null,
+    metaKeywords: input.meta_keywords ?? null,
+    tags: input.tags ?? null,
+  });
 
-  await rest(`blog_posts?id=eq.${encodeURIComponent(String(id))}`, {
-    method: "PATCH",
-    prefer: "return=minimal",
-    body: {
-      title,
-      slug,
-      content_html: html || null,
-      content_markdown: input.content_markdown ?? null,
-      hero_image_url: input.hero_image_url ?? null,
-      hero_image_alt: input.hero_image_alt ?? null,
-      infographic_url: input.infographic_url ?? null,
-      meta_description: input.meta_description ?? null,
-      meta_keywords: input.meta_keywords ?? null,
-      tags: input.tags ?? null,
-      faq_schema: input.faq_schema ?? null,
-      language: input.language ?? "en",
-      reading_time: readingTimeFromHtml(html),
-      updated_at: now,
-    },
+  const current = (await rest(
+    `blog_posts?select=id,status,quality_status&id=eq.${encodeURIComponent(String(id))}&limit=1`,
+  )) as Array<{ id: number; status?: string | null; quality_status?: string | null }>;
+
+  if (!current?.[0]) {
+    throw new Error("AutoSEO post not found.");
+  }
+
+  // Every substantive edit re-runs the gate. High-risk/finance/trade content
+  // returns to review until a human approves the updated version.
+  const nextStatus = quality.status === "approved" ? (current[0].status ?? "draft") : "draft";
+
+  await patchBlogPostCompat(id, {
+    title,
+    slug,
+    content_html: html || null,
+    content_markdown: input.content_markdown ?? null,
+    hero_image_url: input.hero_image_url ?? null,
+    hero_image_alt: input.hero_image_alt ?? null,
+    infographic_url: input.infographic_url ?? null,
+    meta_description: input.meta_description ?? null,
+    meta_keywords: input.meta_keywords ?? null,
+    tags: input.tags ?? null,
+    faq_schema: input.faq_schema ?? null,
+    language: input.language ?? "en",
+    reading_time: readingTimeFromHtml(html),
+    quality_status: quality.status,
+    risk_level: quality.riskLevel,
+    requires_human_review: quality.requiresHumanReview,
+    quality_flags: quality.flags,
+    source_urls: quality.sourceUrls,
+    reviewed_at: null,
+    reviewed_by: null,
+    status: nextStatus,
+    is_featured: nextStatus === "published" ? undefined : false,
+    updated_at: now,
+  });
+
+  await writeRevisionLog({
+    postId: id,
+    action: "article_updated",
+    previousStatus: current[0].status ?? null,
+    newStatus: nextStatus,
+    qualityStatus: quality.status,
+    riskLevel: quality.riskLevel,
+    flags: quality.flags,
+  });
+
+  await invalidateBlogSitemap();
+}
+
+export async function approveAutoseoPost(id: number, reviewer: string, notes?: string | null): Promise<void> {
+  const numericId = Number(id);
+  const reviewedBy = String(reviewer ?? "").trim();
+
+  if (!Number.isFinite(numericId)) {
+    throw new Error("Invalid AutoSEO post id.");
+  }
+
+  if (!reviewedBy) {
+    throw new Error("Reviewer is required to approve an AutoSEO article.");
+  }
+
+  const rows = (await rest(`blog_posts?select=*&id=eq.${encodeURIComponent(String(numericId))}&limit=1`)) as Array<
+    Record<string, unknown>
+  >;
+
+  const row = rows?.[0];
+
+  if (!row) {
+    throw new Error("AutoSEO post not found.");
+  }
+
+  const quality = await evaluateAutoseoQuality({
+    id: numericId,
+    title: String(row["title"] ?? ""),
+    slug: String(row["slug"] ?? ""),
+    contentHtml: row["content_html"] == null ? null : String(row["content_html"]),
+    metaDescription: row["meta_description"] == null ? null : String(row["meta_description"]),
+    metaKeywords: row["meta_keywords"] == null ? null : String(row["meta_keywords"]),
+    tags: row["tags"] == null ? null : String(row["tags"]),
+  });
+
+  const blockingFlags = quality.flags.filter((flag) => flag.severity === "blocking");
+
+  if (blockingFlags.length > 0) {
+    throw new Error(
+      `This article still has blocking quality issues: ${blockingFlags.map((flag) => flag.message).join(" ")}`,
+    );
+  }
+
+  const now = new Date().toISOString();
+
+  await patchBlogPostCompat(numericId, {
+    quality_status: "approved",
+    risk_level: quality.riskLevel,
+    requires_human_review: quality.requiresHumanReview,
+    quality_flags: quality.flags,
+    source_urls: quality.sourceUrls,
+    review_notes: notes ?? null,
+    reviewed_at: now,
+    reviewed_by: reviewedBy,
+    updated_at: now,
+  });
+
+  await writeRevisionLog({
+    postId: numericId,
+    action: "quality_approved",
+    previousStatus: row["status"] == null ? null : String(row["status"]),
+    newStatus: row["status"] == null ? null : String(row["status"]),
+    qualityStatus: "approved",
+    riskLevel: quality.riskLevel,
+    flags: quality.flags,
+    notes: notes ?? null,
+    changedBy: reviewedBy,
+  });
+
+  await invalidateBlogSitemap();
+}
+
+export async function flagAutoseoPost(id: number, reviewer: string, notes?: string | null): Promise<void> {
+  const numericId = Number(id);
+  const reviewedBy = String(reviewer ?? "").trim();
+
+  if (!Number.isFinite(numericId)) {
+    throw new Error("Invalid AutoSEO post id.");
+  }
+
+  const rows = (await rest(
+    `blog_posts?select=id,status,risk_level,quality_flags&id=eq.${encodeURIComponent(String(numericId))}&limit=1`,
+  )) as Array<{
+    id: number;
+    status?: string | null;
+    risk_level?: AutoseoRiskLevel | null;
+    quality_flags?: AutoseoQualityFlag[] | null;
+  }>;
+
+  if (!rows?.[0]) {
+    throw new Error("AutoSEO post not found.");
+  }
+
+  const now = new Date().toISOString();
+
+  await patchBlogPostCompat(numericId, {
+    quality_status: "flagged",
+    status: "draft",
+    is_featured: false,
+    review_notes: notes ?? null,
+    reviewed_at: now,
+    reviewed_by: reviewedBy || null,
+    updated_at: now,
+  });
+
+  await writeRevisionLog({
+    postId: numericId,
+    action: "quality_flagged",
+    previousStatus: rows[0].status ?? null,
+    newStatus: "draft",
+    qualityStatus: "flagged",
+    riskLevel: rows[0].risk_level ?? null,
+    flags: rows[0].quality_flags ?? [],
+    notes: notes ?? null,
+    changedBy: reviewedBy || null,
   });
 
   await invalidateBlogSitemap();
@@ -219,24 +830,47 @@ export async function setAutoseoPublished(id: number, published: boolean): Promi
   }
 
   const existing = (await rest(
-    `blog_posts?select=id,published_at&id=eq.${encodeURIComponent(String(numericId))}&limit=1`,
-  )) as Array<{ id: number; published_at: string | null }>;
+    `blog_posts?select=id,status,published_at,quality_status,seo_indexable&id=eq.${encodeURIComponent(
+      String(numericId),
+    )}&limit=1`,
+  )) as Array<{
+    id: number;
+    status?: string | null;
+    published_at: string | null;
+    quality_status?: AutoseoQualityStatus | null;
+    seo_indexable?: boolean | null;
+  }>;
 
   if (!existing?.[0]) {
     throw new Error("AutoSEO post not found.");
   }
 
-  const now = new Date().toISOString();
+  if (published && existing[0].quality_status !== "approved") {
+    throw new Error("This AutoSEO article must pass the quality review and be approved before it can be published.");
+  }
 
-  await rest(`blog_posts?id=eq.${encodeURIComponent(String(numericId))}`, {
-    method: "PATCH",
-    prefer: "return=minimal",
-    body: {
-      status: published ? "published" : "draft",
-      published_at: published ? existing[0].published_at ?? now : existing[0].published_at,
-      is_featured: published ? undefined : false,
-      updated_at: now,
-    },
+  if (published && existing[0].seo_indexable === false) {
+    throw new Error(
+      "This AutoSEO article overlaps an established search intent and cannot be published as a competing indexable URL.",
+    );
+  }
+
+  const now = new Date().toISOString();
+  const nextStatus = published ? "published" : "draft";
+
+  await patchBlogPostCompat(numericId, {
+    status: nextStatus,
+    published_at: published ? (existing[0].published_at ?? now) : existing[0].published_at,
+    is_featured: published ? undefined : false,
+    updated_at: now,
+  });
+
+  await writeRevisionLog({
+    postId: numericId,
+    action: published ? "published" : "unpublished",
+    previousStatus: existing[0].status ?? null,
+    newStatus: nextStatus,
+    qualityStatus: existing[0].quality_status ?? null,
   });
 
   await invalidateBlogSitemap();
@@ -249,9 +883,20 @@ export async function setFeaturedAutoseoPost(id: number): Promise<void> {
     throw new Error("Invalid AutoSEO post id.");
   }
 
+  const rows = (await rest(
+    `blog_posts?select=id,status,quality_status&id=eq.${encodeURIComponent(String(numericId))}&limit=1`,
+  )) as Array<{ id: number; status?: string | null; quality_status?: AutoseoQualityStatus | null }>;
+
+  if (!rows?.[0]) {
+    throw new Error("AutoSEO post not found.");
+  }
+
+  if (rows[0].status !== "published" || rows[0].quality_status !== "approved") {
+    throw new Error("Only approved, published AutoSEO articles can be featured.");
+  }
+
   const now = new Date().toISOString();
 
-  // Match the Manual-post behavior: one featured AutoSEO article at a time.
   await rest("blog_posts?is_featured=eq.true", {
     method: "PATCH",
     prefer: "return=minimal",
@@ -261,13 +906,17 @@ export async function setFeaturedAutoseoPost(id: number): Promise<void> {
     },
   });
 
-  await rest(`blog_posts?id=eq.${encodeURIComponent(String(numericId))}`, {
-    method: "PATCH",
-    prefer: "return=minimal",
-    body: {
-      is_featured: true,
-      updated_at: now,
-    },
+  await patchBlogPostCompat(numericId, {
+    is_featured: true,
+    updated_at: now,
+  });
+
+  await writeRevisionLog({
+    postId: numericId,
+    action: "featured",
+    previousStatus: rows[0].status ?? null,
+    newStatus: rows[0].status ?? null,
+    qualityStatus: rows[0].quality_status ?? null,
   });
 }
 
@@ -283,7 +932,6 @@ export function readingTimeFromHtml(html: string): number {
 
   return Math.max(1, Math.ceil(words / 200));
 }
-
 
 type WebhookBody = Record<string, unknown>;
 
@@ -349,8 +997,6 @@ const INTENT_STOP_WORDS = new Set([
   "va",
 ]);
 
-
-
 const INTENT_SYNONYMS: Record<string, string> = {
   automobiles: "car",
   automobile: "car",
@@ -386,7 +1032,6 @@ function normalizeIntentText(value: string): string {
       .trim()
   );
 }
-
 
 function intentTokens(value: string): string[] {
   const normalized = normalizeIntentText(value);
@@ -428,8 +1073,6 @@ export function normalizePrimaryIntent(value: string): string {
   return uniqueSorted(intentTokens(value)).join(" ");
 }
 
-
-
 /**
  * AutoSEO normally provides metaKeywords/keywords. Those are our preferred
  * source for the article's primary target query.
@@ -468,7 +1111,6 @@ export function derivePrimaryIntent(input: {
   return normalizedTags;
 }
 
-
 function tokenSet(value: string): Set<string> {
   return new Set(
     value
@@ -485,6 +1127,7 @@ function tokenSet(value: string): Set<string> {
  * two useful financing articles simply because they both mention "used car"
  * or "financing".
  */
+
 export function intentSimilarity(a: string, b: string): number {
   if (!a || !b) {
     return 0;
@@ -501,7 +1144,6 @@ export function intentSimilarity(a: string, b: string): number {
     return 0;
   }
 
-  
   let intersection = 0;
 
   for (const token of setA) {
@@ -571,7 +1213,6 @@ async function findExistingIntentOwner(input: {
     return null;
   }
 
-  
   let existing: AutoseoPost[];
 
   try {
@@ -643,7 +1284,6 @@ export async function getAutoseoIntentInfo(article: AutoseoPost): Promise<Autose
 
   const ownerDate = new Date(owner.post.published_at ?? owner.post.created_at ?? 0).getTime();
 
-  
   /**
    * Prefer the older established URL as the owner.
    *
@@ -678,7 +1318,6 @@ export function dedupeAutoseoPostsByIntent(posts: AutoseoPost[]): AutoseoPost[] 
 
     const bTime = new Date(b.published_at ?? b.created_at ?? 0).getTime();
 
-    
     return aTime - bTime;
   });
 
@@ -717,8 +1356,6 @@ export function dedupeAutoseoPostsByIntent(posts: AutoseoPost[]): AutoseoPost[] 
   return posts.filter((post) => ownerIds.has(post.id));
 }
 
-
-
 // ---------------------------------------------------------------------------
 // Image mirror
 // ---------------------------------------------------------------------------
@@ -749,7 +1386,6 @@ async function ensureImageBucket(): Promise<void> {
 
   const c = creds();
 
-  
   const res = await fetch(`${c.url}/storage/v1/bucket`, {
     method: "POST",
     headers: {
@@ -778,8 +1414,6 @@ async function ensureImageBucket(): Promise<void> {
 
   throw new Error(`Could not prepare image bucket (${res.status}): ${detail.slice(0, 200)}`);
 }
-
-
 
 /**
  * Copy a remote image into storage and return its public URL.
@@ -821,7 +1455,6 @@ async function mirrorImage(
       throw new Error("image too large");
     }
 
-    
     const fromUrl = new URL(remoteUrl).pathname.split(".").pop()?.toLowerCase() ?? "";
 
     const ext = EXT_BY_TYPE[contentType] ?? (/^[a-z0-9]{2,5}$/.test(fromUrl) ? fromUrl : "jpg");
@@ -857,7 +1490,6 @@ async function mirrorImage(
   }
 }
 
-
 // ---------------------------------------------------------------------------
 // Upsert
 // ---------------------------------------------------------------------------
@@ -892,7 +1524,6 @@ async function upsertRow(row: Record<string, unknown>): Promise<void> {
         throw error;
       }
 
-      
       console.error(`[autoseo] blog_posts has no "${missing}" column — skipping that field.`);
 
       const { [missing]: _drop, ...remaining } = payload;
@@ -922,7 +1553,6 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{
   const faq = body["faqSchema"];
 
   const now = new Date().toISOString();
-
 
   const metaKeywords =
     text(body["metaKeywords"]) ??
@@ -959,10 +1589,20 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{
     tags,
   });
 
-  
   const canonicalSlug = existingOwner?.post.slug ?? slug;
 
   const seoIndexable = !existingOwner;
+
+  const quality = await evaluateAutoseoQuality({
+    id,
+    title,
+    slug,
+    contentHtml: html,
+    metaDescription: text(body["metaDescription"]),
+    metaKeywords,
+    tags,
+    duplicateOf: existingOwner?.post.slug ?? null,
+  });
 
   if (existingOwner) {
     console.warn(
@@ -997,7 +1637,6 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{
 
     meta_description: text(body["metaDescription"]),
 
-    
     meta_keywords: metaKeywords,
 
     tags,
@@ -1012,7 +1651,11 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{
 
     source_article_id: Number.isFinite(sourceArticleId) ? sourceArticleId : null,
 
-    status: text(body["status"]),
+    // AutoSEO cannot bypass the My Car quality gate. Clean low-risk content can
+    // retain the incoming publish intent, while finance/trade/high-risk or
+    // flagged content is held as a draft until a human approves it.
+    status:
+      quality.status === "approved" && (text(body["status"]) ?? "published") === "published" ? "published" : "draft",
 
     published_at: text(body["publishedAt"]) ?? now,
 
@@ -1031,12 +1674,36 @@ export async function upsertAutoseoArticle(body: WebhookBody): Promise<{
 
     canonical_slug: canonicalSlug,
 
-    seo_indexable: seoIndexable,
+    seo_indexable: seoIndexable && quality.status === "approved",
+
+    quality_status: quality.status,
+
+    risk_level: quality.riskLevel,
+
+    requires_human_review: quality.requiresHumanReview,
+
+    quality_flags: quality.flags,
+
+    source_urls: quality.sourceUrls,
+
+    review_notes: null,
+
+    reviewed_at: quality.status === "approved" ? now : null,
+
+    reviewed_by: quality.status === "approved" ? "automatic_quality_gate" : null,
   };
 
-
-  
   await upsertRow(row);
+
+  await writeRevisionLog({
+    postId: id,
+    action: "autoseo_received",
+    newStatus: String(row.status),
+    qualityStatus: quality.status,
+    riskLevel: quality.riskLevel,
+    flags: quality.flags,
+    changedBy: "autoseo",
+  });
 
   // A new or changed article means the cached sitemap is stale.
   try {
@@ -1062,6 +1729,7 @@ type SitemapRow = {
   published_at: string | null;
   created_at?: string | null;
   status?: string | null;
+  quality_status?: AutoseoQualityStatus | null;
 };
 
 /**
@@ -1073,7 +1741,6 @@ type SitemapRow = {
  * Supabase table.
  */
 
-
 export async function sitemapUrls(): Promise<
   Array<{
     slug: string;
@@ -1084,13 +1751,21 @@ export async function sitemapUrls(): Promise<
 
   try {
     rows = (await rest(
-      "blog_posts?select=id,title,slug,meta_keywords,tags,updated_at,published_at,created_at,status&or=(status.is.null,status.eq.published)&published_at=not.is.null",
+      "blog_posts?select=id,title,slug,meta_keywords,tags,updated_at,published_at,created_at,status,quality_status&status=eq.published&quality_status=eq.approved&published_at=not.is.null",
     )) as SitemapRow[];
   } catch {
-    // Table without the optional status column.
-    rows = (await rest(
-      "blog_posts?select=id,title,slug,meta_keywords,tags,updated_at,published_at,created_at&published_at=not.is.null",
-    )) as SitemapRow[];
+    try {
+      // Compatibility fallback for a table with status but without the quality
+      // gate columns.
+      rows = (await rest(
+        "blog_posts?select=id,title,slug,meta_keywords,tags,updated_at,published_at,created_at,status&status=eq.published&published_at=not.is.null",
+      )) as SitemapRow[];
+    } catch {
+      // Oldest compatibility fallback.
+      rows = (await rest(
+        "blog_posts?select=id,title,slug,meta_keywords,tags,updated_at,published_at,created_at&published_at=not.is.null",
+      )) as SitemapRow[];
+    }
   }
 
   const validRows = (rows ?? []).filter((row) => row.slug && row.title);
@@ -1102,7 +1777,7 @@ export async function sitemapUrls(): Promise<
    * article targeting the same intent from receiving another strong
    * indexation signal.
    */
- const chronological = [...validRows].sort((a, b) => {
+  const chronological = [...validRows].sort((a, b) => {
     const aTime = new Date(a.published_at ?? a.created_at ?? 0).getTime();
 
     const bTime = new Date(b.published_at ?? b.created_at ?? 0).getTime();
@@ -1135,7 +1810,6 @@ export async function sitemapUrls(): Promise<
       (owner) => !owner.intent.startsWith("__slug:") && intentsOverlap(intent, owner.intent),
     );
 
-    
     if (!duplicate) {
       owners.push({
         row,
