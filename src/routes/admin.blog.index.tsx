@@ -9,6 +9,8 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Switch } from "@/components/ui/switch";
 
+import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
+
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 
 import {
@@ -24,6 +26,8 @@ import {
 
 import { useAuth } from "@/hooks/useAuth";
 import { formatDate } from "@/lib/format";
+
+import { escapeHtml, normalizeCta, normalizeHeadingStyles, sanitizeHtml, type HeadingStyle } from "@/lib/blog-content";
 
 import {
   deleteLegacyPost,
@@ -78,11 +82,24 @@ type Row =
       post: AutoseoAdminPost;
     };
 
-type PreviewArticle = {
-  source: "manual" | "autoseo";
-  slug: string;
-  title: string;
-  status: string;
+type Preview =
+  | {
+      source: "manual";
+      post: LegacyBlogPost;
+    }
+  | {
+      source: "autoseo";
+      post: AutoseoAdminPost;
+    };
+
+type Faq = {
+  question: string;
+  answer: string;
+};
+
+type ExtendedAutoseoPost = AutoseoAdminPost & {
+  faq_schema?: Faq[] | null;
+  infographic_url?: string | null;
 };
 
 const FILTERS = ["all", "manual", "autoseo", "published", "draft"] as const;
@@ -107,8 +124,58 @@ const recent = (...dates: Array<string | null | undefined>): string | null =>
 const autoseoStatus = (post: AutoseoAdminPost): string =>
   (post.status ?? "").trim() || (post.published_at ? "published" : "draft");
 
+const getAutoseoFaqs = (post: AutoseoAdminPost): Faq[] => {
+  const extended = post as ExtendedAutoseoPost;
+
+  return Array.isArray(extended.faq_schema)
+    ? extended.faq_schema.filter((faq) => Boolean(faq && faq.question && faq.answer))
+    : [];
+};
+
 /* -------------------------------------------------------------------------- */
-/* PAGE                                                                       */
+/* PUBLIC AUTOSEO ARTICLE STYLES                                              */
+/* -------------------------------------------------------------------------- */
+
+const AUTOSEO_PROSE_CSS = [
+  ".admin-autoseo-article{max-width:720px;}",
+  ".admin-autoseo-article h2{font-size:1.5rem;font-weight:700;margin-top:1.75rem;margin-bottom:.6rem;}",
+  ".admin-autoseo-article h3{font-size:1.25rem;font-weight:700;margin-top:1.5rem;margin-bottom:.5rem;}",
+  ".admin-autoseo-article p{font-size:1rem;line-height:1.75;margin-bottom:1rem;color:hsl(var(--muted-foreground));}",
+  ".admin-autoseo-article ul{list-style:disc;padding-left:1.5rem;margin-bottom:1rem;}",
+  ".admin-autoseo-article ol{list-style:decimal;padding-left:1.5rem;margin-bottom:1rem;}",
+  ".admin-autoseo-article li{margin-bottom:.5rem;}",
+  ".admin-autoseo-article blockquote{border-left:4px solid hsl(var(--primary));padding-left:1rem;font-style:italic;color:hsl(var(--muted-foreground));margin:1.25rem 0;}",
+  ".admin-autoseo-article code{background:rgba(148,163,184,.18);padding:2px 6px;border-radius:4px;font-family:ui-monospace,SFMono-Regular,Menlo,monospace;font-size:.9em;}",
+  ".admin-autoseo-article pre{background:#0f172a;color:#f1f5f9;padding:1rem;border-radius:.5rem;overflow-x:auto;margin:1.25rem 0;}",
+  ".admin-autoseo-article pre code{background:transparent;padding:0;color:inherit;}",
+  ".admin-autoseo-article table{width:100%;border-collapse:collapse;margin:1.5rem 0;}",
+  ".admin-autoseo-article th,.admin-autoseo-article td{border:1px solid hsl(var(--border));padding:.65rem;text-align:left;}",
+  ".admin-autoseo-article tbody tr:nth-child(even){background:rgba(148,163,184,.06);}",
+  ".admin-autoseo-article .table-scroll{overflow-x:auto;}",
+  ".admin-autoseo-article img{max-width:100%;height:auto;border-radius:.5rem;display:block;margin:1.5rem auto;}",
+  ".admin-autoseo-article a{color:hsl(var(--primary));text-decoration:none;}",
+  ".admin-autoseo-article a:hover{text-decoration:underline;}",
+].join("");
+
+/* -------------------------------------------------------------------------- */
+/* MANUAL ARTICLE HEADING STYLE HELPER                                        */
+/* -------------------------------------------------------------------------- */
+
+const headingRule = (selector: string, style: HeadingStyle) =>
+  `${selector}{
+    font-size:${style.fontSize};
+    font-weight:${style.fontWeight};
+    line-height:${style.lineHeight};
+    text-align:${style.textAlign};
+    color:${style.color};
+    background-color:${style.backgroundColor ?? "transparent"};
+    ${style.marginTop ? `margin-top:${style.marginTop};` : ""}
+    ${style.marginBottom ? `margin-bottom:${style.marginBottom};` : ""}
+    ${style.paddingLeft ? `padding-left:${style.paddingLeft};` : ""}
+  }`;
+
+/* -------------------------------------------------------------------------- */
+/* ADMIN BLOG                                                                 */
 /* -------------------------------------------------------------------------- */
 
 function AdminBlog() {
@@ -118,7 +185,7 @@ function AdminBlog() {
 
   const queryClient = useQueryClient();
 
-  const [preview, setPreview] = useState<PreviewArticle | null>(null);
+  const [preview, setPreview] = useState<Preview | null>(null);
 
   const [deleting, setDeleting] = useState<LegacyBlogPost | null>(null);
 
@@ -189,18 +256,14 @@ function AdminBlog() {
   const openManualPost = (post: LegacyBlogPost) => {
     setPreview({
       source: "manual",
-      slug: post.slug,
-      title: post.title,
-      status: post.status === "published" ? "published" : "draft",
+      post,
     });
   };
 
   const openAutoseoPost = (post: AutoseoAdminPost) => {
     setPreview({
       source: "autoseo",
-      slug: post.slug,
-      title: post.title,
-      status: autoseoStatus(post),
+      post,
     });
   };
 
@@ -310,7 +373,7 @@ function AdminBlog() {
   });
 
   /* ---------------------------------------------------------------------- */
-  /* COMBINE MANUAL + AUTOSEO                                               */
+  /* COMBINE POSTS                                                          */
   /* ---------------------------------------------------------------------- */
 
   const rows = useMemo<Row[]>(() => {
@@ -321,11 +384,6 @@ function AdminBlog() {
     const seen = new Set<string>();
 
     const output: Row[] = [];
-
-    /*
-     * Manual posts take priority if
-     * Manual + AutoSEO use the same slug.
-     */
 
     for (const post of manual) {
       const slug = (post.slug ?? "").toLowerCase();
@@ -371,7 +429,7 @@ function AdminBlog() {
   }, [manualQuery.data, autoseoQuery.data]);
 
   /* ---------------------------------------------------------------------- */
-  /* SEARCH + FILTER                                                        */
+  /* FILTERS                                                                */
   /* ---------------------------------------------------------------------- */
 
   const visible = useMemo(() => {
@@ -410,12 +468,6 @@ function AdminBlog() {
   const isLoading = manualQuery.isLoading || autoseoQuery.isLoading;
 
   /* ---------------------------------------------------------------------- */
-  /* PREVIEW URL                                                            */
-  /* ---------------------------------------------------------------------- */
-
-  const previewUrl = preview ? `/blog/${encodeURIComponent(preview.slug)}` : "";
-
-  /* ---------------------------------------------------------------------- */
   /* RENDER                                                                 */
   /* ---------------------------------------------------------------------- */
 
@@ -434,9 +486,7 @@ function AdminBlog() {
       />
 
       <div className="p-6">
-        {/* -------------------------------------------------------------- */}
-        {/* FEATURED MIGRATION WARNING                                     */}
-        {/* -------------------------------------------------------------- */}
+        {/* Featured warning */}
 
         {schema && !schema.hasFeaturedColumn && (
           <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
@@ -444,9 +494,7 @@ function AdminBlog() {
           </p>
         )}
 
-        {/* -------------------------------------------------------------- */}
-        {/* MANUAL QUERY ERROR                                             */}
-        {/* -------------------------------------------------------------- */}
+        {/* Manual error */}
 
         {manualQuery.error && (
           <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
@@ -455,9 +503,7 @@ function AdminBlog() {
           </p>
         )}
 
-        {/* -------------------------------------------------------------- */}
-        {/* AUTOSEO QUERY ERROR                                            */}
-        {/* -------------------------------------------------------------- */}
+        {/* AutoSEO error */}
 
         {autoseoQuery.error && (
           <p className="mt-2 rounded-lg border border-amber-300 bg-amber-50 p-4 text-sm text-amber-900">
@@ -466,9 +512,7 @@ function AdminBlog() {
           </p>
         )}
 
-        {/* -------------------------------------------------------------- */}
-        {/* SEARCH + FILTERS                                               */}
-        {/* -------------------------------------------------------------- */}
+        {/* Search + filters */}
 
         <div className="mt-4 flex flex-wrap items-center gap-3">
           <div className="relative min-w-[220px] flex-1">
@@ -496,9 +540,7 @@ function AdminBlog() {
           </div>
         </div>
 
-        {/* -------------------------------------------------------------- */}
-        {/* LOADING                                                        */}
-        {/* -------------------------------------------------------------- */}
+        {/* Posts */}
 
         {isLoading ? (
           <div className="mt-6 space-y-2">
@@ -511,17 +553,9 @@ function AdminBlog() {
         ) : visible.length === 0 ? (
           <p className="mt-6 text-sm text-muted-foreground">No posts to show.</p>
         ) : (
-          /* ------------------------------------------------------------ */
-          /* BLOG LIST                                                    */
-          /* ------------------------------------------------------------ */
-
           <ul className="mt-6 divide-y divide-border overflow-hidden rounded-lg border border-border bg-background">
             {visible.map((row) =>
               row.source === "manual" ? (
-                /* ------------------------------------------------------ */
-                /* MANUAL POST                                           */
-                /* ------------------------------------------------------ */
-
                 <li
                   key={`manual-${row.post.id}`}
                   role="button"
@@ -530,26 +564,24 @@ function AdminBlog() {
                   onClick={() => openManualPost(row.post)}
                   onKeyDown={(event) => handleManualRowKeyDown(event, row.post)}
                   className="
-                    group
-                    flex
-                    cursor-pointer
-                    flex-wrap
-                    items-center
-                    justify-between
-                    gap-3
-                    p-4
-                    outline-none
-                    transition-all
-                    duration-200
-                    hover:bg-muted/50
-                    focus-visible:bg-muted/50
-                    focus-visible:ring-2
-                    focus-visible:ring-inset
-                    focus-visible:ring-primary
-                  "
+                      group
+                      flex
+                      cursor-pointer
+                      flex-wrap
+                      items-center
+                      justify-between
+                      gap-3
+                      p-4
+                      outline-none
+                      transition-all
+                      duration-200
+                      hover:bg-muted/50
+                      focus-visible:bg-muted/50
+                      focus-visible:ring-2
+                      focus-visible:ring-inset
+                      focus-visible:ring-primary
+                    "
                 >
-                  {/* Article info */}
-
                   <div className="min-w-0 flex-1">
                     <p className="flex items-center gap-2 truncate font-medium">
                       <span className="shrink-0 rounded-full bg-muted px-2 py-0.5 text-xs font-medium text-muted-foreground">
@@ -568,15 +600,11 @@ function AdminBlog() {
                     </p>
 
                     <p className="mt-1 text-xs text-muted-foreground/70 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                      Click anywhere on this row to preview the public article.
+                      Click anywhere on this row to view the article.
                     </p>
                   </div>
 
-                  {/* Manual actions */}
-
                   <div className="flex items-center gap-3" onClick={stopRowClick}>
-                    {/* Featured */}
-
                     <Button
                       variant={row.post.is_featured ? "default" : "ghost"}
                       size="icon"
@@ -598,8 +626,6 @@ function AdminBlog() {
                       <Star className={`size-4 ${row.post.is_featured ? "fill-current" : ""}`} />
                     </Button>
 
-                    {/* Published */}
-
                     <div className="flex items-center gap-2 text-sm">
                       <span className="text-muted-foreground">Published</span>
 
@@ -612,8 +638,6 @@ function AdminBlog() {
                         onCheckedChange={() => togglePublish.mutate(row.post)}
                       />
                     </div>
-
-                    {/* Edit */}
 
                     <Button variant="ghost" size="icon" aria-label="Edit post" title="Edit post" asChild>
                       <Link
@@ -628,8 +652,6 @@ function AdminBlog() {
                         <Pencil className="size-4" />
                       </Link>
                     </Button>
-
-                    {/* Open live */}
 
                     {row.post.status === "published" && (
                       <Button
@@ -654,8 +676,6 @@ function AdminBlog() {
                       </Button>
                     )}
 
-                    {/* Delete */}
-
                     <Button
                       variant="ghost"
                       size="icon"
@@ -672,10 +692,6 @@ function AdminBlog() {
                   </div>
                 </li>
               ) : (
-                /* ------------------------------------------------------ */
-                /* AUTOSEO ARTICLE                                       */
-                /* ------------------------------------------------------ */
-
                 <li
                   key={`autoseo-${row.post.id}`}
                   role="button"
@@ -684,41 +700,31 @@ function AdminBlog() {
                   onClick={() => openAutoseoPost(row.post)}
                   onKeyDown={(event) => handleAutoseoRowKeyDown(event, row.post)}
                   className="
-                    group
-                    flex
-                    cursor-pointer
-                    flex-wrap
-                    items-center
-                    justify-between
-                    gap-3
-                    p-4
-                    outline-none
-                    transition-all
-                    duration-200
-                    hover:bg-muted/50
-                    focus-visible:bg-muted/50
-                    focus-visible:ring-2
-                    focus-visible:ring-inset
-                    focus-visible:ring-primary
-                  "
+                      group
+                      flex
+                      cursor-pointer
+                      flex-wrap
+                      items-center
+                      justify-between
+                      gap-3
+                      p-4
+                      outline-none
+                      transition-all
+                      duration-200
+                      hover:bg-muted/50
+                      focus-visible:bg-muted/50
+                      focus-visible:ring-2
+                      focus-visible:ring-inset
+                      focus-visible:ring-primary
+                    "
                 >
-                  {/* AutoSEO article info */}
-
                   <div className="flex min-w-0 flex-1 items-center gap-3">
                     {row.post.hero_image_url ? (
                       <img
                         src={row.post.hero_image_url}
                         alt={row.post.hero_image_alt ?? row.post.title}
                         loading="lazy"
-                        className="
-                          size-12
-                          shrink-0
-                          rounded-md
-                          object-cover
-                          transition-transform
-                          duration-200
-                          group-hover:scale-[1.04]
-                        "
+                        className="size-12 shrink-0 rounded-md object-cover transition-transform duration-200 group-hover:scale-[1.04]"
                       />
                     ) : null}
 
@@ -742,12 +748,10 @@ function AdminBlog() {
                       </p>
 
                       <p className="mt-1 text-xs text-muted-foreground/70 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                        Click anywhere on this row to preview the public article.
+                        Click anywhere on this row to view the article.
                       </p>
                     </div>
                   </div>
-
-                  {/* AutoSEO actions */}
 
                   <div className="flex items-center gap-1" onClick={stopRowClick}>
                     <Button
@@ -778,7 +782,7 @@ function AdminBlog() {
         )}
 
         {/* ---------------------------------------------------------------- */}
-        {/* PUBLIC BLOG PREVIEW MODAL                                        */}
+        {/* ARTICLE-ONLY PREVIEW MODAL                                       */}
         {/* ---------------------------------------------------------------- */}
 
         <Dialog
@@ -791,85 +795,31 @@ function AdminBlog() {
         >
           <DialogContent
             className="
-              flex
               h-[94vh]
               w-[96vw]
-              max-w-[1500px]
-              flex-col
-              gap-0
+              max-w-[1280px]
               overflow-hidden
               p-0
             "
           >
-            {/* Modal header */}
+            <DialogHeader className="sr-only">
+              <DialogTitle>{preview?.post.title ?? "Article preview"}</DialogTitle>
 
-            <DialogHeader className="shrink-0 border-b border-border bg-background px-6 py-4 pr-14">
-              <div className="flex flex-wrap items-center justify-between gap-4">
-                <div className="min-w-0">
-                  <div className="flex flex-wrap items-center gap-2">
-                    <span
-                      className={
-                        preview?.source === "autoseo"
-                          ? "rounded-full bg-primary/10 px-2 py-0.5 text-xs font-semibold text-primary"
-                          : "rounded-full bg-muted px-2 py-0.5 text-xs font-semibold text-muted-foreground"
-                      }
-                    >
-                      {preview?.source === "autoseo" ? "AutoSEO" : "Manual"}
-                    </span>
-
-                    <span
-                      className={
-                        preview?.status === "published"
-                          ? "rounded-full bg-emerald-500/10 px-2 py-0.5 text-xs font-semibold text-emerald-700 dark:text-emerald-400"
-                          : "rounded-full bg-amber-500/10 px-2 py-0.5 text-xs font-semibold text-amber-700 dark:text-amber-400"
-                      }
-                    >
-                      {preview?.status ?? ""}
-                    </span>
-                  </div>
-
-                  <DialogTitle className="mt-2 truncate text-left text-base sm:text-lg">{preview?.title}</DialogTitle>
-
-                  <DialogDescription className="mt-1 truncate text-left">
-                    /blog/
-                    {preview?.slug}
-                  </DialogDescription>
-                </div>
-
-                {preview && (
-                  <Button variant="outline" size="sm" asChild>
-                    <Link
-                      to="/blog/$slug"
-                      params={{
-                        slug: preview.slug,
-                      }}
-                      target="_blank"
-                    >
-                      <ExternalLink className="size-4" />
-                      Open live
-                    </Link>
-                  </Button>
-                )}
-              </div>
+              <DialogDescription>Article preview</DialogDescription>
             </DialogHeader>
 
-            {/* Actual public blog page */}
-
-            <div className="min-h-0 flex-1 bg-background">
-              {previewUrl && (
-                <iframe
-                  key={previewUrl}
-                  src={previewUrl}
-                  title={preview?.title ? `Preview of ${preview.title}` : "Blog preview"}
-                  className="h-full w-full border-0 bg-background"
-                />
-              )}
+            <div className="h-full overflow-y-auto bg-background">
+              {preview?.source === "manual" ? (
+                <ManualArticlePreview post={preview.post} />
+              ) : preview?.source === "autoseo" ? (
+                <AutoseoArticlePreview post={preview.post} allPosts={autoseoQuery.data ?? []} />
+              ) : null}
             </div>
           </DialogContent>
         </Dialog>
 
         {/* ---------------------------------------------------------------- */}
-        {/* DELETE MANUAL POST                                               */}
+        {/* DELETE                                                          */}
         {/* ---------------------------------------------------------------- */}
 
         <AlertDialog
@@ -908,5 +858,271 @@ function AdminBlog() {
         </AlertDialog>
       </div>
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* AUTOSEO ARTICLE PREVIEW                                                    */
+/* -------------------------------------------------------------------------- */
+
+function AutoseoArticlePreview({ post, allPosts }: { post: AutoseoAdminPost; allPosts: AutoseoAdminPost[] }) {
+  const extended = post as ExtendedAutoseoPost;
+
+  const faqs = getAutoseoFaqs(post);
+
+  const html = (post.content_html ?? "")
+    .replace(/<table\b/gi, '<div class="table-scroll"><table')
+    .replace(/<\/table>/gi, "</table></div>")
+    .replace(/<img\b(?![^>]*onerror)/gi, `<img onerror="this.style.display='none'" `);
+
+  const related = allPosts.filter((candidate) => candidate.id !== post.id && candidate.slug !== post.slug).slice(0, 3);
+
+  return (
+    <article className="mx-auto max-w-3xl px-4 py-10 sm:px-6">
+      <style
+        dangerouslySetInnerHTML={{
+          __html: AUTOSEO_PROSE_CSS,
+        }}
+      />
+
+      {post.hero_image_url && (
+        <img
+          src={post.hero_image_url}
+          alt={post.hero_image_alt ?? post.title}
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
+          className="mt-2 max-h-[400px] w-full rounded-xl object-cover"
+        />
+      )}
+
+      <h1 className="mt-7 font-display text-3xl font-bold leading-tight tracking-tight sm:text-4xl">{post.title}</h1>
+
+      <p className="mt-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+        {formatDate(post.published_at)}
+
+        {post.reading_time ? ` · ${post.reading_time} min read` : ""}
+      </p>
+
+      <div
+        className="admin-autoseo-article mt-8 text-foreground/90"
+        dangerouslySetInnerHTML={{
+          __html: html,
+        }}
+      />
+
+      {extended.infographic_url && (
+        <img
+          src={extended.infographic_url}
+          alt={`${post.title} infographic`}
+          loading="lazy"
+          onError={(event) => {
+            event.currentTarget.style.display = "none";
+          }}
+          className="mt-10 w-full rounded-xl border border-border"
+        />
+      )}
+
+      {faqs.length > 0 && (
+        <section className="mt-12">
+          <h2 className="font-display text-2xl font-bold">Frequently Asked Questions</h2>
+
+          <Accordion type="single" collapsible defaultValue="faq-0" className="mt-4">
+            {faqs.map((faq, index) => (
+              <AccordionItem key={`${index}-${faq.question}`} value={`faq-${index}`}>
+                <AccordionTrigger className="cursor-pointer text-left font-semibold">{faq.question}</AccordionTrigger>
+
+                <AccordionContent className="text-sm leading-6 text-muted-foreground">{faq.answer}</AccordionContent>
+              </AccordionItem>
+            ))}
+          </Accordion>
+        </section>
+      )}
+
+      {related.length > 0 && (
+        <section className="mt-14">
+          <h2 className="font-display text-2xl font-bold">Related articles</h2>
+
+          <div className="mt-4 space-y-3">
+            {related.map((article) => (
+              <div key={article.id} className="flex items-center gap-4 rounded-xl border border-border bg-card p-3">
+                {article.hero_image_url ? (
+                  <img
+                    src={article.hero_image_url}
+                    alt={article.hero_image_alt ?? article.title}
+                    loading="lazy"
+                    onError={(event) => {
+                      event.currentTarget.style.display = "none";
+                    }}
+                    className="h-16 w-24 shrink-0 rounded-lg object-cover"
+                  />
+                ) : (
+                  <div className="h-16 w-24 shrink-0 rounded-lg bg-muted" />
+                )}
+
+                <div>
+                  <p className="font-semibold leading-snug">{article.title}</p>
+
+                  <p className="mt-1 text-xs uppercase tracking-wide text-muted-foreground">
+                    {formatDate(article.published_at)}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+      )}
+    </article>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* MANUAL ARTICLE PREVIEW                                                     */
+/* -------------------------------------------------------------------------- */
+
+function ManualArticlePreview({ post }: { post: LegacyBlogPost }) {
+  const styles = normalizeHeadingStyles(post.heading_styles);
+
+  const cta = normalizeCta(post.primary_cta);
+
+  const bodyHtml = /<(h1|h2|h3|h4|p|ul|ol|blockquote|table)[\s>]/i.test(post.body ?? "")
+    ? sanitizeHtml(post.body ?? "")
+    : String(post.body ?? "")
+        .split(/\n\s*\n/)
+        .filter((paragraph) => paragraph.trim())
+        .map((paragraph) => `<p>${escapeHtml(paragraph.trim()).replace(/\n/g, "<br>")}</p>`)
+        .join("");
+
+  const responsiveBodyHtml = bodyHtml
+    .replace(/<table\b/gi, '<div class="admin-blog-table-wrap"><table')
+    .replace(/<\/table>/gi, "</table></div>");
+
+  const css = [
+    headingRule(".admin-blog-body h1", styles.h1),
+
+    headingRule(".admin-blog-body h2", styles.h2),
+
+    headingRule(".admin-blog-body h3", styles.h3),
+
+    headingRule(".admin-blog-body h4", styles.h4),
+
+    ".admin-blog-body h1,.admin-blog-body h2,.admin-blog-body h3,.admin-blog-body h4{margin-top:1.6em;margin-bottom:.5em;}",
+
+    ".admin-blog-body p{margin-bottom:1.1em;line-height:1.75;}",
+
+    ".admin-blog-body a{color:hsl(var(--primary));text-decoration:underline;}",
+
+    ".admin-blog-body ul,.admin-blog-body ol{margin:0 0 1.1em 1.25em;list-style:disc;}",
+
+    ".admin-blog-body .admin-blog-table-wrap{margin:1.5em 0;overflow-x:auto;border:1px solid hsl(var(--border));border-radius:.75rem;background:rgba(148,163,184,.04);-webkit-overflow-scrolling:touch;}",
+
+    ".admin-blog-body table{width:100%;min-width:640px;border-collapse:collapse;table-layout:fixed;}",
+
+    ".admin-blog-body th,.admin-blog-body td{padding:.75rem;border:1px solid hsl(var(--border));vertical-align:top;text-align:left;}",
+
+    ".admin-blog-body th{font-weight:700;background:rgba(148,163,184,.06);}",
+
+    ".admin-blog-body td p,.admin-blog-body th p{margin:0;}",
+
+    ".admin-blog-body td ul,.admin-blog-body td ol,.admin-blog-body th ul,.admin-blog-body th ol{margin:.5em 0 0 1.1rem;}",
+  ].join("");
+
+  return (
+    <article className="w-full overflow-x-hidden">
+      <style
+        dangerouslySetInnerHTML={{
+          __html: css,
+        }}
+      />
+
+      {/* Hero */}
+
+      <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-8 lg:px-12">
+        <div className="relative aspect-[16/7] min-h-[280px] overflow-hidden rounded-2xl bg-muted">
+          {post.image_url && (
+            <img
+              src={post.image_url}
+              alt={post.title}
+              onError={(event) => {
+                event.currentTarget.style.display = "none";
+              }}
+              className="absolute inset-0 h-full w-full object-cover"
+            />
+          )}
+
+          <div className="absolute inset-0 bg-gradient-to-t from-black/80 via-black/30 to-black/20" />
+
+          <div className="relative flex h-full items-end p-6 sm:p-10 lg:p-14">
+            <div className="max-w-4xl text-left text-white">
+              {post.category && (
+                <span className="inline-flex rounded-full border border-white/40 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.16em] text-white/90 backdrop-blur-sm">
+                  {post.category}
+                </span>
+              )}
+
+              <h1 className="mt-4 font-display text-4xl font-bold leading-none tracking-tight sm:text-5xl lg:text-7xl">
+                {post.title}
+              </h1>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      {/* Content */}
+
+      <div className="mx-auto grid max-w-6xl gap-12 px-4 py-12 sm:px-8 lg:grid-cols-[minmax(0,720px)_280px] lg:px-12">
+        <div
+          className="admin-blog-body text-base text-foreground/90"
+          dangerouslySetInnerHTML={{
+            __html: responsiveBodyHtml,
+          }}
+        />
+
+        <aside className="space-y-8">
+          {cta.enabled && (cta.headline || cta.button_text) && (
+            <div className="rounded-xl border border-border bg-card p-6">
+              {cta.headline && <h2 className="font-display text-2xl font-bold">{cta.headline}</h2>}
+
+              {cta.button_text && cta.url && (
+                <a
+                  href={cta.url}
+                  {...(/^https?:/i.test(cta.url)
+                    ? {
+                        target: "_blank",
+                        rel: "noopener noreferrer",
+                      }
+                    : {})}
+                  className="mt-5 inline-flex cursor-pointer items-center rounded-md bg-primary px-6 py-3 text-sm font-semibold text-primary-foreground"
+                >
+                  {cta.button_text}
+                </a>
+              )}
+            </div>
+          )}
+
+          <div className="rounded-xl border border-border bg-card p-6">
+            <p className="text-xs font-semibold uppercase tracking-[0.16em] text-muted-foreground">
+              About this article
+            </p>
+
+            <p className="mt-3 text-sm leading-6 text-muted-foreground">
+              Practical guidance from the MyCar team in Fredericksburg, Virginia.
+            </p>
+          </div>
+        </aside>
+      </div>
+
+      {/* Meta */}
+
+      <div className="mx-auto max-w-6xl px-4 pb-12 sm:px-8 lg:px-12">
+        <div className="max-w-[720px] text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+          {formatDate(post.published_at)}
+
+          {post.author_name ? ` · ${post.author_name}` : ""}
+
+          {post.read_time ? ` · ${post.read_time} min read` : ""}
+        </div>
+      </div>
+    </article>
   );
 }
