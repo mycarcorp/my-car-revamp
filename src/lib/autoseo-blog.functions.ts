@@ -1,5 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
-import type { AutoseoPost } from "./autoseo-blog.server";
+import type {
+  AutoseoAdminUpdate,
+  AutoseoPost,
+} from "./autoseo-blog.server";
 
 export type { AutoseoPost };
 
@@ -7,6 +10,7 @@ export type { AutoseoPost };
 export type AutoseoAdminPost = AutoseoPost & {
   status?: string | null;
   published_url?: string | null;
+  is_featured?: boolean | null;
 };
 
 export const publicAutoseoList = createServerFn({ method: "GET" }).handler(
@@ -21,7 +25,9 @@ export const publicAutoseoList = createServerFn({ method: "GET" }).handler(
 );
 
 export const publicAutoseoPost = createServerFn({ method: "GET" })
-  .inputValidator((input: { slug: string }) => ({ slug: String(input?.slug ?? "").slice(0, 200) }))
+  .inputValidator((input: { slug: string }) => ({
+    slug: String(input?.slug ?? "").slice(0, 200),
+  }))
   .handler(async ({ data }): Promise<AutoseoPost | null> => {
     try {
       const m = await import("./autoseo-blog.server");
@@ -41,6 +47,50 @@ export const listAutoseoAdminPosts = createServerFn({ method: "POST" })
   .handler(async ({ data }): Promise<AutoseoAdminPost[]> => {
     const auth = await import("./legacy-blog.server");
     await auth.requireStaff(data.accessToken);
+
     const m = await import("./autoseo-blog.server");
     return (await m.listAutoseoAdminRows()) as AutoseoAdminPost[];
   });
+
+/** Staff-only update of an AutoSEO article's editable content fields. */
+export const updateAutoseoAdminPost = createServerFn({ method: "POST" })
+  .inputValidator(
+    (
+      input: AutoseoAdminUpdate & {
+        accessToken: string;
+      },
+    ) => {
+      const accessToken = String(input?.accessToken ?? "");
+      if (!accessToken) throw new Error("Not signed in.");
+
+      const id = Number(input?.id);
+      if (!Number.isFinite(id)) throw new Error("Invalid AutoSEO post id.");
+
+      return {
+        accessToken,
+        id,
+        title: String(input?.title ?? "").trim(),
+        slug: String(input?.slug ?? "").trim(),
+        content_html: input?.content_html ?? null,
+        content_markdown: input?.content_markdown ?? null,
+        hero_image_url: input?.hero_image_url ?? null,
+        hero_image_alt: input?.hero_image_alt ?? null,
+        infographic_url: input?.infographic_url ?? null,
+        meta_description: input?.meta_description ?? null,
+        meta_keywords: input?.meta_keywords ?? null,
+        tags: input?.tags ?? null,
+        faq_schema: input?.faq_schema ?? null,
+        language: input?.language ?? "en",
+      };
+    },
+  )
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const auth = await import("./legacy-blog.server");
+    await auth.requireStaff(data.accessToken);
+
+    const m = await import("./autoseo-blog.server");
+
+    await m.updateAutoseoAdminRow({
+      id: data.id,
+      title: data.title,
+      slug: data.slug,
