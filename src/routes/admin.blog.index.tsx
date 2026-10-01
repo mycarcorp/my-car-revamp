@@ -2,7 +2,18 @@ import { createFileRoute, Link } from "@tanstack/react-router";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState, type KeyboardEvent, type MouseEvent } from "react";
 import { toast } from "sonner";
-import { ExternalLink, Pencil, Star, Trash2, Plus, Search } from "lucide-react";
+import {
+  ExternalLink,
+  Pencil,
+  Star,
+  Trash2,
+  Plus,
+  Search,
+  ShieldCheck,
+  ShieldAlert,
+  RefreshCw,
+  Flag,
+} from "lucide-react";
 
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Button } from "@/components/ui/button";
@@ -39,11 +50,17 @@ import {
 } from "@/lib/legacy-blog.functions";
 
 import {
+  approveAutoseoPostAdmin,
+  flagAutoseoPostAdmin,
   listAutoseoAdminPosts,
+  scanAutoseoQualityAdmin,
   setAutoseoPublishedAdmin,
   setFeaturedAutoseoPostAdmin,
   updateAutoseoAdminPost,
   type AutoseoAdminPost,
+  type AutoseoQualityResult,
+  type AutoseoQualityStatus,
+  type AutoseoRiskLevel,
 } from "@/lib/autoseo-blog.functions";
 
 /* -------------------------------------------------------------------------- */
@@ -129,6 +146,58 @@ const recent = (...dates: Array<string | null | undefined>): string | null =>
 
 const autoseoStatus = (post: AutoseoAdminPost): string =>
   (post.status ?? "").trim() || (post.published_at ? "published" : "draft");
+
+const autoseoQualityStatus = (post: AutoseoAdminPost): AutoseoQualityStatus => post.quality_status ?? "pending";
+
+const autoseoRiskLevel = (post: AutoseoAdminPost): AutoseoRiskLevel => post.risk_level ?? "medium";
+
+const qualityStatusLabel = (status: AutoseoQualityStatus): string => {
+  switch (status) {
+    case "approved":
+      return "Approved";
+    case "needs_review":
+      return "Needs Review";
+    case "flagged":
+      return "Flagged";
+    default:
+      return "Pending";
+  }
+};
+
+const riskLabel = (risk: AutoseoRiskLevel): string => {
+  switch (risk) {
+    case "high":
+      return "High Risk";
+    case "low":
+      return "Low Risk";
+    default:
+      return "Medium Risk";
+  }
+};
+
+const qualityStatusClass = (status: AutoseoQualityStatus): string => {
+  switch (status) {
+    case "approved":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    case "needs_review":
+      return "border-amber-200 bg-amber-50 text-amber-800";
+    case "flagged":
+      return "border-red-200 bg-red-50 text-red-700";
+    default:
+      return "border-slate-200 bg-slate-50 text-slate-700";
+  }
+};
+
+const riskClass = (risk: AutoseoRiskLevel): string => {
+  switch (risk) {
+    case "high":
+      return "border-red-200 bg-red-50 text-red-700";
+    case "low":
+      return "border-emerald-200 bg-emerald-50 text-emerald-700";
+    default:
+      return "border-amber-200 bg-amber-50 text-amber-800";
+  }
+};
 
 const getAutoseoFaqs = (post: AutoseoAdminPost): Faq[] => {
   const extended = post as ExtendedAutoseoPost;
@@ -757,8 +826,32 @@ function AdminBlog() {
                         {row.post.reading_time ? ` · ${row.post.reading_time} min read` : ""}
                       </p>
 
+                      <div className="mt-2 flex flex-wrap items-center gap-2">
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${qualityStatusClass(
+                            autoseoQualityStatus(row.post),
+                          )}`}
+                        >
+                          {qualityStatusLabel(autoseoQualityStatus(row.post))}
+                        </span>
+
+                        <span
+                          className={`rounded-full border px-2 py-0.5 text-[11px] font-semibold ${riskClass(
+                            autoseoRiskLevel(row.post),
+                          )}`}
+                        >
+                          {riskLabel(autoseoRiskLevel(row.post))}
+                        </span>
+
+                        {row.post.requires_human_review && (
+                          <span className="rounded-full border border-amber-200 bg-amber-50 px-2 py-0.5 text-[11px] font-semibold text-amber-800">
+                            Human review required
+                          </span>
+                        )}
+                      </div>
+
                       <p className="mt-1 text-xs text-muted-foreground/70 opacity-0 transition-opacity duration-200 group-hover:opacity-100">
-                        Click anywhere on this row to view the article.
+                        Click anywhere on this row to view the article and quality review.
                       </p>
                     </div>
                   </div>
@@ -768,8 +861,18 @@ function AdminBlog() {
                       variant={row.post.is_featured ? "default" : "ghost"}
                       size="icon"
                       aria-label={row.post.is_featured ? "Featured AutoSEO post" : "Make featured AutoSEO post"}
-                      title={row.post.is_featured ? "Featured AutoSEO post" : "Make featured AutoSEO post"}
-                      disabled={autoseoStatus(row.post) !== "published" || featureAutoseoPost.isPending}
+                      title={
+                        autoseoQualityStatus(row.post) !== "approved"
+                          ? "Approve this article before featuring it"
+                          : row.post.is_featured
+                            ? "Featured AutoSEO post"
+                            : "Make featured AutoSEO post"
+                      }
+                      disabled={
+                        autoseoStatus(row.post) !== "published" ||
+                        autoseoQualityStatus(row.post) !== "approved" ||
+                        featureAutoseoPost.isPending
+                      }
                       onClick={(event) => {
                         event.stopPropagation();
                         featureAutoseoPost.mutate(row.post.id);
@@ -783,13 +886,24 @@ function AdminBlog() {
 
                       <Switch
                         checked={autoseoStatus(row.post) === "published"}
-                        disabled={toggleAutoseoPublish.isPending}
+                        disabled={
+                          toggleAutoseoPublish.isPending ||
+                          (autoseoStatus(row.post) !== "published" && autoseoQualityStatus(row.post) !== "approved")
+                        }
+                        title={
+                          autoseoStatus(row.post) !== "published" && autoseoQualityStatus(row.post) !== "approved"
+                            ? "Quality review approval is required before publishing"
+                            : undefined
+                        }
                         onClick={(event) => {
                           event.stopPropagation();
                         }}
-
                         onCheckedChange={() => toggleAutoseoPublish.mutate(row.post)}
                       />
+
+                      {autoseoStatus(row.post) !== "published" && autoseoQualityStatus(row.post) !== "approved" && (
+                        <span className="text-xs font-medium text-amber-700">Locked</span>
+                      )}
                     </div>
                   </div>
                 </li>
@@ -904,7 +1018,24 @@ function AdminBlog() {
                 {preview?.source === "manual" ? (
                   <ManualArticlePreview post={preview.post} />
                 ) : preview?.source === "autoseo" ? (
-                  <AutoseoArticlePreview post={preview.post} allPosts={autoseoQuery.data ?? []} />
+                  <>
+                    <AutoseoQualityReviewPanel
+                      post={preview.post}
+                      accessToken={accessToken}
+                      reviewer={session?.user?.email ?? "MyCar staff"}
+                      onEdit={() => {
+                        const post = preview.post;
+                        setPreview(null);
+                        setEditingAutoseo(post);
+                      }}
+                      onChanged={async () => {
+                        setPreview(null);
+                        await refresh();
+                      }}
+                    />
+
+                    <AutoseoArticlePreview post={preview.post} allPosts={autoseoQuery.data ?? []} />
+                  </>
                 ) : null}
               </div>
             </div>
@@ -987,6 +1118,280 @@ function AdminBlog() {
         </AlertDialog>
       </div>
     </div>
+  );
+}
+
+/* -------------------------------------------------------------------------- */
+/* AUTOSEO QUALITY REVIEW                                                     */
+/* -------------------------------------------------------------------------- */
+
+function AutoseoQualityReviewPanel({
+  post,
+  accessToken,
+  reviewer,
+  onEdit,
+  onChanged,
+}: {
+  post: AutoseoAdminPost;
+  accessToken: string;
+  reviewer: string;
+  onEdit: () => void;
+  onChanged: () => void | Promise<void>;
+}) {
+  const [notes, setNotes] = useState(post.review_notes ?? "");
+  const [scanResult, setScanResult] = useState<AutoseoQualityResult | null>(null);
+
+  const storedStatus = autoseoQualityStatus(post);
+  const storedRisk = autoseoRiskLevel(post);
+  const storedFlags = Array.isArray(post.quality_flags) ? post.quality_flags : [];
+  const storedSources = Array.isArray(post.source_urls) ? post.source_urls : [];
+
+  const scan = useMutation({
+    mutationFn: () =>
+      scanAutoseoQualityAdmin({
+        data: {
+          accessToken,
+          id: post.id,
+          title: post.title,
+          slug: post.slug,
+          content_html: post.content_html ?? null,
+          meta_description: post.meta_description ?? null,
+          meta_keywords: post.meta_keywords ?? null,
+          tags: post.tags ?? null,
+        },
+      }),
+    onSuccess: (result) => {
+      setScanResult(result);
+      toast.success("Quality scan completed.");
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Could not run the quality scan.");
+    },
+  });
+
+  const approve = useMutation({
+    mutationFn: () =>
+      approveAutoseoPostAdmin({
+        data: {
+          accessToken,
+          id: post.id,
+          reviewer,
+          notes: notes.trim() || null,
+        },
+      }),
+    onSuccess: async () => {
+      toast.success("AutoSEO article approved. It can now be published.");
+      await onChanged();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Could not approve this AutoSEO article.");
+    },
+  });
+
+  const flag = useMutation({
+    mutationFn: () =>
+      flagAutoseoPostAdmin({
+        data: {
+          accessToken,
+          id: post.id,
+          reviewer,
+          notes: notes.trim() || null,
+        },
+      }),
+    onSuccess: async () => {
+      toast.success("AutoSEO article flagged and kept unpublished.");
+      await onChanged();
+    },
+    onError: (error: Error) => {
+      toast.error(error.message || "Could not flag this AutoSEO article.");
+    },
+  });
+
+  const effectiveStatus = scanResult?.status ?? storedStatus;
+  const effectiveRisk = scanResult?.riskLevel ?? storedRisk;
+  const effectiveFlags = scanResult?.flags ?? storedFlags;
+  const effectiveSources = scanResult?.sourceUrls ?? storedSources;
+  const effectiveHumanReview = scanResult?.requiresHumanReview ?? Boolean(post.requires_human_review);
+
+  const busy = scan.isPending || approve.isPending || flag.isPending;
+
+  return (
+    <section className="border-b border-border bg-muted/20 px-4 py-6 sm:px-6 lg:px-8">
+      <div className="mx-auto max-w-6xl">
+        <div className="flex flex-wrap items-start justify-between gap-4">
+          <div>
+            <div className="flex items-center gap-2">
+              {effectiveStatus === "approved" ? (
+                <ShieldCheck className="size-5 text-emerald-600" />
+              ) : (
+                <ShieldAlert className="size-5 text-amber-600" />
+              )}
+
+              <h2 className="font-display text-xl font-bold">AutoSEO Quality Review</h2>
+            </div>
+
+            <p className="mt-1 text-sm text-muted-foreground">
+              Publishing and featuring are locked until this article passes the mandatory quality gate.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <span
+              className={`rounded-full border px-3 py-1 text-xs font-semibold ${qualityStatusClass(effectiveStatus)}`}
+            >
+              {qualityStatusLabel(effectiveStatus)}
+            </span>
+
+            <span className={`rounded-full border px-3 py-1 text-xs font-semibold ${riskClass(effectiveRisk)}`}>
+              {riskLabel(effectiveRisk)}
+            </span>
+
+            {effectiveHumanReview && (
+              <span className="rounded-full border border-amber-200 bg-amber-50 px-3 py-1 text-xs font-semibold text-amber-800">
+                Human review required
+              </span>
+            )}
+          </div>
+        </div>
+
+        {scanResult && (
+          <div className="mt-4 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900">
+            This is the latest live scan result. Approve or Flag to save the review decision.
+          </div>
+        )}
+
+        <div className="mt-5 grid gap-5 lg:grid-cols-2">
+          <div className="rounded-xl border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Quality issues</h3>
+
+            {effectiveFlags.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {effectiveFlags.map((item, index) => (
+                  <div
+                    key={`${item.code}-${index}`}
+                    className={`rounded-lg border p-3 text-sm ${
+                      item.severity === "blocking"
+                        ? "border-red-200 bg-red-50 text-red-900"
+                        : "border-amber-200 bg-amber-50 text-amber-900"
+                    }`}
+                  >
+                    <div className="flex flex-wrap items-center gap-2">
+                      <span className="font-semibold">{item.severity === "blocking" ? "Blocking" : "Warning"}</span>
+                      <span className="text-xs opacity-70">{item.code}</span>
+                    </div>
+
+                    <p className="mt-1 leading-6">{item.message}</p>
+
+                    {item.matched_text && (
+                      <p className="mt-2 rounded bg-background/70 px-2 py-1 text-xs">Matched: “{item.matched_text}”</p>
+                    )}
+
+                    {item.requires_source && (
+                      <p className="mt-2 text-xs font-semibold">Authoritative source required.</p>
+                    )}
+                  </div>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">No quality flags are currently stored or detected.</p>
+            )}
+          </div>
+
+          <div className="rounded-xl border border-border bg-background p-4">
+            <h3 className="text-sm font-semibold">Detected sources</h3>
+
+            {effectiveSources.length > 0 ? (
+              <div className="mt-3 space-y-2">
+                {effectiveSources.map((url) => (
+                  <a
+                    key={url}
+                    href={url}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="block break-all rounded-lg border border-border px-3 py-2 text-sm text-primary hover:bg-muted/50"
+                  >
+                    {url}
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-3 text-sm text-muted-foreground">
+                No external source links were detected in this article.
+              </p>
+            )}
+
+            <div className="mt-5 border-t border-border pt-4">
+              <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Last review</p>
+              <p className="mt-2 text-sm">
+                {post.reviewed_by ? post.reviewed_by : "Not reviewed yet"}
+                {post.reviewed_at ? ` · ${formatDate(post.reviewed_at)}` : ""}
+              </p>
+
+              {post.review_notes && <p className="mt-2 text-sm leading-6 text-muted-foreground">{post.review_notes}</p>}
+            </div>
+          </div>
+        </div>
+
+        <div className="mt-5 rounded-xl border border-border bg-background p-4">
+          <label className="text-sm font-semibold" htmlFor={`review-notes-${post.id}`}>
+            Reviewer notes
+          </label>
+
+          <Textarea
+            id={`review-notes-${post.id}`}
+            value={notes}
+            onChange={(event) => setNotes(event.target.value)}
+            placeholder="Add what you verified, corrected, sourced, or why this article should remain unpublished."
+            className="mt-2 min-h-[100px]"
+          />
+
+          <p className="mt-2 text-xs text-muted-foreground">Reviewer: {reviewer}</p>
+        </div>
+
+        <div className="mt-5 flex flex-wrap items-center gap-3">
+          <Button type="button" variant="outline" onClick={() => scan.mutate()} disabled={busy}>
+            <RefreshCw className={`size-4 ${scan.isPending ? "animate-spin" : ""}`} />
+            {scan.isPending ? "Scanning…" : "Run Quality Scan"}
+          </Button>
+
+          <Button type="button" variant="outline" onClick={onEdit} disabled={busy}>
+            <Pencil className="size-4" />
+            Edit Article
+          </Button>
+
+          <Button
+            type="button"
+            variant="destructive"
+            onClick={() => flag.mutate()}
+            disabled={busy || !notes.trim()}
+            title={!notes.trim() ? "Add reviewer notes before flagging this article" : undefined}
+          >
+            <Flag className="size-4" />
+            {flag.isPending ? "Flagging…" : "Flag / Keep Unpublished"}
+          </Button>
+
+          <Button
+            type="button"
+            onClick={() => approve.mutate()}
+            disabled={busy || effectiveFlags.some((item) => item.severity === "blocking")}
+            title={
+              effectiveFlags.some((item) => item.severity === "blocking")
+                ? "Resolve blocking quality issues before approval"
+                : undefined
+            }
+          >
+            <ShieldCheck className="size-4" />
+            {approve.isPending ? "Approving…" : "Approve Article"}
+          </Button>
+        </div>
+
+        {effectiveFlags.some((item) => item.severity === "blocking") && (
+          <p className="mt-3 text-sm font-medium text-red-700">
+            Approval is locked until all blocking quality issues are corrected and the article is rescanned.
+          </p>
+        )}
+      </div>
+    </section>
   );
 }
 
