@@ -1146,7 +1146,6 @@ export async function sitemapUrls(): Promise<
 
   return owners.map(({ row }) => ({
     slug: row.slug,
-
-
-  
-  
+    lastmod: row.updated_at ?? row.published_at ?? null,
+  }));
+}
