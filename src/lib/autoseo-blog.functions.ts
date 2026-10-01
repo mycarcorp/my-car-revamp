@@ -108,3 +108,37 @@ export const updateAutoseoAdminPost = createServerFn({ method: "POST" })
 
     return { ok: true };
   });
+
+/** Staff-only publish/unpublish of an AutoSEO article. */
+export const setAutoseoPublishedAdmin = createServerFn({ method: "POST" })
+  .inputValidator((input: { accessToken: string; id: number; published: boolean }) => {
+    const accessToken = String(input?.accessToken ?? "");
+    if (!accessToken) throw new Error("Not signed in.");
+    const id = Number(input?.id);
+    if (!Number.isFinite(id)) throw new Error("Invalid AutoSEO post id.");
+    return { accessToken, id, published: Boolean(input?.published) };
+  })
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const auth = await import("./legacy-blog.server");
+    await auth.requireStaff(data.accessToken);
+    const m = await import("./autoseo-blog.server");
+    await m.setAutoseoPublished(data.id, data.published);
+    return { ok: true };
+  });
+
+/** Staff-only: mark one AutoSEO article as the featured post. */
+export const setFeaturedAutoseoPostAdmin = createServerFn({ method: "POST" })
+  .inputValidator((input: { accessToken: string; id: number }) => {
+    const accessToken = String(input?.accessToken ?? "");
+    if (!accessToken) throw new Error("Not signed in.");
+    const id = Number(input?.id);
+    if (!Number.isFinite(id)) throw new Error("Invalid AutoSEO post id.");
+    return { accessToken, id };
+  })
+  .handler(async ({ data }): Promise<{ ok: true }> => {
+    const auth = await import("./legacy-blog.server");
+    await auth.requireStaff(data.accessToken);
+    const m = await import("./autoseo-blog.server");
+    await m.setFeaturedAutoseoPost(data.id);
+    return { ok: true };
+  });

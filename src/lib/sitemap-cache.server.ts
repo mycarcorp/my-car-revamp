@@ -190,7 +190,7 @@ async function collectVehicleUrls(): Promise<
     const row = vehicle as unknown as Record<string, unknown>;
 
     const possibleLastmod =
-      row.updated_at ?? row.modified_at ?? row.date_updated ?? row.date_received ?? row.created_at ?? null;
+      row["updated_at"] ?? row["modified_at"] ?? row["date_updated"] ?? row["date_received"] ?? row["created_at"] ?? null;
 
     const lastmod = typeof possibleLastmod === "string" ? isoDate(possibleLastmod) : null;
 
