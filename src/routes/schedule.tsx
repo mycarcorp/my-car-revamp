@@ -7,8 +7,9 @@ import {
   Camera,
   CarFront,
   Check,
+  ChevronLeft,
+  ChevronRight,
   Clock3,
-  CalendarDays,
   Handshake,
   MapPin,
   MessagesSquare,
@@ -42,6 +43,7 @@ export const Route = createFileRoute("/schedule")({
     vin: typeof raw["vin"] === "string" && raw["vin"].trim() ? raw["vin"].trim() : undefined,
     type: isAppointmentType(raw["type"]) ? raw["type"] : undefined,
   }),
+
   head: () => ({
     meta: [
       {
@@ -56,6 +58,7 @@ export const Route = createFileRoute("/schedule")({
         property: "og:title",
         content: "Schedule a Test Drive in Fredericksburg, VA | My Car",
       },
+
       {
         property: "og:description",
         content:
@@ -86,29 +89,6 @@ const MYCAR_LOGO_DATA_URI =
 
 const TIMES = ["9:30 AM", "11:00 AM", "1:00 PM", "2:30 PM", "4:00 PM", "5:30 PM"];
 
-function toLocalDateValue(value: Date) {
-  const year = value.getFullYear();
-  const month = String(value.getMonth() + 1).padStart(2, "0");
-  const day = String(value.getDate()).padStart(2, "0");
-  return `${year}-${month}-${day}`;
-}
-
-function getHoursForDate(value: Date, hours: Record<string, string>) {
-  const day = value.getDay();
-  if (day === 0) return hours["sun"] ?? "";
-  if (day === 6) return hours["sat"] ?? "";
-  return hours["mon_fri"] ?? "";
-}
-
-function isClosedHours(value: unknown) {
-  const normalized = String(value ?? "")
-    .trim()
-    .toLowerCase();
-  return (
-    !normalized || normalized === "closed" || normalized === "close" || normalized === "day off" || normalized === "off"
-  );
-}
-
 const APPOINTMENT_OPTIONS: {
   value: AppointmentType;
   title: string;
@@ -123,6 +103,7 @@ const APPOINTMENT_OPTIONS: {
     cta: "Schedule a Test Drive",
     icon: CarFront,
   },
+
   {
     value: "trade_appraisal",
     title: "Trade Appraisal",
@@ -137,7 +118,6 @@ const APPOINTMENT_OPTIONS: {
     cta: "Discuss Financing",
     icon: Banknote,
   },
-
   {
     value: "general",
     title: "General Visit",
@@ -175,6 +155,44 @@ function displayHours(value: unknown) {
   return text && text !== "—" ? text : "Call to confirm";
 }
 
+const CLOSED_HOURS_PATTERN = /^(closed|off|day off|unavailable|n\/a|na|—|-)$/i;
+
+function toLocalDateKey(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getHoursForDate(value: Date, hours: Record<string, string>) {
+  const day = value.getDay();
+  if (day === 0) return String(hours["sun"] ?? "").trim();
+  if (day === 6) return String(hours["sat"] ?? "").trim();
+  return String(hours["mon_fri"] ?? "").trim();
+}
+
+function isWorkingDate(value: Date, hours: Record<string, string>) {
+  const configuredHours = getHoursForDate(value, hours);
+  if (!configuredHours) return false;
+  return !CLOSED_HOURS_PATTERN.test(configuredHours);
+}
+
+function sameCalendarMonth(a: Date, b: Date) {
+  return a.getFullYear() === b.getFullYear() && a.getMonth() === b.getMonth();
+}
+
+function buildCalendarDays(month: Date) {
+  const firstDay = new Date(month.getFullYear(), month.getMonth(), 1);
+  const start = new Date(firstDay);
+  start.setDate(firstDay.getDate() - firstDay.getDay());
+
+  return Array.from({ length: 42 }, (_, index) => {
+    const value = new Date(start);
+    value.setDate(start.getDate() + index);
+    return value;
+  });
+}
+
 function SchedulePage() {
   const params = Route.useSearch();
   const { data: settings } = useQuery(siteSettingsQuery());
@@ -189,6 +207,10 @@ function SchedulePage() {
 
   const [type, setType] = useState<AppointmentType>(params.type ?? "test_drive");
   const [date, setDate] = useState("");
+  const [calendarMonth, setCalendarMonth] = useState(() => {
+    const now = new Date();
+    return new Date(now.getFullYear(), now.getMonth(), 1);
+  });
   const [time, setTime] = useState(TIMES[0]);
   const [selectedVehicleId, setSelectedVehicleId] = useState("");
   const [vehiclePickerOpen, setVehiclePickerOpen] = useState(false);
@@ -196,7 +218,6 @@ function SchedulePage() {
   const autoScrolledVehicleRef = useRef(false);
   const formStartedRef = useRef(false);
   const pageTrackedRef = useRef(false);
-  const appointmentDetailsRef = useRef<HTMLDivElement | null>(null);
 
   const selectedVehicle = useMemo(
     () => inventory.find((item) => item.id === selectedVehicleId),
@@ -218,36 +239,6 @@ function SchedulePage() {
 
   const vehicle =
     selectedVehicle != null ? `${vehicleTitle(selectedVehicle)} — Stock #${selectedVehicle.stock_number}` : "";
-
-  const appointmentDates = useMemo(() => {
-    const dates: Array<{ value: string; date: Date; hours: string; closed: boolean }> = [];
-    const start = new Date();
-    start.setHours(12, 0, 0, 0);
-
-    for (let offset = 0; offset < 21; offset += 1) {
-      const next = new Date(start);
-      next.setDate(start.getDate() + offset);
-      const dayHours = getHoursForDate(next, hours);
-      dates.push({
-        value: toLocalDateValue(next),
-        date: next,
-        hours: dayHours,
-        closed: isClosedHours(dayHours),
-      });
-    }
-
-    return dates;
-  }, [hours]);
-
-  const selectedAppointmentDate = appointmentDates.find((item) => item.value === date);
-
-  const chooseDate = (value: string) => {
-    setDate(value);
-    setTime(TIMES[0]);
-    window.setTimeout(() => {
-      appointmentDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-    }, 100);
-  };
 
   useEffect(() => {
     if (params.type) setType(params.type);
@@ -305,6 +296,35 @@ function SchedulePage() {
 
     return () => window.clearTimeout(timer);
   }, [params.stock, params.vehicle, params.vin, selectedVehicle]);
+
+  const today = new Date();
+  const localToday = new Date(today.getTime() - today.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
+  const todayStart = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const calendarDays = useMemo(() => buildCalendarDays(calendarMonth), [calendarMonth]);
+  const currentMonthStart = new Date(todayStart.getFullYear(), todayStart.getMonth(), 1);
+  const canGoToPreviousMonth = calendarMonth.getTime() > currentMonthStart.getTime();
+  const selectedDateObject = date ? new Date(`${date}T12:00:00`) : null;
+  const selectedHours = selectedDateObject ? getHoursForDate(selectedDateObject, hours) : "";
+  const hasConfiguredHours = Boolean(
+    String(hours["mon_fri"] ?? "").trim() || String(hours["sat"] ?? "").trim() || String(hours["sun"] ?? "").trim(),
+  );
+
+  const selectAppointmentDate = (value: Date) => {
+    const nextDate = toLocalDateKey(value);
+    setDate(nextDate);
+    markFormStarted();
+
+    window.setTimeout(() => {
+      document.getElementById("appointment-details")?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 120);
+  };
+
+  const changeAppointmentDate = () => {
+    setDate("");
+    window.setTimeout(() => {
+      document.getElementById("appointment-calendar")?.scrollIntoView({ behavior: "smooth", block: "center" });
+    }, 80);
+  };
 
   const scrollToForm = () => {
     document.getElementById("appointment-form")?.scrollIntoView({
@@ -598,185 +618,243 @@ function SchedulePage() {
             </h2>
 
             <p className="mt-3 text-sm leading-6 text-muted-foreground sm:text-base">
-              Complete the form below with your preferred visit type, vehicle, date and time. Our team will contact you
-              to confirm your appointment.
+              Start by choosing a date. Once you select an available day, we&apos;ll take you directly to the rest of
+              your appointment details.
             </p>
           </div>
 
-          <div className="grid items-start gap-8 lg:grid-cols-[0.72fr_1.4fr]">
-            {/* FORM SIDEBAR */}
-            <aside className="order-2 rounded-2xl border border-border bg-card p-6 shadow-sm lg:order-1">
-              <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Your Visit</p>
-
-              <h3 className="mt-2 font-display text-xl font-bold">What to expect</h3>
-
-              <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                Choose your appointment details and we&apos;ll prepare for your visit before you arrive.
-              </p>
-
-              <div className="mt-6 space-y-3">
-                {APPOINTMENT_OPTIONS.map((option) => {
-                  const Icon = option.icon;
-                  const active = type === option.value;
-
-                  return (
-                    <button
-                      key={option.value}
-                      type="button"
-                      onClick={() => setType(option.value)}
-                      className={`flex w-full cursor-pointer items-center gap-3 rounded-xl border p-3 text-left transition ${
-                        active
-                          ? "border-primary bg-primary/[0.05]"
-                          : "border-border hover:border-primary/40 hover:bg-muted/40"
-                      }`}
-                    >
-                      <div
-                        className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${
-                          active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"
-                        }`}
-                      >
-                        <Icon className="size-4" />
-                      </div>
-
-                      <p className={`text-sm font-semibold ${active ? "text-primary" : "text-foreground"}`}>
-                        {option.title}
+          {!date ? (
+            <div id="appointment-calendar" className="mx-auto max-w-4xl scroll-mt-24">
+              <div className="overflow-hidden rounded-3xl border border-slate-200 bg-white shadow-[0_24px_70px_-35px_rgba(15,23,42,0.35)]">
+                <div className="border-b border-slate-200 bg-slate-950 px-5 py-5 text-white sm:px-8 sm:py-6">
+                  <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
+                    <div>
+                      <p className="text-xs font-bold uppercase tracking-[0.2em] text-[#F7941D]">Step 1 of 2</p>
+                      <h3 className="mt-1 font-display text-2xl font-bold">Choose your visit date</h3>
+                      <p className="mt-1 text-sm text-slate-300">
+                        Available dates follow the dealership&apos;s current working days.
                       </p>
-                    </button>
-                  );
-                })}
-              </div>
-              {selectedVehicle && (
-                <div className="mt-6 border-t border-border pt-5">
-                  <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
-                    Selected Vehicle
-                  </p>
-
-                  <div className="mt-3 rounded-xl border border-border bg-surface p-3">
-                    <p className="text-sm font-semibold text-foreground">{vehicleTitle(selectedVehicle)}</p>
-                    <p className="mt-1 text-xs text-muted-foreground">Stock #{selectedVehicle.stock_number}</p>
+                    </div>
+                    <div className="flex items-center gap-2 rounded-full border border-white/10 bg-white/5 px-3 py-2 text-xs text-slate-300">
+                      <span className="size-2 rounded-full bg-[#F7941D]" />
+                      Select an available date to continue
+                    </div>
                   </div>
                 </div>
-              )}
 
-              <div className="mt-6 border-t border-border pt-5 text-sm">
-                {settings?.address_line && (
-                  <p className="flex items-start gap-2 text-muted-foreground">
-                    <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
-                    <span>{settings.address_line}</span>
-                  </p>
-                )}
+                <div className="p-4 sm:p-7 lg:p-8">
+                  <div className="flex items-center justify-between gap-4">
+                    <button
+                      type="button"
+                      aria-label="Previous month"
+                      disabled={!canGoToPreviousMonth}
+                      onClick={() =>
+                        setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() - 1, 1))
+                      }
+                      className="flex size-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 hover:bg-slate-50 disabled:cursor-not-allowed disabled:opacity-30"
+                    >
+                      <ChevronLeft className="size-5" />
+                    </button>
 
-                {settings?.phone && (
-                  <a
-                    href={phoneHref}
-                    className="mt-3 flex items-center gap-2 font-semibold text-foreground transition hover:text-primary"
-                  >
-                    <MessagesSquare className="size-4 text-primary" />
-                    {settings.phone}
-                  </a>
-                )}
+                    <div className="text-center">
+                      <p className="font-display text-xl font-bold text-slate-950 sm:text-2xl">
+                        {calendarMonth.toLocaleDateString("en-US", { month: "long", year: "numeric" })}
+                      </p>
+                    </div>
+
+                    <button
+                      type="button"
+                      aria-label="Next month"
+                      onClick={() =>
+                        setCalendarMonth((current) => new Date(current.getFullYear(), current.getMonth() + 1, 1))
+                      }
+                      className="flex size-10 items-center justify-center rounded-full border border-slate-200 bg-white text-slate-700 transition hover:border-slate-300 hover:bg-slate-50"
+                    >
+                      <ChevronRight className="size-5" />
+                    </button>
+                  </div>
+
+                  <div className="mt-7 grid grid-cols-7 border-b border-slate-100 pb-3 text-center text-[11px] font-bold uppercase tracking-[0.12em] text-slate-400 sm:text-xs">
+                    {["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"].map((dayName) => (
+                      <div key={dayName}>{dayName}</div>
+                    ))}
+                  </div>
+
+                  <div className="mt-2 grid grid-cols-7 gap-1 sm:gap-2">
+                    {calendarDays.map((calendarDate) => {
+                      const dateKey = toLocalDateKey(calendarDate);
+                      const inMonth = sameCalendarMonth(calendarDate, calendarMonth);
+                      const isPast = calendarDate.getTime() < todayStart.getTime();
+                      const working = isWorkingDate(calendarDate, hours);
+                      const enabled = inMonth && !isPast && working;
+                      const isToday = dateKey === localToday;
+                      const dayHours = getHoursForDate(calendarDate, hours);
+
+                      return (
+                        <button
+                          key={dateKey}
+                          type="button"
+                          disabled={!enabled}
+                          onClick={() => selectAppointmentDate(calendarDate)}
+                          title={
+                            enabled
+                              ? `${calendarDate.toLocaleDateString("en-US", { weekday: "long", month: "long", day: "numeric" })} · ${dayHours}`
+                              : working
+                                ? "Unavailable"
+                                : "Dealership closed"
+                          }
+                          className={`group relative flex aspect-square min-h-11 flex-col items-center justify-center rounded-xl border text-sm transition sm:min-h-16 sm:rounded-2xl sm:text-base ${
+                            !inMonth
+                              ? "pointer-events-none border-transparent text-transparent"
+                              : enabled
+                                ? "cursor-pointer border-transparent bg-white font-semibold text-slate-800 hover:-translate-y-0.5 hover:border-[#F7941D] hover:bg-orange-50 hover:text-slate-950 hover:shadow-md"
+                                : "cursor-not-allowed border-transparent bg-slate-50 text-slate-300"
+                          }`}
+                        >
+                          {inMonth && (
+                            <>
+                              <span
+                                className={`flex size-8 items-center justify-center rounded-full sm:size-9 ${
+                                  isToday && enabled ? "bg-slate-950 text-white" : ""
+                                }`}
+                              >
+                                {calendarDate.getDate()}
+                              </span>
+                              <span
+                                className={`mt-1 hidden text-[9px] font-semibold uppercase tracking-wide sm:block ${enabled ? "text-emerald-600" : "text-slate-300"}`}
+                              >
+                                {enabled ? "Available" : !working ? "Closed" : ""}
+                              </span>
+                            </>
+                          )}
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {!hasConfiguredHours && (
+                    <div className="mt-6 rounded-2xl border border-amber-200 bg-amber-50 px-4 py-3 text-sm leading-6 text-amber-900">
+                      Online date selection is temporarily unavailable because showroom hours have not been configured
+                      yet. Please call the dealership to confirm a visit time.
+                    </div>
+                  )}
+
+                  <div className="mt-7 flex flex-wrap items-center justify-center gap-x-6 gap-y-2 border-t border-slate-100 pt-5 text-xs text-slate-500">
+                    <span className="inline-flex items-center gap-2">
+                      <span className="size-2.5 rounded-full bg-emerald-500" /> Available
+                    </span>
+                    <span className="inline-flex items-center gap-2">
+                      <span className="size-2.5 rounded-full bg-slate-200" /> Closed / unavailable
+                    </span>
+                    <span>Hours are based on your current showroom schedule.</span>
+                  </div>
+                </div>
               </div>
-            </aside>
-
-            {/* FORM — date-first booking flow */}
-            <div
-              onFocusCapture={markFormStarted}
-              onPointerDown={markFormStarted}
-              className="order-1 rounded-2xl border border-border bg-card p-6 shadow-sm lg:order-2 lg:p-8"
-            >
-              <div className="mb-6 border-b border-border pb-5">
+            </div>
+          ) : (
+            <div id="appointment-details" className="scroll-mt-24">
+              <div className="mx-auto mb-7 flex max-w-4xl flex-col gap-4 rounded-2xl border border-emerald-200 bg-emerald-50 px-5 py-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-start gap-3">
-                  <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                    <CalendarDays className="size-5" />
+                  <div className="mt-0.5 flex size-9 shrink-0 items-center justify-center rounded-full bg-emerald-600 text-white">
+                    <Check className="size-5" />
                   </div>
                   <div>
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Step 1</p>
-                    <h3 className="mt-1 font-display text-xl font-bold text-foreground">Choose Your Visit Date</h3>
-                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
-                      Pick an available day first. Closed days are automatically unavailable based on the dealership
-                      hours.
+                    <p className="text-xs font-bold uppercase tracking-[0.14em] text-emerald-700">
+                      Selected appointment date
                     </p>
+                    <p className="mt-1 font-display text-lg font-bold text-slate-950">
+                      {selectedDateObject?.toLocaleDateString("en-US", {
+                        weekday: "long",
+                        month: "long",
+                        day: "numeric",
+                        year: "numeric",
+                      })}
+                    </p>
+                    {selectedHours && <p className="mt-0.5 text-sm text-slate-600">Showroom hours: {selectedHours}</p>}
                   </div>
                 </div>
+                <button
+                  type="button"
+                  onClick={changeAppointmentDate}
+                  className="shrink-0 rounded-lg border border-emerald-300 bg-white px-4 py-2 text-sm font-bold text-emerald-800 transition hover:bg-emerald-100"
+                >
+                  Change date
+                </button>
               </div>
 
-              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
-                {appointmentDates.map((item) => {
-                  const selected = date === item.value;
-                  const dayName = item.date.toLocaleDateString("en-US", { weekday: "short" });
-                  const monthName = item.date.toLocaleDateString("en-US", { month: "short" });
-                  const dayNumber = item.date.getDate();
-
-                  return (
-                    <button
-                      key={item.value}
-                      type="button"
-                      disabled={item.closed}
-                      onClick={() => chooseDate(item.value)}
-                      className={`relative min-h-[112px] rounded-xl border p-3 text-left transition duration-200 ${
-                        item.closed
-                          ? "cursor-not-allowed border-border bg-muted/50 opacity-55"
-                          : selected
-                            ? "border-primary bg-primary/[0.06] shadow-sm ring-2 ring-primary/20"
-                            : "cursor-pointer border-border bg-background hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-md"
-                      }`}
-                    >
-                      {selected && (
-                        <span className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
-                          <Check className="size-3.5" />
-                        </span>
-                      )}
-
-                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{dayName}</p>
-                      <p className="mt-1 font-display text-2xl font-bold text-foreground">
-                        {monthName} {dayNumber}
-                      </p>
-                      <p
-                        className={`mt-2 text-xs font-semibold ${item.closed ? "text-muted-foreground" : "text-primary"}`}
-                      >
-                        {item.closed ? "Closed" : item.hours}
-                      </p>
-                    </button>
-                  );
-                })}
-              </div>
-
-              {!date ? (
-                <div className="mt-6 rounded-xl border border-dashed border-primary/30 bg-primary/[0.03] px-4 py-4 text-center">
-                  <p className="text-sm font-semibold text-foreground">Select an available date to continue</p>
-                  <p className="mt-1 text-xs text-muted-foreground">
-                    After you choose a date, the rest of the appointment form will open automatically.
+              <div className="grid items-start gap-8 lg:grid-cols-[0.72fr_1.4fr]">
+                <aside className="order-2 rounded-2xl border border-border bg-card p-6 shadow-sm lg:order-1">
+                  <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Step 2 of 2</p>
+                  <h3 className="mt-2 font-display text-xl font-bold">Complete your visit</h3>
+                  <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                    Tell us what you&apos;re coming in for and we&apos;ll prepare before you arrive.
                   </p>
-                </div>
-              ) : (
-                <div ref={appointmentDetailsRef} className="scroll-mt-24 mt-8 border-t border-border pt-7">
-                  <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-primary/[0.05] p-4">
-                    <div>
-                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Selected Date</p>
-                      <p className="mt-1 font-display text-lg font-bold text-foreground">
-                        {selectedAppointmentDate?.date.toLocaleDateString("en-US", {
-                          weekday: "long",
-                          month: "long",
-                          day: "numeric",
-                          year: "numeric",
-                        })}
-                      </p>
-                      <p className="mt-1 text-xs text-muted-foreground">Hours: {selectedAppointmentDate?.hours}</p>
-                    </div>
-                    <button
-                      type="button"
-                      onClick={() => setDate("")}
-                      className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground transition hover:border-primary/50 hover:text-primary"
-                    >
-                      Change date
-                    </button>
+
+                  <div className="mt-6 space-y-3">
+                    {APPOINTMENT_OPTIONS.map((option) => {
+                      const Icon = option.icon;
+                      const active = type === option.value;
+                      return (
+                        <button
+                          key={option.value}
+                          type="button"
+                          onClick={() => setType(option.value)}
+                          className={`flex w-full cursor-pointer items-center gap-3 rounded-xl border p-3 text-left transition ${active ? "border-primary bg-primary/[0.05]" : "border-border hover:border-primary/40 hover:bg-muted/40"}`}
+                        >
+                          <div
+                            className={`flex size-9 shrink-0 items-center justify-center rounded-lg ${active ? "bg-primary text-primary-foreground" : "bg-muted text-muted-foreground"}`}
+                          >
+                            <Icon className="size-4" />
+                          </div>
+                          <p className={`text-sm font-semibold ${active ? "text-primary" : "text-foreground"}`}>
+                            {option.title}
+                          </p>
+                        </button>
+                      );
+                    })}
                   </div>
 
-                  <div className="mb-6">
-                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Step 2</p>
-                    <h3 className="mt-1 font-display text-xl font-bold text-foreground">Complete Your Appointment</h3>
-                    <p className="mt-1 text-sm text-muted-foreground">
-                      Now choose your visit details and enter your contact information.
+                  {selectedVehicle && (
+                    <div className="mt-6 border-t border-border pt-5">
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
+                        Selected Vehicle
+                      </p>
+                      <div className="mt-3 rounded-xl border border-border bg-surface p-3">
+                        <p className="text-sm font-semibold text-foreground">{vehicleTitle(selectedVehicle)}</p>
+                        <p className="mt-1 text-xs text-muted-foreground">Stock #{selectedVehicle.stock_number}</p>
+                      </div>
+                    </div>
+                  )}
+
+                  <div className="mt-6 border-t border-border pt-5 text-sm">
+                    {settings?.address_line && (
+                      <p className="flex items-start gap-2 text-muted-foreground">
+                        <MapPin className="mt-0.5 size-4 shrink-0 text-primary" />
+                        <span>{settings.address_line}</span>
+                      </p>
+                    )}
+                    {settings?.phone && (
+                      <a
+                        href={phoneHref}
+                        className="mt-3 flex items-center gap-2 font-semibold text-foreground transition hover:text-primary"
+                      >
+                        <MessagesSquare className="size-4 text-primary" />
+                        {settings.phone}
+                      </a>
+                    )}
+                  </div>
+                </aside>
+
+                <div
+                  onFocusCapture={markFormStarted}
+                  onPointerDown={markFormStarted}
+                  className="order-1 rounded-2xl border border-border bg-card p-6 shadow-sm lg:order-2 lg:p-8 [&_button[type='submit']]:ml-auto [&_button[type='submit']]:flex"
+                >
+                  <div className="mb-6 border-b border-border pb-5">
+                    <p className="text-xs font-bold uppercase tracking-[0.16em] text-primary">Appointment details</p>
+                    <h3 className="mt-1 font-display text-xl font-bold text-foreground">Finish your request</h3>
+                    <p className="mt-2 text-sm leading-6 text-muted-foreground">
+                      Choose your visit type, preferred time and vehicle, then enter your contact information.
                     </p>
                   </div>
 
@@ -800,7 +878,6 @@ function SchedulePage() {
                           }
                         : null
                     }
-
                     collectDetails={() => ({
                       appointment_type: type,
                       appointment_stage: "requested",
@@ -898,9 +975,9 @@ function SchedulePage() {
                     </div>
                   </LeadForm>
                 </div>
-              )}
+              </div>
             </div>
-          </div>
+          )}
         </div>
       </section>
 
