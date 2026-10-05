@@ -8,6 +8,7 @@ import {
   CarFront,
   Check,
   Clock3,
+  CalendarDays,
   Handshake,
   MapPin,
   MessagesSquare,
@@ -41,7 +42,6 @@ export const Route = createFileRoute("/schedule")({
     vin: typeof raw["vin"] === "string" && raw["vin"].trim() ? raw["vin"].trim() : undefined,
     type: isAppointmentType(raw["type"]) ? raw["type"] : undefined,
   }),
-
   head: () => ({
     meta: [
       {
@@ -86,6 +86,29 @@ const MYCAR_LOGO_DATA_URI =
 
 const TIMES = ["9:30 AM", "11:00 AM", "1:00 PM", "2:30 PM", "4:00 PM", "5:30 PM"];
 
+function toLocalDateValue(value: Date) {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+function getHoursForDate(value: Date, hours: Record<string, string>) {
+  const day = value.getDay();
+  if (day === 0) return hours["sun"] ?? "";
+  if (day === 6) return hours["sat"] ?? "";
+  return hours["mon_fri"] ?? "";
+}
+
+function isClosedHours(value: unknown) {
+  const normalized = String(value ?? "")
+    .trim()
+    .toLowerCase();
+  return (
+    !normalized || normalized === "closed" || normalized === "close" || normalized === "day off" || normalized === "off"
+  );
+}
+
 const APPOINTMENT_OPTIONS: {
   value: AppointmentType;
   title: string;
@@ -114,6 +137,7 @@ const APPOINTMENT_OPTIONS: {
     cta: "Discuss Financing",
     icon: Banknote,
   },
+
   {
     value: "general",
     title: "General Visit",
@@ -172,6 +196,7 @@ function SchedulePage() {
   const autoScrolledVehicleRef = useRef(false);
   const formStartedRef = useRef(false);
   const pageTrackedRef = useRef(false);
+  const appointmentDetailsRef = useRef<HTMLDivElement | null>(null);
 
   const selectedVehicle = useMemo(
     () => inventory.find((item) => item.id === selectedVehicleId),
@@ -193,6 +218,36 @@ function SchedulePage() {
 
   const vehicle =
     selectedVehicle != null ? `${vehicleTitle(selectedVehicle)} — Stock #${selectedVehicle.stock_number}` : "";
+
+  const appointmentDates = useMemo(() => {
+    const dates: Array<{ value: string; date: Date; hours: string; closed: boolean }> = [];
+    const start = new Date();
+    start.setHours(12, 0, 0, 0);
+
+    for (let offset = 0; offset < 21; offset += 1) {
+      const next = new Date(start);
+      next.setDate(start.getDate() + offset);
+      const dayHours = getHoursForDate(next, hours);
+      dates.push({
+        value: toLocalDateValue(next),
+        date: next,
+        hours: dayHours,
+        closed: isClosedHours(dayHours),
+      });
+    }
+
+    return dates;
+  }, [hours]);
+
+  const selectedAppointmentDate = appointmentDates.find((item) => item.value === date);
+
+  const chooseDate = (value: string) => {
+    setDate(value);
+    setTime(TIMES[0]);
+    window.setTimeout(() => {
+      appointmentDetailsRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    }, 100);
+  };
 
   useEffect(() => {
     if (params.type) setType(params.type);
@@ -250,9 +305,6 @@ function SchedulePage() {
 
     return () => window.clearTimeout(timer);
   }, [params.stock, params.vehicle, params.vin, selectedVehicle]);
-
-  const today = new Date();
-  const localToday = new Date(today.getTime() - today.getTimezoneOffset() * 60_000).toISOString().slice(0, 10);
 
   const scrollToForm = () => {
     document.getElementById("appointment-form")?.scrollIntoView({
@@ -593,7 +645,6 @@ function SchedulePage() {
                   );
                 })}
               </div>
-
               {selectedVehicle && (
                 <div className="mt-6 border-t border-border pt-5">
                   <p className="text-xs font-semibold uppercase tracking-[0.14em] text-muted-foreground">
@@ -627,162 +678,227 @@ function SchedulePage() {
               </div>
             </aside>
 
-            {/* FORM */}
+            {/* FORM — date-first booking flow */}
             <div
               onFocusCapture={markFormStarted}
               onPointerDown={markFormStarted}
-              className="
-                order-1 rounded-2xl border border-border bg-card p-6 shadow-sm
-                lg:order-2 lg:p-8
-                [&_button[type='submit']]:ml-auto
-                [&_button[type='submit']]:flex
-              "
+              className="order-1 rounded-2xl border border-border bg-card p-6 shadow-sm lg:order-2 lg:p-8"
             >
               <div className="mb-6 border-b border-border pb-5">
-                <h3 className="font-display text-xl font-bold text-foreground">Appointment Details</h3>
-
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Tell us when you&apos;d like to visit and what we should prepare for you.
-                </p>
-              </div>
-
-              <LeadForm
-                leadType="appointment"
-                submitLabel="Request Appointment"
-                successTitle="Appointment requested"
-                successBody="Your request was received. Our team will confirm the final date and time by phone or email shortly."
-                messageLabel="Anything we should prepare?"
-                vehicleId={selectedVehicle?.id ?? null}
-                vehicle={
-                  selectedVehicle
-                    ? {
-                        id: selectedVehicle.id,
-                        vin: selectedVehicle.vin,
-                        stock_number: selectedVehicle.stock_number,
-                        year: selectedVehicle.year,
-                        make: selectedVehicle.make,
-                        model: selectedVehicle.model,
-                        trim: selectedVehicle.trim,
-                      }
-                    : null
-                }
-                collectDetails={() => ({
-                  appointment_type: type,
-                  appointment_stage: "requested",
-                  preferred_date: date,
-                  preferred_time: time,
-                  request_source:
-                    params.vehicle || params.stock || params.vin ? "vehicle_detail_page" : "schedule_page",
-                  requested_vehicle_parameter: params.vehicle ?? "",
-                  requested_stock_parameter: params.stock ?? "",
-                  requested_vin_parameter: params.vin ?? "",
-                  vehicle,
-                  vehicle_id: selectedVehicle?.id ?? "",
-                  vehicle_vin: selectedVehicle?.vin ?? "",
-                  vehicle_stock_number: selectedVehicle?.stock_number ?? "",
-                  vehicle_year: selectedVehicle?.year ?? "",
-                  vehicle_make: selectedVehicle?.make ?? "",
-                  vehicle_model: selectedVehicle?.model ?? "",
-                  vehicle_trim: selectedVehicle?.trim ?? "",
-                })}
-              >
-                <div className="grid gap-5 sm:grid-cols-2">
-                  <div className="space-y-2">
-                    <Label htmlFor="appointment-type">Appointment type</Label>
-
-                    <Select
-                      value={type}
-                      onValueChange={(value) => {
-                        const nextType = value as AppointmentType;
-                        setType(nextType);
-                        trackScheduleEvent("appointment_type_selected", {
-                          appointment_type: nextType,
-                          source: "appointment_form",
-                        });
-                      }}
-                    >
-                      <SelectTrigger id="appointment-type">
-                        <SelectValue />
-                      </SelectTrigger>
-
-                      <SelectContent>
-                        <SelectItem value="test_drive">Test drive</SelectItem>
-                        <SelectItem value="trade_appraisal">Trade appraisal</SelectItem>
-                        <SelectItem value="financing">Financing consultation</SelectItem>
-                        <SelectItem value="general">General visit</SelectItem>
-                      </SelectContent>
-                    </Select>
+                <div className="flex items-start gap-3">
+                  <div className="flex size-11 shrink-0 items-center justify-center rounded-xl bg-primary/10 text-primary">
+                    <CalendarDays className="size-5" />
                   </div>
-
-                  {/* VEHICLE PICKER — opens inventory modal */}
-                  <div className="space-y-2">
-                    <Label htmlFor="vehicle-picker">
-                      Vehicle <span className="font-normal text-muted-foreground">(optional)</span>
-                    </Label>
-
-                    <div className="relative">
-                      <button
-                        id="vehicle-picker"
-                        type="button"
-                        onClick={openVehiclePicker}
-                        className="flex min-h-10 w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2 text-left text-sm ring-offset-background transition hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
-                      >
-                        <span
-                          className={selectedVehicle ? "min-w-0 truncate text-foreground" : "text-muted-foreground"}
-                        >
-                          {selectedVehicle
-                            ? `${vehicleTitle(selectedVehicle)} — Stock #${selectedVehicle.stock_number}`
-                            : "Choose a vehicle from inventory"}
-                        </span>
-
-                        <Search className="size-4 shrink-0 text-muted-foreground" />
-                      </button>
-
-                      {selectedVehicle && (
-                        <button
-                          type="button"
-                          aria-label="Clear selected vehicle"
-                          onClick={() => setSelectedVehicleId("")}
-                          className="absolute right-9 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
-                        >
-                          <X className="size-3.5" />
-                        </button>
-                      )}
-                    </div>
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="date">Preferred date</Label>
-
-                    <Input
-                      id="date"
-                      type="date"
-                      min={localToday}
-                      value={date}
-                      onChange={(event) => setDate(event.target.value)}
-                      required
-                    />
-                  </div>
-
-                  <div className="space-y-2">
-                    <Label htmlFor="preferred-time">Preferred time</Label>
-
-                    <Select value={time ?? ""} onValueChange={setTime}>
-                      <SelectTrigger id="preferred-time">
-                        <SelectValue />
-                      </SelectTrigger>
-
-                      <SelectContent>
-                        {TIMES.map((availableTime) => (
-                          <SelectItem key={availableTime} value={availableTime}>
-                            {availableTime}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
+                  <div>
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Step 1</p>
+                    <h3 className="mt-1 font-display text-xl font-bold text-foreground">Choose Your Visit Date</h3>
+                    <p className="mt-1 text-sm leading-6 text-muted-foreground">
+                      Pick an available day first. Closed days are automatically unavailable based on the dealership
+                      hours.
+                    </p>
                   </div>
                 </div>
-              </LeadForm>
+              </div>
+
+              <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-4">
+                {appointmentDates.map((item) => {
+                  const selected = date === item.value;
+                  const dayName = item.date.toLocaleDateString("en-US", { weekday: "short" });
+                  const monthName = item.date.toLocaleDateString("en-US", { month: "short" });
+                  const dayNumber = item.date.getDate();
+
+                  return (
+                    <button
+                      key={item.value}
+                      type="button"
+                      disabled={item.closed}
+                      onClick={() => chooseDate(item.value)}
+                      className={`relative min-h-[112px] rounded-xl border p-3 text-left transition duration-200 ${
+                        item.closed
+                          ? "cursor-not-allowed border-border bg-muted/50 opacity-55"
+                          : selected
+                            ? "border-primary bg-primary/[0.06] shadow-sm ring-2 ring-primary/20"
+                            : "cursor-pointer border-border bg-background hover:-translate-y-0.5 hover:border-primary/60 hover:shadow-md"
+                      }`}
+                    >
+                      {selected && (
+                        <span className="absolute right-2 top-2 flex size-6 items-center justify-center rounded-full bg-primary text-primary-foreground">
+                          <Check className="size-3.5" />
+                        </span>
+                      )}
+
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{dayName}</p>
+                      <p className="mt-1 font-display text-2xl font-bold text-foreground">
+                        {monthName} {dayNumber}
+                      </p>
+                      <p
+                        className={`mt-2 text-xs font-semibold ${item.closed ? "text-muted-foreground" : "text-primary"}`}
+                      >
+                        {item.closed ? "Closed" : item.hours}
+                      </p>
+                    </button>
+                  );
+                })}
+              </div>
+
+              {!date ? (
+                <div className="mt-6 rounded-xl border border-dashed border-primary/30 bg-primary/[0.03] px-4 py-4 text-center">
+                  <p className="text-sm font-semibold text-foreground">Select an available date to continue</p>
+                  <p className="mt-1 text-xs text-muted-foreground">
+                    After you choose a date, the rest of the appointment form will open automatically.
+                  </p>
+                </div>
+              ) : (
+                <div ref={appointmentDetailsRef} className="scroll-mt-24 mt-8 border-t border-border pt-7">
+                  <div className="mb-6 flex flex-wrap items-center justify-between gap-3 rounded-xl bg-primary/[0.05] p-4">
+                    <div>
+                      <p className="text-xs font-semibold uppercase tracking-[0.14em] text-primary">Selected Date</p>
+                      <p className="mt-1 font-display text-lg font-bold text-foreground">
+                        {selectedAppointmentDate?.date.toLocaleDateString("en-US", {
+                          weekday: "long",
+                          month: "long",
+                          day: "numeric",
+                          year: "numeric",
+                        })}
+                      </p>
+                      <p className="mt-1 text-xs text-muted-foreground">Hours: {selectedAppointmentDate?.hours}</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={() => setDate("")}
+                      className="rounded-lg border border-border bg-background px-3 py-2 text-xs font-semibold text-foreground transition hover:border-primary/50 hover:text-primary"
+                    >
+                      Change date
+                    </button>
+                  </div>
+
+                  <div className="mb-6">
+                    <p className="text-xs font-semibold uppercase tracking-[0.16em] text-primary">Step 2</p>
+                    <h3 className="mt-1 font-display text-xl font-bold text-foreground">Complete Your Appointment</h3>
+                    <p className="mt-1 text-sm text-muted-foreground">
+                      Now choose your visit details and enter your contact information.
+                    </p>
+                  </div>
+
+                  <LeadForm
+                    leadType="appointment"
+                    submitLabel="Request Appointment"
+                    successTitle="Appointment requested"
+                    successBody="Your request was received. Our team will confirm the final date and time by phone or email shortly."
+                    messageLabel="Anything we should prepare?"
+                    vehicleId={selectedVehicle?.id ?? null}
+                    vehicle={
+                      selectedVehicle
+                        ? {
+                            id: selectedVehicle.id,
+                            vin: selectedVehicle.vin,
+                            stock_number: selectedVehicle.stock_number,
+                            year: selectedVehicle.year,
+                            make: selectedVehicle.make,
+                            model: selectedVehicle.model,
+                            trim: selectedVehicle.trim,
+                          }
+                        : null
+                    }
+
+                    collectDetails={() => ({
+                      appointment_type: type,
+                      appointment_stage: "requested",
+                      preferred_date: date,
+                      preferred_time: time,
+                      request_source:
+                        params.vehicle || params.stock || params.vin ? "vehicle_detail_page" : "schedule_page",
+                      requested_vehicle_parameter: params.vehicle ?? "",
+                      requested_stock_parameter: params.stock ?? "",
+                      requested_vin_parameter: params.vin ?? "",
+                      vehicle,
+                      vehicle_id: selectedVehicle?.id ?? "",
+                      vehicle_vin: selectedVehicle?.vin ?? "",
+                      vehicle_stock_number: selectedVehicle?.stock_number ?? "",
+                      vehicle_year: selectedVehicle?.year ?? "",
+                      vehicle_make: selectedVehicle?.make ?? "",
+                      vehicle_model: selectedVehicle?.model ?? "",
+                      vehicle_trim: selectedVehicle?.trim ?? "",
+                    })}
+                  >
+                    <div className="grid gap-5 sm:grid-cols-2">
+                      <div className="space-y-2">
+                        <Label htmlFor="appointment-type">Appointment type</Label>
+                        <Select
+                          value={type}
+                          onValueChange={(value) => {
+                            const nextType = value as AppointmentType;
+                            setType(nextType);
+                            trackScheduleEvent("appointment_type_selected", {
+                              appointment_type: nextType,
+                              source: "appointment_form",
+                            });
+                          }}
+                        >
+                          <SelectTrigger id="appointment-type">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            <SelectItem value="test_drive">Test drive</SelectItem>
+                            <SelectItem value="trade_appraisal">Trade appraisal</SelectItem>
+                            <SelectItem value="financing">Financing consultation</SelectItem>
+                            <SelectItem value="general">General visit</SelectItem>
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2">
+                        <Label htmlFor="preferred-time">Preferred time</Label>
+                        <Select value={time ?? ""} onValueChange={setTime}>
+                          <SelectTrigger id="preferred-time">
+                            <SelectValue />
+                          </SelectTrigger>
+                          <SelectContent>
+                            {TIMES.map((availableTime) => (
+                              <SelectItem key={availableTime} value={availableTime}>
+                                {availableTime}
+                              </SelectItem>
+                            ))}
+                          </SelectContent>
+                        </Select>
+                      </div>
+
+                      <div className="space-y-2 sm:col-span-2">
+                        <Label htmlFor="vehicle-picker">
+                          Vehicle <span className="font-normal text-muted-foreground">(optional)</span>
+                        </Label>
+                        <div className="relative">
+                          <button
+                            id="vehicle-picker"
+                            type="button"
+                            onClick={openVehiclePicker}
+                            className="flex min-h-10 w-full cursor-pointer items-center justify-between gap-3 rounded-md border border-input bg-background px-3 py-2 text-left text-sm ring-offset-background transition hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2"
+                          >
+                            <span
+                              className={selectedVehicle ? "min-w-0 truncate text-foreground" : "text-muted-foreground"}
+                            >
+                              {selectedVehicle
+                                ? `${vehicleTitle(selectedVehicle)} — Stock #${selectedVehicle.stock_number}`
+                                : "Choose a vehicle from inventory"}
+                            </span>
+                            <Search className="size-4 shrink-0 text-muted-foreground" />
+                          </button>
+                          {selectedVehicle && (
+                            <button
+                              type="button"
+                              aria-label="Clear selected vehicle"
+                              onClick={() => setSelectedVehicleId("")}
+                              className="absolute right-9 top-1/2 flex size-6 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground transition hover:bg-muted hover:text-foreground"
+                            >
+                              <X className="size-3.5" />
+                            </button>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  </LeadForm>
+                </div>
+              )}
             </div>
           </div>
         </div>
