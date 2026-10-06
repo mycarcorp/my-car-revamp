@@ -324,6 +324,49 @@ function getPreferredTime(lead: AdminLeadRow) {
   return value == null ? "—" : formatSimpleValue(value);
 }
 
+const ATTRIBUTION_KEYS = new Set([
+  "lead_source",
+  "lead_medium",
+  "utm_source",
+  "utm_medium",
+  "utm_campaign",
+  "utm_content",
+  "utm_term",
+  "fbclid",
+  "gclid",
+  "gbraid",
+  "wbraid",
+  "ttclid",
+  "li_fat_id",
+  "rdt_cid",
+  "referrer",
+  "landing_page",
+  "conversion_page",
+]);
+
+function isAttributionDetailKey(key: string) {
+  const normalized = normalizeDetailKey(key);
+  return (
+    ATTRIBUTION_KEYS.has(normalized) || normalized.startsWith("first_touch_") || normalized.startsWith("last_touch_")
+  );
+}
+
+function getLeadSource(lead: AdminLeadRow) {
+  const value = getFirstDetail(lead, ["lead_source", "last_touch_source"]);
+  return value == null || String(value).trim() === "" ? "Not tracked" : String(value).trim();
+}
+
+function getLeadMedium(lead: AdminLeadRow) {
+  const value = getFirstDetail(lead, ["lead_medium", "last_touch_medium"]);
+  return value == null || String(value).trim() === "" ? "—" : String(value).trim();
+}
+
+function getAttributionEntries(lead: AdminLeadRow): LeadDetailEntry[] {
+  return Object.entries(lead.details ?? {}).filter(
+    ([key, value]) => value != null && value !== "" && isAttributionDetailKey(key),
+  );
+}
+
 function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts: AccountProfile[] }) {
   const queryClient = useQueryClient();
   const [type, setType] = useState<LeadFilterType>("all");
@@ -408,6 +451,8 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
       return [
         lead.full_name,
         getLeadTypeLabel(lead),
+        getLeadSource(lead),
+        getLeadMedium(lead),
         getPreferredDate(lead),
         getPreferredTime(lead),
         lead.status || "new",
@@ -437,6 +482,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
       icon: Clock3,
       className: "text-[#D25B4C] bg-[#D25B4C]/12",
     },
+
     {
       key: "finance",
       label: "Financing",
@@ -465,7 +511,6 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
       icon: CalendarCheck,
       className: "text-[#809C61] bg-[#809C61]/12",
     },
-
     {
       key: "availability",
       label: "Check Availability",
@@ -529,7 +574,6 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
 
                 setCalendarOpen(true);
               }}
-
               className={`flex h-10 w-full items-center justify-between gap-3 rounded-md border bg-background px-3 text-sm shadow-sm transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-56 ${
                 selectedCalendarDate ? "border-primary text-foreground" : "border-input text-muted-foreground"
               }`}
@@ -674,6 +718,8 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
                         </div>
 
                         <div className="mt-3 grid grid-cols-2 gap-3 text-xs">
+                          <MobileValue label="Source" value={getLeadSource(lead)} />
+                          <MobileValue label="Medium" value={getLeadMedium(lead)} />
                           <MobileValue label="Date" value={getPreferredDate(lead)} />
                           <MobileValue label="Time" value={getPreferredTime(lead)} />
 
@@ -701,12 +747,13 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
             <div className="hidden overflow-x-auto md:block">
               <table className="w-full min-w-[1050px] table-fixed text-left text-sm">
                 <colgroup>
-                  <col className="w-[25%]" />
-                  <col className="w-[15%]" />
-                  <col className="w-[18%]" />
-                  <col className="w-[12%]" />
-                  <col className="w-[12%]" />
+                  <col className="w-[21%]" />
+                  <col className="w-[13%]" />
                   <col className="w-[14%]" />
+                  <col className="w-[15%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[10%]" />
+                  <col className="w-[13%]" />
                   <col className="w-[4%]" />
                 </colgroup>
 
@@ -714,6 +761,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
                   <tr>
                     <th className="px-4 py-3 font-medium">Name</th>
                     <th className="px-4 py-3 font-medium">Request</th>
+                    <th className="px-4 py-3 font-medium">Source</th>
                     <th className="px-4 py-3 font-medium">Date</th>
                     <th className="px-4 py-3 font-medium">Time</th>
                     <th className="px-4 py-3 font-medium">Status</th>
@@ -759,6 +807,12 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
                         <td className="overflow-hidden px-4 py-3">
                           <Badge variant="secondary" className="max-w-full truncate">
                             {getLeadTypeLabel(lead)}
+                          </Badge>
+                        </td>
+
+                        <td className="overflow-hidden px-4 py-3">
+                          <Badge variant="outline" className="max-w-full truncate">
+                            {getLeadSource(lead)}
                           </Badge>
                         </td>
 
@@ -1006,8 +1060,10 @@ function LeadDetailsDialog({
   if (!lead) return null;
 
   const details = Object.entries(lead.details ?? {}).filter(
-    ([key, value]) => value !== null && value !== undefined && value !== "" && !isHiddenModalField(key),
+    ([key, value]) =>
+      value !== null && value !== undefined && value !== "" && !isHiddenModalField(key) && !isAttributionDetailKey(key),
   );
+  const attributionEntries = getAttributionEntries(lead);
 
   const selectedVehicleEntries = details.filter(([key]) => isSelectedVehicleKey(key));
   const otherDetails = details.filter(([key]) => !isSelectedVehicleKey(key));
@@ -1097,6 +1153,16 @@ function LeadDetailsDialog({
                     </div>
                   </div>
 
+                  <div className="border-t border-border pt-4">
+                    <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                      Lead source
+                    </p>
+                    <div className="space-y-3">
+                      <CompactValue label="Source" value={getLeadSource(lead)} />
+                      <CompactValue label="Medium" value={getLeadMedium(lead)} />
+                    </div>
+                  </div>
+
                   {hasSchedule ? (
                     <div className="border-t border-border pt-4">
                       <p className="mb-3 text-xs font-semibold uppercase tracking-wide text-muted-foreground">
@@ -1138,6 +1204,19 @@ function LeadDetailsDialog({
             </aside>
 
             <div className="min-w-0 space-y-5">
+              <FormSectionCard
+                title="Lead Attribution"
+                description="Where this customer came from before submitting the form."
+              >
+                {attributionEntries.length > 0 ? (
+                  <OrganizedDetailGrid entries={attributionEntries} />
+                ) : (
+                  <p className="text-sm text-muted-foreground">
+                    Attribution was not captured for this lead. Older submissions will show as Not tracked.
+                  </p>
+                )}
+              </FormSectionCard>
+
               {selectedVehicleEntries.length > 0 && (
                 <FormSectionCard
                   title={lead.lead_type === "trade" ? "Vehicle the Customer Wants" : "Selected Vehicle"}
@@ -1915,6 +1994,23 @@ function formatFieldLabel(key: string) {
     zip_code: "ZIP Code",
     relationship: "Relationship",
     phone_number: "Phone Number",
+    lead_source: "Lead Source",
+    lead_medium: "Lead Medium",
+    utm_source: "UTM Source",
+    utm_medium: "UTM Medium",
+    utm_campaign: "UTM Campaign",
+    utm_content: "UTM Content",
+    utm_term: "UTM Term",
+    fbclid: "Facebook Click ID",
+    gclid: "Google Click ID",
+    gbraid: "Google GBRAID",
+    wbraid: "Google WBRAID",
+    ttclid: "TikTok Click ID",
+    li_fat_id: "LinkedIn Click ID",
+    rdt_cid: "Reddit Click ID",
+    referrer: "Referrer",
+    landing_page: "Landing Page",
+    conversion_page: "Conversion Page",
   };
 
   if (labels[key]) return labels[key];
