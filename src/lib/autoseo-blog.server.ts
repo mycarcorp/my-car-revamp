@@ -706,7 +706,7 @@ function normalizeQualityRule(row: Record<string, unknown>): BlogQualityRule | n
     : [];
 
   return {
-    id: Number.isFinite(Number(row["id"])) ? Number(row["id"]) : undefined,
+    ...(Number.isFinite(Number(row["id"])) ? { id: Number(row["id"]) } : {}),
     code,
     name,
     rule_type: ruleType,
@@ -978,7 +978,7 @@ export async function evaluateAutoseoQuality(input: {
       severity: rule.severity,
       message: rule.message || `Quality rule "${rule.name}" was matched.`,
       matched_text: matched,
-      requires_source: rule.requires_source || undefined,
+      ...(rule.requires_source ? { requires_source: true } : {}),
     });
   }
 
