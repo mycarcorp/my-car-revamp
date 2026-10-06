@@ -465,6 +465,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
       icon: CalendarCheck,
       className: "text-[#809C61] bg-[#809C61]/12",
     },
+
     {
       key: "availability",
       label: "Check Availability",
@@ -528,6 +529,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
 
                 setCalendarOpen(true);
               }}
+
               className={`flex h-10 w-full items-center justify-between gap-3 rounded-md border bg-background px-3 text-sm shadow-sm transition-colors hover:border-primary/40 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring sm:w-56 ${
                 selectedCalendarDate ? "border-primary text-foreground" : "border-input text-muted-foreground"
               }`}
