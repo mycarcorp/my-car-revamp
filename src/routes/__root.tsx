@@ -17,6 +17,7 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
+import { captureAttribution } from "@/lib/attribution";
 
 function NotFoundComponent() {
   return (
@@ -142,6 +143,10 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAdmin = pathname.startsWith("/admin");
+
+  useEffect(() => {
+    if (!isAdmin) captureAttribution();
+  }, [pathname, isAdmin]);
 
   useEffect(() => {
     if (isAdmin) return;
