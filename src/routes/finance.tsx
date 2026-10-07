@@ -1222,8 +1222,8 @@ function FinancePage() {
                         <div className="px-5 pb-8 pt-5 sm:px-10">
                           <TabsContent value="applicant" className="m-0 focus-visible:outline-none">
                             <FormSection title="Buyer Info">
-                              <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
-                                <div className="sm:col-span-2 lg:col-span-2">
+                              <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
+                                <div className="sm:col-span-2">
                                   <Label htmlFor="buyer-name" className="text-[11px] font-medium text-slate-700">
                                     Buyer
                                   </Label>
@@ -1246,7 +1246,7 @@ function FinancePage() {
                                       <MoreVertical className="size-3.5" />
                                     </button>
                                     {showBuyerNameDetails && (
-                                      <div className="absolute left-0 top-full z-50 mt-1 grid w-[620px] max-w-[calc(100vw-3rem)] gap-x-3 gap-y-2 border border-slate-300 bg-white p-3 shadow-xl sm:grid-cols-2 lg:grid-cols-3">
+                                      <div className="absolute left-0 top-full z-50 mt-1 grid w-[620px] max-w-[calc(100vw-3rem)] gap-x-3 gap-y-2 border border-slate-300 bg-white p-3 shadow-xl sm:grid-cols-2">
                                         <ComboField
                                           id="salutation"
                                           label="Salutation"
@@ -1612,7 +1612,7 @@ function FinancePage() {
                             </FormSection>
 
                             <FormSection title="Other Income">
-                              <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
+                              <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
                                 <CurrencyField
                                   id="other-income-amount"
                                   label="Income Amount"
@@ -1656,7 +1656,7 @@ function FinancePage() {
                                       ) : undefined
                                     }
                                   >
-                                    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
+                                    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
                                       <TextField
                                         id={`reference-${reference.id}-name`}
                                         label="Name"
@@ -1712,7 +1712,7 @@ function FinancePage() {
                                       </div>
 
                                       {expandedReferenceAddresses.includes(reference.id) && (
-                                        <div className="grid gap-x-3 gap-y-2 border border-slate-300 bg-slate-50 p-3 sm:col-span-2 lg:col-span-4 sm:grid-cols-2 lg:grid-cols-4">
+                                        <div className="grid gap-x-3 gap-y-2 border border-slate-300 bg-slate-50 p-3 sm:col-span-2 sm:grid-cols-2">
                                           <div className="sm:col-span-2">
                                             <TextField
                                               id={`reference-${reference.id}-street`}
