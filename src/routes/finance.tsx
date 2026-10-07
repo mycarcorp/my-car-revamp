@@ -2285,7 +2285,7 @@ function AddressFields({
     onChange((current) => ({ ...current, [field]: nextValue }));
 
   return (
-    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
       <div className="sm:col-span-2">
         <TextField
           id={`${idPrefix}-street`}
@@ -2400,7 +2400,7 @@ function EmployerFields({
     onChange((current) => ({ ...current, [field]: nextValue }));
 
   return (
-    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
       <TextField
         id={`${idPrefix}-name`}
         label={employerNameLabel}
