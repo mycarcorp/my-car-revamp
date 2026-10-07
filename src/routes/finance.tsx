@@ -32,6 +32,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LeadForm } from "@/components/LeadForm";
 import { allVehiclesQuery, siteSettingsQuery } from "@/lib/queries";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/app-client";
+import { registerAccount } from "@/lib/account.functions";
+import { linkLegacyProfile } from "@/lib/legacy-auth.functions";
 
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 
