@@ -39,6 +39,8 @@ export type LeadFormProps = {
   children?: ReactNode;
   /** Extra fields serialized into the lead details column. */
   collectDetails?: () => Record<string, unknown>;
+  /** When set, the built-in contact fields and submit button are hidden and these values are used. */
+  contact?: { fullName: string; email: string; phone?: string | null } | null;
 };
 
 export function LeadForm({
@@ -52,6 +54,7 @@ export function LeadForm({
   messageLabel = "Anything we should know?",
   children,
   collectDetails,
+  contact = null,
 }: LeadFormProps) {
   const { user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
@@ -60,14 +63,14 @@ export function LeadForm({
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
     const form = new FormData(e.currentTarget);
-    const full_name = String(form.get("full_name") ?? "").trim();
-    const email = String(form.get("email") ?? "").trim();
+    const full_name = (contact ? contact.fullName : String(form.get("full_name") ?? "")).trim();
+    const email = (contact ? contact.email : String(form.get("email") ?? "")).trim();
     if (!full_name || !email) {
       toast.error("Please enter your name and email.");
       return;
     }
     setSubmitting(true);
-    const phone = String(form.get("phone") ?? "") || null;
+    const phone = (contact ? contact.phone ?? "" : String(form.get("phone") ?? "")) || null;
     const message = String(form.get("message") ?? "") || null;
     const details: Record<string, unknown> = { ...(collectDetails?.() ?? {}) };
     // Attribution never overrides form-provided fields.
@@ -145,6 +148,7 @@ export function LeadForm({
   return (
     <form onSubmit={onSubmit} className="space-y-4">
       {children}
+      {!contact && (<>
       <div className="grid gap-4 sm:grid-cols-2">
         <div className="space-y-2">
           <Label htmlFor="full_name">Full name</Label>
@@ -172,6 +176,7 @@ export function LeadForm({
         By submitting you agree to be contacted by My Car Business Services LLC about your request.
         We never sell your information.
       </p>
+      </>)}
     </form>
   );
 }

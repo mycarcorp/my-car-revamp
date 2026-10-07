@@ -32,6 +32,10 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { LeadForm } from "@/components/LeadForm";
 import { allVehiclesQuery, siteSettingsQuery } from "@/lib/queries";
 import { useAuth } from "@/hooks/useAuth";
+import { toast } from "sonner";
+import { supabase } from "@/integrations/supabase/app-client";
+import { registerAccount } from "@/lib/account.functions";
+import { linkLegacyProfile } from "@/lib/legacy-auth.functions";
 
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 
@@ -542,14 +546,23 @@ function FinancePage() {
         reference.relationship.trim().length > 0,
     );
 
-  const stepIndex = activeStep === "applicant" ? 0 : activeStep === "address" ? 1 : activeStep === "employment" ? 2 : 3;
-  const stepProgress = ((stepIndex + 1) / 4) * 100;
+  const STEP_KEYS = ["applicant", "address", "employment", "references", "account"] as const;
+  const STEP_META: Record<string, { title: string; subtitle: string }> = {
+    applicant: { title: "Personal information", subtitle: "This helps verify your identity and is never shared without your consent." },
+    address: { title: "Contact information", subtitle: "Where you live and where we can reach you." },
+    employment: { title: "Financial information", subtitle: "Your employment and income before taxes." },
+    references: { title: "References", subtitle: "People we can contact to support your application." },
+    account: { title: "Sign in or sign up", subtitle: "Save your application and track its status." },
+  };
+  const stepIndex = Math.max(0, STEP_KEYS.indexOf(activeStep as (typeof STEP_KEYS)[number]));
+  const stepProgress = ((stepIndex + 1) / STEP_KEYS.length) * 100;
 
   const canOpenStep = (step: string) => {
     if (step === "applicant") return true;
     if (step === "address") return applicantComplete;
     if (step === "employment") return applicantComplete && addressComplete;
     if (step === "references") return applicantComplete && addressComplete && employmentComplete;
+    if (step === "account") return applicantComplete && addressComplete && employmentComplete && referencesComplete;
     return false;
   };
 
@@ -570,54 +583,6 @@ function FinancePage() {
     if (metaPhone) setCellPhone((current) => current || digitsOnly(metaPhone, 10));
   }, [user]);
 
-  useEffect(() => {
-    const scope = leadFormScopeRef.current;
-    if (!scope) return;
-
-    const hiddenFields = [
-      { label: "Full name", value: buyerName },
-      { label: "Email", value: buyerEmail },
-      { label: "Phone", value: formatPhone(cellPhone) },
-      { label: "Anything else we should know?", value: "" },
-    ];
-
-    hiddenFields.forEach(({ label, value }) => {
-      const labelElement = Array.from(scope.querySelectorAll("label"))
-        .filter((element) => element.textContent?.trim().toLowerCase() === label.toLowerCase())
-        .at(-1);
-      if (!labelElement) return;
-
-      const fieldId = labelElement.getAttribute("for");
-      const field = fieldId
-        ? scope.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${CSS.escape(fieldId)}`)
-        : labelElement.parentElement?.querySelector<HTMLInputElement | HTMLTextAreaElement>("input, textarea");
-
-      if (field && field.value !== value) {
-        const prototype =
-          field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
-        const setter = Object.getOwnPropertyDescriptor(prototype, "value")?.set;
-        setter?.call(field, value);
-        field.dispatchEvent(new Event("input", { bubbles: true }));
-        field.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-
-      const wrapper = labelElement.parentElement;
-      if (wrapper) wrapper.style.display = "none";
-    });
-
-    Array.from(scope.querySelectorAll<HTMLElement>("p, small")).forEach((element) => {
-      const text = element.textContent?.replace(/\s+/g, " ").trim().toLowerCase();
-      if (text?.startsWith("by submitting you agree to be contacted by my car business services llc")) {
-        element.style.display = "none";
-      }
-    });
-
-    const generatedSubmitButton = Array.from(scope.querySelectorAll<HTMLButtonElement>('button[type="submit"]')).find(
-      (button) => !button.hasAttribute("data-finance-submit"),
-    );
-
-    if (generatedSubmitButton) generatedSubmitButton.style.display = "none";
-  }, [buyerName, buyerEmail, cellPhone, activeStep]);
 
   function addReference() {
     setReferences((current) => [
@@ -1116,7 +1081,7 @@ function FinancePage() {
           className={`gap-0 overflow-hidden border-0 bg-white p-0 shadow-2xl ${
             financeModalStage === "intro"
               ? "max-w-[560px] rounded-2xl"
-              : "h-[min(92vh,860px)] max-w-[760px] rounded-2xl"
+              : "h-[min(92vh,860px)] max-w-[640px] rounded-2xl"
           }`}
         >
           {financeModalStage === "intro" ? (
@@ -1156,7 +1121,8 @@ function FinancePage() {
                     if (activeStep === "applicant") setFinanceModalStage("intro");
                     else if (activeStep === "address") setActiveStep("applicant");
                     else if (activeStep === "employment") setActiveStep("address");
-                    else setActiveStep("employment");
+                    else if (activeStep === "references") setActiveStep("employment");
+                    else setActiveStep("references");
                   }}
                   className="absolute left-4 flex size-9 items-center justify-center rounded-full text-slate-800 transition hover:bg-slate-100"
                 >
@@ -1173,7 +1139,11 @@ function FinancePage() {
                       submitLabel="Submit"
                       successTitle="Financing application received"
                       successBody="Our finance manager will review your information and contact you about the next steps."
-                      messageLabel="Anything else we should know?"
+                      contact={{
+                        fullName: buyerName || [firstName, lastName].filter(Boolean).join(" "),
+                        email: buyerEmail || user?.email || "",
+                        phone: cellPhone ? formatPhone(cellPhone) : null,
+                      }}
                       collectDetails={() => ({
                         buyer: buyerName,
                         salutation,
@@ -1226,19 +1196,6 @@ function FinancePage() {
                         sms_consent_timestamp: smsConsent ? new Date().toISOString() : "",
                       })}
                     >
-                      <div className="border-b border-slate-200 bg-white px-5 py-4 sm:px-8">
-                        <div className="mb-2 flex items-center justify-between text-xs font-medium text-slate-500">
-                          <span>Step {stepIndex + 1} of 4</span>
-                          <span>{Math.round(stepProgress)}% complete</span>
-                        </div>
-                        <div className="h-2 overflow-hidden rounded-full bg-slate-200">
-                          <div
-                            className="h-full rounded-full bg-[#0b4a78] transition-all duration-300"
-                            style={{ width: `${stepProgress}%` }}
-                          />
-                        </div>
-                      </div>
-
                       <Tabs
                         value={activeStep}
                         onValueChange={(nextStep) => {
@@ -1246,54 +1203,27 @@ function FinancePage() {
                         }}
                         className="w-full"
                       >
-                        <div className="border-b border-slate-200 px-3 pt-3 sm:px-5 sm:pt-5">
-                          <TabsList className="grid h-auto w-full grid-cols-2 gap-1 rounded-xl bg-slate-100 p-1 lg:grid-cols-4">
-                            <TabsTrigger value="applicant" className="gap-2 rounded-lg py-2.5 text-xs sm:text-sm">
-                              <UserRound className="size-4" /> Applicant
-                            </TabsTrigger>
-                            <TabsTrigger
-                              value="address"
-                              disabled={!applicantComplete}
-                              className="gap-2 rounded-lg py-2.5 text-xs sm:text-sm"
-                            >
-                              <MapPin className="size-4" /> Address
-                            </TabsTrigger>
-                            <TabsTrigger
-                              value="employment"
-                              disabled={!applicantComplete || !addressComplete}
-                              className="gap-2 rounded-lg py-2.5 text-xs sm:text-sm"
-                            >
-                              <BriefcaseBusiness className="size-4" /> Employment
-                            </TabsTrigger>
-                            <TabsTrigger
-                              value="references"
-                              disabled={!applicantComplete || !addressComplete || !employmentComplete}
-                              className="gap-2 rounded-lg py-2.5 text-xs sm:text-sm"
-                            >
-                              <UsersRound className="size-4" /> References
-                            </TabsTrigger>
-                          </TabsList>
-                          <div className="flex items-center justify-between py-3 text-xs text-slate-500">
-                            <span>
-                              Step{" "}
-                              {activeStep === "applicant"
-                                ? 1
-                                : activeStep === "address"
-                                  ? 2
-                                  : activeStep === "employment"
-                                    ? 3
-                                    : 4}{" "}
-                              of 4
-                            </span>
-                            <span className="hidden sm:inline">Use the tabs to review each section.</span>
+                        <div className="px-5 pt-6 sm:px-10 sm:pt-8">
+                          <div className="h-2 overflow-hidden rounded-full bg-slate-200">
+                            <div
+                              className="h-full rounded-full bg-[#0b3a63] transition-all duration-300"
+                              style={{ width: `${stepProgress}%` }}
+                            />
                           </div>
+                          <p className="mt-3 text-xs font-medium text-slate-500">
+                            Step {stepIndex + 1} of {STEP_KEYS.length}
+                          </p>
+                          <h2 className="mt-4 font-display text-2xl font-bold tracking-tight text-[#0b2545]">
+                            {STEP_META[activeStep]?.title}
+                          </h2>
+                          <p className="mt-1.5 text-sm leading-6 text-slate-600">{STEP_META[activeStep]?.subtitle}</p>
                         </div>
 
-                        <div className="p-3 sm:p-5">
+                        <div className="px-5 pb-8 pt-5 sm:px-10">
                           <TabsContent value="applicant" className="m-0 focus-visible:outline-none">
                             <FormSection title="Buyer Info">
-                              <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
-                                <div className="sm:col-span-2 lg:col-span-2">
+                              <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
+                                <div className="sm:col-span-2">
                                   <Label htmlFor="buyer-name" className="text-[11px] font-medium text-slate-700">
                                     Buyer
                                   </Label>
@@ -1316,7 +1246,7 @@ function FinancePage() {
                                       <MoreVertical className="size-3.5" />
                                     </button>
                                     {showBuyerNameDetails && (
-                                      <div className="absolute left-0 top-full z-50 mt-1 grid w-[620px] max-w-[calc(100vw-3rem)] gap-x-3 gap-y-2 border border-slate-300 bg-white p-3 shadow-xl sm:grid-cols-2 lg:grid-cols-3">
+                                      <div className="absolute left-0 top-full z-50 mt-1 grid w-[620px] max-w-[calc(100vw-3rem)] gap-x-3 gap-y-2 border border-slate-300 bg-white p-3 shadow-xl sm:grid-cols-2">
                                         <ComboField
                                           id="salutation"
                                           label="Salutation"
@@ -1682,7 +1612,7 @@ function FinancePage() {
                             </FormSection>
 
                             <FormSection title="Other Income">
-                              <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
+                              <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
                                 <CurrencyField
                                   id="other-income-amount"
                                   label="Income Amount"
@@ -1726,7 +1656,7 @@ function FinancePage() {
                                       ) : undefined
                                     }
                                   >
-                                    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-4">
+                                    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
                                       <TextField
                                         id={`reference-${reference.id}-name`}
                                         label="Name"
@@ -1782,7 +1712,7 @@ function FinancePage() {
                                       </div>
 
                                       {expandedReferenceAddresses.includes(reference.id) && (
-                                        <div className="grid gap-x-3 gap-y-2 border border-slate-300 bg-slate-50 p-3 sm:col-span-2 lg:col-span-4 sm:grid-cols-2 lg:grid-cols-4">
+                                        <div className="grid gap-x-3 gap-y-2 border border-slate-300 bg-slate-50 p-3 sm:col-span-2 sm:grid-cols-2">
                                           <div className="sm:col-span-2">
                                             <TextField
                                               id={`reference-${reference.id}-street`}
@@ -1877,17 +1807,26 @@ function FinancePage() {
                               </label>
                             </div>
 
-                            <div className="mt-5 flex items-center justify-between">
-                              <Button type="button" variant="ghost" onClick={() => setActiveStep("employment")}>
+                            <StepActions
+                              onBack={() => setActiveStep("employment")}
+                              onNext={() => setActiveStep("account")}
+                              nextDisabled={!referencesComplete}
+                            />
+                          </TabsContent>
+
+                          <TabsContent value="account" className="m-0 focus-visible:outline-none">
+                            <FinanceAccountStep defaultEmail={buyerEmail} defaultName={buyerName} />
+                            <div className="mt-6 flex items-center justify-between">
+                              <Button type="button" variant="ghost" onClick={() => setActiveStep("references")}>
                                 Back
                               </Button>
                               <Button
                                 type="submit"
                                 data-finance-submit
-                                disabled={!referencesComplete}
-                                className="bg-[#F7941D] font-semibold text-slate-950 hover:bg-[#ea8718]"
+                                disabled={!referencesComplete || !user}
+                                className="h-12 min-w-40 rounded-full bg-[#1473d1] font-semibold text-white hover:bg-[#0f65bc] disabled:bg-slate-200 disabled:text-slate-400 disabled:opacity-100"
                               >
-                                Submit
+                                Submit application
                               </Button>
                             </div>
                           </TabsContent>
@@ -2047,12 +1986,12 @@ function FormSection({
   children: React.ReactNode;
 }) {
   return (
-    <section className="relative overflow-visible rounded-xl border border-slate-200 bg-white">
-      <div className="border-b border-slate-200 px-4 py-3 sm:px-5">
-        <h2 className="text-sm font-semibold text-slate-900">{title}</h2>
+    <section className="relative overflow-visible">
+      <div className="pb-3">
+        <h3 className="text-sm font-semibold text-[#0b2545]">{title}</h3>
         {description && <p className="mt-1 text-xs leading-5 text-slate-500">{description}</p>}
       </div>
-      <div className="space-y-4 p-4 sm:p-5">{children}</div>
+      <div className="space-y-4">{children}</div>
     </section>
   );
 }
@@ -2077,9 +2016,9 @@ function StepActions({
         type="button"
         onClick={onNext}
         disabled={nextDisabled}
-        className="min-w-32 bg-[#1473d1] font-semibold text-white hover:bg-[#0f65bc] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:opacity-100"
+        className="h-12 min-w-40 rounded-full bg-[#1473d1] font-semibold text-white hover:bg-[#0f65bc] disabled:cursor-not-allowed disabled:bg-slate-200 disabled:text-slate-400 disabled:opacity-100"
       >
-        Continue
+        Next
       </Button>
     </div>
   );
@@ -2346,7 +2285,7 @@ function AddressFields({
     onChange((current) => ({ ...current, [field]: nextValue }));
 
   return (
-    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
       <div className="sm:col-span-2">
         <TextField
           id={`${idPrefix}-street`}
@@ -2461,7 +2400,7 @@ function EmployerFields({
     onChange((current) => ({ ...current, [field]: nextValue }));
 
   return (
-    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2 lg:grid-cols-5">
+    <div className="grid gap-x-3 gap-y-2 sm:grid-cols-2">
       <TextField
         id={`${idPrefix}-name`}
         label={employerNameLabel}
@@ -2552,6 +2491,103 @@ function EmployerFields({
         value={value.county}
         onChange={(next) => setField("county", next)}
       />
+    </div>
+  );
+}
+
+function FinanceAccountStep({ defaultEmail, defaultName }: { defaultEmail: string; defaultName: string }) {
+  const { user } = useAuth();
+  const [mode, setMode] = useState<"signin" | "signup">("signup");
+  const [email, setEmail] = useState(defaultEmail);
+  const [password, setPassword] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  if (user) {
+    return (
+      <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-4 text-sm text-emerald-900">
+        <ShieldCheck className="size-5 shrink-0" />
+        <span>
+          Signed in as <strong>{user.email}</strong>. Submit to send your application.
+        </span>
+      </div>
+    );
+  }
+
+  async function submitAccount() {
+    const cleanEmail = email.trim().toLowerCase();
+    if (!cleanEmail || password.length < (mode === "signup" ? 8 : 1)) {
+      toast.error(mode === "signup" ? "Enter your email and a password of at least 8 characters." : "Enter your email and password.");
+      return;
+    }
+    setBusy(true);
+    try {
+      if (mode === "signup") {
+        const result = await registerAccount({ data: { email: cleanEmail, password, fullName: defaultName } });
+        if (result.status === "exists") {
+          toast.error("An account already exists for that email. Please sign in.");
+          setMode("signin");
+          return;
+        }
+        if (result.status !== "created") {
+          toast.error(result.message || "We couldn't create your account.");
+          return;
+        }
+      }
+      const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
+      if (error) {
+        toast.error(error.message.toLowerCase().includes("invalid") ? "That email and password didn't work." : error.message);
+        return;
+      }
+      void linkLegacyProfile({}).catch(() => undefined);
+      toast.success("You're signed in. Submit your application.");
+    } catch (cause) {
+      toast.error(cause instanceof Error ? cause.message : "Something went wrong.");
+    } finally {
+      setBusy(false);
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      <div className="space-y-1.5">
+        <Label htmlFor="fin-acc-email" className="text-xs font-medium text-slate-600">Email</Label>
+        <Input id="fin-acc-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12" />
+      </div>
+      <div className="space-y-1.5">
+        <Label htmlFor="fin-acc-password" className="text-xs font-medium text-slate-600">Password</Label>
+        <Input
+          id="fin-acc-password"
+          type="password"
+          autoComplete={mode === "signup" ? "new-password" : "current-password"}
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              void submitAccount();
+            }
+          }}
+          className="h-12"
+        />
+      </div>
+      <Button
+        type="button"
+        onClick={() => void submitAccount()}
+        disabled={busy}
+        variant="outline"
+        className="h-12 w-full rounded-full border-[#1473d1] font-semibold text-[#1473d1] hover:bg-[#eaf4ff]"
+      >
+        {busy ? "Please wait…" : mode === "signup" ? "Create account" : "Sign in"}
+      </Button>
+      <p className="text-center text-sm text-slate-600">
+        {mode === "signup" ? "Already have an account?" : "New to MyCar?"}{" "}
+        <button type="button" className="font-semibold text-[#1473d1] hover:underline" onClick={() => setMode(mode === "signup" ? "signin" : "signup")}>
+          {mode === "signup" ? "Sign in" : "Create one"}
+        </button>
+      </p>
+      <div className="rounded-lg bg-slate-50 p-3 text-[11px] leading-5 text-slate-500">
+        By continuing, you agree to be contacted by My Car Business Services LLC about your application. We never sell your information.
+      </div>
     </div>
   );
 }
