@@ -34,6 +34,7 @@ import {
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
+      { name: "google-site-verification", content: "Treiv8fZAqKhNjSJYJtOYmyeg951BzF57RSn7uXJoWs" },
       {
         title: "Used Car Dealership in Fredericksburg, VA | My Car",
       },
