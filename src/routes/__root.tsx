@@ -144,9 +144,10 @@ function RootComponent() {
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAdmin = pathname.startsWith("/admin");
 
+  const searchStr = useRouterState({ select: (s) => s.location.searchStr });
   useEffect(() => {
     if (!isAdmin) captureAttribution();
-  }, [pathname, isAdmin]);
+  }, [pathname, searchStr, isAdmin]);
 
   useEffect(() => {
     if (isAdmin) return;

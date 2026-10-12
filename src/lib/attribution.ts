@@ -51,13 +51,23 @@ export function classifySource(t: Omit<Touch, "source" | "medium" | "timestamp">
   const isVla =
     /(vla|vehicle[_ -]?ads?|vehicle[_ -]?listing)/.test(`${src} ${med} ${camp}`);
 
-  // UTMs win — they distinguish Facebook vs Instagram and VLA.
+  const all = `${src} ${med} ${camp} ${t.utm_content.toLowerCase()}`;
+  const mentionsInstagram = /(instagram|(^|[^a-z])ig([^a-z]|$))/.test(all);
+  const mentionsFacebook = /(facebook|(^|[^a-z])fb([^a-z]|$))/.test(all);
+  const META_UNKNOWN = "Meta (Facebook/Instagram)";
+
+  // UTMs win — they distinguish Facebook vs Instagram and Vehicle Ads.
   if (src) {
-    if (/(instagram|^ig$)/.test(src)) return { source: "Instagram", medium: med || (paidMedium ? "paid" : "social") };
-    if (/(facebook|^fb$|meta)/.test(src)) return { source: "Facebook", medium: med || "social" };
+    if (/(instagram|^ig$)/.test(src)) return { source: "Instagram", medium: med || "social" };
+    if (/(facebook|^fb$)/.test(src)) return { source: "Facebook", medium: med || "social" };
+    if (/meta/.test(src)) {
+      if (mentionsInstagram && !mentionsFacebook) return { source: "Instagram", medium: med || "social" };
+      if (mentionsFacebook && !mentionsInstagram) return { source: "Facebook", medium: med || "social" };
+      return { source: META_UNKNOWN, medium: med || "social" };
+    }
     if (/google/.test(src)) {
       if (isVla) return { source: "Google Vehicle Ads", medium: med || "cpc" };
-      if (paidMedium) return { source: "Google Ads", medium: med };
+      if (paidMedium || t.gclid || t.gbraid || t.wbraid) return { source: "Google Ads", medium: med || "cpc" };
       return { source: "Google Organic", medium: med || "organic" };
     }
     if (/tiktok/.test(src)) return { source: "TikTok", medium: med || "social" };
@@ -66,24 +76,25 @@ export function classifySource(t: Omit<Touch, "source" | "medium" | "timestamp">
     return { source: t.utm_source, medium: med || "referral" };
   }
 
-  // Click IDs without UTMs.
-  if (t.gclid || t.gbraid || t.wbraid) return { source: isVla ? "Google Vehicle Ads" : "Google Ads", medium: "cpc" };
+  // Click IDs without UTMs (Vehicle Ads need explicit campaign tags, so never here).
+  if (t.gclid || t.gbraid || t.wbraid) return { source: "Google Ads", medium: "cpc" };
   if (t.ttclid) return { source: "TikTok", medium: "paid" };
   if (t.li_fat_id) return { source: "LinkedIn", medium: "paid" };
   if (t.rdt_cid) return { source: "Reddit", medium: "paid" };
 
-  // Referrer-based.
+  // Referrer-based (also resolves Meta click IDs to the right app).
   if (ref) {
     if (/instagram\.com$/.test(ref)) return { source: "Instagram", medium: "social" };
-    if (/(facebook\.com|fb\.com|fb\.me|messenger\.com)$/.test(ref) || t.fbclid)
-      return { source: "Facebook", medium: "social" };
+    if (/(facebook\.com|fb\.com|fb\.me|messenger\.com)$/.test(ref)) return { source: "Facebook", medium: "social" };
     if (/(^|\.)google\./.test(ref)) return { source: "Google Organic", medium: "organic" };
     if (/tiktok\.com$/.test(ref)) return { source: "TikTok", medium: "social" };
     if (/(linkedin\.com|lnkd\.in)$/.test(ref)) return { source: "LinkedIn", medium: "social" };
     if (/reddit\.com$/.test(ref)) return { source: "Reddit", medium: "social" };
+    if (t.fbclid) return { source: META_UNKNOWN, medium: "social" };
     return { source: "Referral", medium: "referral" };
   }
-  if (t.fbclid) return { source: "Facebook", medium: "social" };
+  // fbclid is used by both Facebook and Instagram — don't guess.
+  if (t.fbclid) return { source: META_UNKNOWN, medium: "social" };
   return { source: "Direct", medium: "none" };
 }
 
@@ -132,13 +143,13 @@ export function captureAttribution(): void {
   const first = read(FIRST_KEY);
   const last = read(LAST_KEY);
   // New touch when campaign signals appear, or a fresh session starts.
-  if (!hasSignal && !newSession && first && last) return;
-  if (!hasSignal && last && !newSession) return;
+  if (!hasSignal && first && last) return; // internal navigation / direct return visit
 
   const touch: Touch = { ...base, ...classifySource(base), timestamp: new Date().toISOString() };
   if (!first) write(FIRST_KEY, touch);
-  // A direct return visit shouldn't overwrite a known campaign last touch.
+  // A Direct visit never overwrites a known campaign last touch.
   if (!last || hasSignal) write(LAST_KEY, touch);
+  void newSession;
 }
 
 /** Flat attribution fields to merge into a lead's details. */
