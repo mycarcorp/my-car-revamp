@@ -367,6 +367,80 @@ function getAttributionEntries(lead: AdminLeadRow): LeadDetailEntry[] {
   );
 }
 
+function detailText(lead: AdminLeadRow, keys: string[]) {
+  const value = getFirstDetail(lead, keys);
+  return value == null || String(value).trim() === "" ? "" : String(value).trim();
+}
+
+const CLICK_ID_KEYS = ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "li_fat_id", "rdt_cid"];
+
+function LeadAttributionView({ lead, entries }: { lead: AdminLeadRow; entries: LeadDetailEntry[] }) {
+  if (entries.length === 0) {
+    return (
+      <p className="text-sm text-muted-foreground">
+        Not tracked — this lead was submitted before source tracking was added.
+      </p>
+    );
+  }
+  const touch = (prefix: "first_touch" | "last_touch") => ({
+    source: detailText(lead, [`${prefix}_source`]),
+    medium: detailText(lead, [`${prefix}_medium`]),
+    campaign: detailText(lead, [`${prefix}_utm_campaign`]),
+    when: detailText(lead, [`${prefix}_timestamp`]),
+  });
+  const first = touch("first_touch");
+  const last = touch("last_touch");
+  const source = getLeadSource(lead);
+  const rows: Array<[string, string]> = [
+    ["Campaign", detailText(lead, ["utm_campaign", "last_touch_utm_campaign"])],
+    ["Ad content", detailText(lead, ["utm_content", "last_touch_utm_content"])],
+    ["Keyword", detailText(lead, ["utm_term", "last_touch_utm_term"])],
+    ["Landing page", detailText(lead, ["landing_page", "first_touch_landing_page"])],
+    ["Conversion page", detailText(lead, ["conversion_page"])],
+    ["Referrer", detailText(lead, ["referrer", "last_touch_referrer"])],
+  ];
+  const clickIds = CLICK_ID_KEYS.map((k) => [k, detailText(lead, [k, `last_touch_${k}`])] as const).filter(([, v]) => v);
+  const fmt = (v: string) => {
+    const d = new Date(v);
+    return v && !Number.isNaN(d.getTime()) ? d.toLocaleString() : "";
+  };
+  return (
+    <div className="space-y-4">
+      {source === "Direct" && (
+        <p className="rounded-md bg-muted px-3 py-2 text-sm text-muted-foreground">
+          Direct: No identifiable marketing source was captured.
+        </p>
+      )}
+      <div className="grid gap-3 sm:grid-cols-2">
+        {([["First touch", first], ["Last touch", last]] as const).map(([label, t]) => (
+          <div key={label} className="rounded-lg border border-border p-3">
+            <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground">{label}</p>
+            <p className="mt-1 font-semibold">{t.source || "Not tracked"}</p>
+            <p className="text-xs text-muted-foreground">
+              {[t.medium, t.campaign].filter(Boolean).join(" · ") || "—"}
+            </p>
+            {t.when && <p className="mt-1 text-xs text-muted-foreground">{fmt(t.when)}</p>}
+          </div>
+        ))}
+      </div>
+      <dl className="grid gap-x-4 gap-y-2 text-sm sm:grid-cols-[140px_1fr]">
+        {rows.map(([k, v]) => (
+          <div key={k} className="contents">
+            <dt className="text-muted-foreground">{k}</dt>
+            <dd className="break-all">{v || "—"}</dd>
+          </div>
+        ))}
+        {clickIds.length > 0 && (
+          <div className="contents">
+            <dt className="text-muted-foreground">Click IDs</dt>
+            <dd className="break-all text-xs">{clickIds.map(([k, v]) => `${k}: ${v}`).join("  ·  ")}</dd>
+          </div>
+        )}
+      </dl>
+    </div>
+  );
+}
+
 function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts: AccountProfile[] }) {
   const queryClient = useQueryClient();
   const [type, setType] = useState<LeadFilterType>("all");
@@ -1208,13 +1282,7 @@ function LeadDetailsDialog({
                 title="Lead Attribution"
                 description="Where this customer came from before submitting the form."
               >
-                {attributionEntries.length > 0 ? (
-                  <OrganizedDetailGrid entries={attributionEntries} />
-                ) : (
-                  <p className="text-sm text-muted-foreground">
-                    Attribution was not captured for this lead. Older submissions will show as Not tracked.
-                  </p>
-                )}
+                <LeadAttributionView lead={lead} entries={attributionEntries} />
               </FormSectionCard>
 
               {selectedVehicleEntries.length > 0 && (
