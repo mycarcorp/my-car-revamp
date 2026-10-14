@@ -309,7 +309,7 @@ function SellPage() {
             <p className="mt-5 text-base leading-6 text-white/95">
               Sell or trade your car 100% online.
               <br />
-              No guesswork. Clear next steps.
+              No haggling, no headaches.
             </p>
           </div>
           <form
