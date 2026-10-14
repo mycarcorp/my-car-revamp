@@ -423,6 +423,37 @@ function FinancePage() {
     [allVehicles],
   );
 
+  // Carousel uses genuine inventory and makes no personalized approval claims.
+  const featuredVehicles = useMemo(() => inventory.filter((v) => Number(v.price_cents) > 0).slice(0, 8), [inventory]);
+  const [featureIndex, setFeatureIndex] = useState(0);
+  useEffect(() => {
+    if (featuredVehicles.length < 2 || typeof window === "undefined") return;
+    const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
+    if (media?.matches) return;
+    const id = window.setInterval(() => {
+      if (!document.hidden) setFeatureIndex((i) => (i + 1) % featuredVehicles.length);
+    }, 4500);
+    return () => window.clearInterval(id);
+  }, [featuredVehicles.length]);
+  const displayPhoto = (v: (typeof inventory)[number] | undefined) => {
+    if (!v) return undefined;
+    return [...(v.vehicle_photos ?? [])]
+      .sort((a, b) => a.position - b.position)
+      .find((photo) => /^https?:\/\//i.test(photo.url) && !/\.(mp4|mov|webm)(\?|$)/i.test(photo.url))?.url;
+  };
+  const heroVehicle = featuredVehicles[0];
+  const heroPhoto = displayPhoto(heroVehicle);
+  const featuredEstimate = useMemo(() => {
+    const car = featuredVehicles[featureIndex];
+    if (!car || !settings) return null;
+    const apr = Number(settings.finance_apr),
+      months = Number(settings.finance_term_months);
+    const down = Number(settings.finance_down_percent);
+    if (![apr, months, down].every(Number.isFinite) || months <= 0 || down < 0 || down >= 100) return null;
+    const result = monthlyPayment(Number(car.price_cents), { apr, termMonths: months, downPercent: down });
+    return Number.isFinite(result) ? result : null;
+  }, [featuredVehicles, featureIndex, settings]);
+
   const [buyerName, setBuyerName] = useState("");
   const [showBuyerNameDetails, setShowBuyerNameDetails] = useState(false);
   const [salutation, setSalutation] = useState("");
@@ -548,7 +579,10 @@ function FinancePage() {
 
   const STEP_KEYS = ["applicant", "address", "employment", "references", "account"] as const;
   const STEP_META: Record<string, { title: string; subtitle: string }> = {
-    applicant: { title: "Personal information", subtitle: "This helps verify your identity and is never shared without your consent." },
+    applicant: {
+      title: "Personal information",
+      subtitle: "This helps verify your identity and is never shared without your consent.",
+    },
     address: { title: "Contact information", subtitle: "Where you live and where we can reach you." },
     employment: { title: "Financial information", subtitle: "Your employment and income before taxes." },
     references: { title: "References", subtitle: "People we can contact to support your application." },
@@ -582,7 +616,6 @@ function FinancePage() {
     if (metaName) setBuyerName((current) => current || metaName);
     if (metaPhone) setCellPhone((current) => current || digitsOnly(metaPhone, 10));
   }, [user]);
-
 
   function addReference() {
     setReferences((current) => [
@@ -693,133 +726,216 @@ function FinancePage() {
   return (
     <div className="min-h-screen bg-background">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(FINANCE_FAQ_SCHEMA) }} />
-      {/* HERO */}
-      <section
-        className="relative isolate overflow-hidden bg-slate-950 bg-cover bg-center"
-        style={{
-          backgroundImage:
-            'linear-gradient(90deg, rgba(3,12,22,0.95) 0%, rgba(3,12,22,0.84) 48%, rgba(3,12,22,0.48) 100%), url("https://images.unsplash.com/photo-1493238792000-8113da705763?auto=format&fit=crop&w=2000&q=88")',
-        }}
-      >
-        <div className="absolute inset-0 -z-10 bg-[radial-gradient(circle_at_82%_42%,rgba(255,255,255,0.14),transparent_32%)]" />
-
-        <div className="mx-auto max-w-7xl px-4 py-20 sm:px-6 lg:px-12 lg:py-28">
-          <div className="max-w-3xl">
-            <p className="inline-flex rounded-full border border-white/20 bg-white/10 px-3 py-1 text-xs font-semibold uppercase tracking-[0.18em] text-white/90 backdrop-blur-sm">
-              Financing at My Car
-            </p>
-
-            <h1 className="mt-5 font-display text-4xl font-bold tracking-tight text-white sm:text-5xl lg:text-6xl">
-              Used Car Financing in Fredericksburg, VA
+      {/* CARVANA-INSPIRED FINANCING HERO — My Car branding and qualified claims */}
+      <section className="relative overflow-hidden bg-white pb-10 sm:pb-16">
+        <div className="absolute inset-x-0 top-0 h-[240px] bg-[#082846] sm:h-[310px]" />
+        <div className="absolute inset-x-0 top-0 h-[240px] bg-[linear-gradient(145deg,#0869b8_0%,#064980_36%,#082846_36%,#082846_100%)] sm:h-[310px]" />
+        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-5 pt-10 sm:pt-14 lg:grid-cols-[1.1fr_.9fr] lg:gap-12">
+          <div className="relative flex min-h-[245px] items-end justify-center sm:min-h-[310px]">
+            {heroPhoto ? (
+              <img
+                src={heroPhoto}
+                alt={heroVehicle ? vehicleTitle(heroVehicle) : "Vehicle available at My Car"}
+                className="relative z-10 h-[245px] w-full object-contain drop-shadow-[0_22px_22px_rgba(0,0,0,.2)] sm:h-[310px]"
+              />
+            ) : (
+              <div className="relative z-10 flex h-[245px] w-full items-center justify-center text-white/70">
+                <CarFront className="h-32 w-32" />
+              </div>
+            )}
+            <div className="absolute left-1 top-2 z-20 rounded-xl border border-white/40 bg-[#123d66]/85 px-4 py-3 text-white shadow-xl backdrop-blur-sm sm:left-8">
+              <span className="block text-[11px] font-semibold">Payment planning</span>
+              <span className="mt-1 block text-lg font-bold">Explore your options</span>
+            </div>
+          </div>
+          <div className="relative z-20 rounded-xl border border-slate-200 bg-white p-7 shadow-[0_15px_45px_rgba(0,0,0,.1)] sm:p-9">
+            <p className="text-xs font-semibold uppercase tracking-[.2em] text-blue-700">My Car Financing</p>
+            <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight text-[#0a2946] sm:text-4xl">
+              FINANCING FOR EVERYONE
             </h1>
-
-            <p className="mt-5 max-w-2xl text-base leading-7 text-slate-200 sm:text-lg">
-              Explore financing options for your next used vehicle with My Car. Estimate a monthly payment, learn how
-              the process works and complete your finance application when you&apos;re ready.
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Explore financing for your next vehicle in Fredericksburg, Virginia. Apply online and our team will
+              contact you about available next steps.
             </p>
-
             <button
               type="button"
-              onClick={scrollToApplication}
-              className="mt-8 inline-flex min-h-12 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#F7941D] px-6 py-3 text-sm font-bold text-slate-950 shadow-[0_12px_30px_rgba(247,148,29,0.28)] transition hover:bg-[#ea8718] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-white"
+              onClick={openFinanceModal}
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#086bc8] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#0759a7]"
             >
-              Start My Finance Application
-              <ArrowRight className="size-4" />
+              Start My Application <ArrowRight className="h-4 w-4" />
             </button>
-          </div>
-        </div>
-      </section>
-
-      {/* WHY FINANCE WITH MY CAR */}
-      <section className="bg-white py-14 sm:py-16">
-        <div className="mx-auto max-w-7xl px-4 sm:px-6 lg:px-12">
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Financing Made Clear</p>
-
-            <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-slate-950 sm:text-4xl">
-              Why Finance With My Car?
-            </h2>
-
-            <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">
-              Get the information you need in one place before you submit an application for your next vehicle.
+            <p className="mt-3 text-center text-[11px] leading-4 text-slate-500">
+              Submitting an application is not a guarantee of approval or specific financing terms.
             </p>
           </div>
+        </div>
+        <p className="relative mx-auto mt-5 max-w-5xl px-5 text-center text-[11px] text-slate-500">
+          Vehicle photos reflect current inventory when available. Payment figures depend on vehicle, application and
+          lender terms.
+        </p>
+      </section>
 
-          <div className="mt-10 grid gap-5 md:grid-cols-3">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <Calculator className="size-6" />
-              </div>
-              <h3 className="mt-5 font-display text-xl font-bold text-slate-950">Estimate Your Payment</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Adjust vehicle price, down payment and term to see an estimated monthly payment before you apply.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <FileCheck2 className="size-6" />
-              </div>
-              <h3 className="mt-5 font-display text-xl font-bold text-slate-950">One Online Application</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                Complete your applicant, address, employment and reference information through one organized form.
-              </p>
-            </div>
-
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <div className="flex size-12 items-center justify-center rounded-xl bg-primary/10 text-primary">
-                <ShieldCheck className="size-6" />
-              </div>
-              <h3 className="mt-5 font-display text-xl font-bold text-slate-950">A Clear Next Step</h3>
-              <p className="mt-2 text-sm leading-6 text-slate-600">
-                After submission, our finance team reviews the information you provide and contacts you about next
-                steps.
-              </p>
-            </div>
+      {/* CREDIT TYPES BENEFITS */}
+      <section className="bg-white px-5 pb-16 pt-6 sm:pb-20">
+        <div className="mx-auto max-w-5xl text-center">
+          <h2 className="text-3xl font-extrabold tracking-tight text-[#0a2946]">We welcome all credit types</h2>
+          <p className="mx-auto mt-3 max-w-xl text-sm leading-6 text-slate-600">
+            Every financing situation is different. Explore your options and find a vehicle that works for your budget.
+          </p>
+          <div className="mt-10 grid gap-4 text-left md:grid-cols-3">
+            {[
+              {
+                icon: ShieldCheck,
+                heading: "Financing options",
+                copy: "Our team can help you explore financing programs available through participating lenders.",
+              },
+              {
+                icon: CarFront,
+                heading: "Affordable vehicles",
+                copy: "Browse our actual inventory and compare available cars, prices and mileage.",
+              },
+              {
+                icon: Calculator,
+                heading: "Plan your payment",
+                copy: "Use our payment estimator to explore different down payments and loan terms.",
+              },
+            ].map(({ icon: Icon, heading, copy }) => (
+              <article key={heading} className="rounded-xl border border-blue-100 bg-white p-6 shadow-sm">
+                <div className="flex h-11 w-11 items-center justify-center rounded-full border border-blue-200 text-blue-600">
+                  <Icon className="h-6 w-6" />
+                </div>
+                <h3 className="mt-5 text-base font-bold text-[#0a2946]">{heading}</h3>
+                <p className="mt-2 text-sm leading-6 text-slate-600">{copy}</p>
+              </article>
+            ))}
           </div>
+          <a
+            href="/search"
+            className="mt-8 inline-flex items-center justify-center rounded-full border border-blue-700 px-7 py-2.5 text-sm font-semibold text-blue-800 transition hover:bg-blue-50"
+          >
+            Shop Vehicles
+          </a>
         </div>
       </section>
 
-      {/* THREE STEP PROCESS */}
-      <section className="border-y border-slate-200 bg-slate-50 py-14 sm:py-16">
-        <div className="mx-auto max-w-6xl px-4 sm:px-6 lg:px-12">
-          <div className="text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">How It Works</p>
-            <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-slate-950">
-              Financing in three simple steps
-            </h2>
+      {/* AUTO-ADVANCING FEATURED INVENTORY AND HOW IT WORKS */}
+      <section className="bg-[#f5f7fa] px-5 py-16 sm:py-20">
+        <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:gap-16">
+          <div className="min-w-0">
+            <div className="relative mx-auto flex h-[265px] max-w-xl items-center justify-center overflow-hidden rounded-xl bg-white/50 sm:h-[330px]">
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-[#f5f7fa] to-transparent sm:w-24" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-[#f5f7fa] to-transparent sm:w-24" />
+              {featuredVehicles.length ? (
+                [-1, 0, 1].map((offset) => {
+                  const item =
+                    featuredVehicles[(featureIndex + offset + featuredVehicles.length) % featuredVehicles.length];
+                  const photo = displayPhoto(item);
+                  return (
+                    <div
+                      key={`${item.id}-${offset}`}
+                      className={`absolute w-[57%] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg transition-all duration-700 ease-in-out ${offset === 0 ? "z-10 translate-x-0 scale-100 opacity-100" : offset === -1 ? "z-0 -translate-x-[62%] scale-[.82] opacity-45" : "z-0 translate-x-[62%] scale-[.82] opacity-45"}`}
+                    >
+                      <div className="flex aspect-[4/3] items-center justify-center bg-slate-100">
+                        {photo ? (
+                          <img src={photo} alt={vehicleTitle(item)} className="h-full w-full object-contain" />
+                        ) : (
+                          <CarFront className="h-16 w-16 text-slate-300" />
+                        )}
+                      </div>
+                      <div className="p-3">
+                        <p className="truncate text-xs font-semibold text-[#0a2946]">{vehicleTitle(item)}</p>
+                        <p className="mt-1 text-sm font-bold text-blue-700">{formatUsd(Number(item.price_cents))}</p>
+                      </div>
+                    </div>
+                  );
+                })
+              ) : (
+                <div className="flex flex-col items-center gap-2 text-slate-500">
+                  <CarFront className="h-14 w-14" />
+                  <p className="text-sm">Current inventory will appear here.</p>
+                </div>
+              )}
+              <div className="absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-lg bg-emerald-700 px-4 py-2 text-center text-white shadow-lg">
+                <span className="block text-[10px] font-semibold">
+                  {featuredEstimate !== null ? "Estimated monthly payment" : "Financing options"}
+                </span>
+                <span className="block text-lg font-extrabold">
+                  {featuredEstimate !== null
+                    ? `$${Math.round(featuredEstimate).toLocaleString()}/mo*`
+                    : "Explore today"}
+                </span>
+              </div>
+            </div>
+            <div className="mt-5 flex items-center justify-center gap-4">
+              <button
+                type="button"
+                aria-label="Previous featured vehicle"
+                onClick={() =>
+                  setFeatureIndex((n) => (n - 1 + featuredVehicles.length) % (featuredVehicles.length || 1))
+                }
+                className="rounded-full border border-slate-300 bg-white p-2 text-slate-700"
+              >
+                <ArrowLeft className="h-4 w-4" />
+              </button>
+              <div className="flex gap-1.5">
+                {featuredVehicles.slice(0, 5).map((v, index) => (
+                  <button
+                    type="button"
+                    key={v.id}
+                    aria-label={`View featured vehicle ${index + 1}`}
+                    onClick={() => setFeatureIndex(index)}
+                    className={`h-1.5 rounded-full transition-all ${index === featureIndex ? "w-5 bg-blue-600" : "w-1.5 bg-slate-300"}`}
+                  />
+                ))}
+              </div>
+              <button
+                type="button"
+                aria-label="Next featured vehicle"
+                onClick={() => setFeatureIndex((n) => (n + 1) % (featuredVehicles.length || 1))}
+                className="rounded-full border border-slate-300 bg-white p-2 text-slate-700"
+              >
+                <ArrowRight className="h-4 w-4" />
+              </button>
+            </div>
+            <p className="mt-3 text-center text-[10px] leading-5 text-slate-500">
+              *Illustrative estimate using current site financing assumptions. Excludes taxes, fees and other charges.
+              Not an offer or approval.
+            </p>
           </div>
-
-          <div className="mt-10 grid gap-8 md:grid-cols-3">
-            <div className="text-center">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
-                1
-              </div>
-              <h3 className="mt-4 font-display text-lg font-bold text-slate-950">Estimate Your Budget</h3>
-              <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-slate-600">
-                Use the payment estimator below to explore a vehicle price, down payment and loan term.
-              </p>
+          <div>
+            <h2 className="text-3xl font-extrabold leading-tight tracking-tight text-[#0a2946] sm:text-4xl">
+              Unlock payments that fit your budget
+            </h2>
+            <div className="relative mt-9 space-y-8 border-l-2 border-blue-200 pl-8">
+              {[
+                [
+                  "1",
+                  "Explore financing options",
+                  "Complete an application and discuss available options with our team.",
+                ],
+                [
+                  "2",
+                  "Browse vehicles for your budget",
+                  "Compare actual inventory, prices and estimated monthly payments.",
+                ],
+                ["3", "Choose your next steps", "Review lender terms and arrange your purchase or dealership visit."],
+              ].map(([number, title, description]) => (
+                <div key={number} className="relative">
+                  <span className="absolute -left-[49px] flex h-8 w-8 items-center justify-center rounded-full border-2 border-blue-600 bg-white text-sm font-bold text-blue-700">
+                    {number}
+                  </span>
+                  <h3 className="font-bold text-[#0a2946]">{title}</h3>
+                  <p className="mt-2 text-sm leading-6 text-slate-600">{description}</p>
+                </div>
+              ))}
             </div>
-
-            <div className="text-center">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
-                2
-              </div>
-              <h3 className="mt-4 font-display text-lg font-bold text-slate-950">Complete the Application</h3>
-              <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-slate-600">
-                Provide the applicant, address, employment and reference information requested in the form.
-              </p>
-            </div>
-
-            <div className="text-center">
-              <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-primary text-lg font-bold text-primary-foreground">
-                3
-              </div>
-              <h3 className="mt-4 font-display text-lg font-bold text-slate-950">Review the Next Steps</h3>
-              <p className="mx-auto mt-2 max-w-xs text-sm leading-6 text-slate-600">
-                Our finance team reviews your submission and contacts you to discuss available next steps.
-              </p>
-            </div>
+            <button
+              type="button"
+              onClick={openFinanceModal}
+              className="mt-9 rounded-full bg-[#086bc8] px-7 py-3 text-sm font-semibold text-white hover:bg-[#0759a7]"
+            >
+              Start My Application
+            </button>
           </div>
         </div>
       </section>
@@ -1021,47 +1137,90 @@ function FinancePage() {
         </div>
       </section>
 
-      {/* FINANCING FAQ / ANSWER-FIRST CONTENT */}
-      <section className="border-y border-slate-200 bg-slate-50 py-14 sm:py-16">
-        <div className="mx-auto max-w-5xl px-4 sm:px-6 lg:px-12">
-          <div className="mx-auto max-w-3xl text-center">
-            <p className="text-xs font-semibold uppercase tracking-[0.18em] text-primary">Financing Information</p>
-            <h2 className="mt-3 font-display text-3xl font-bold tracking-tight text-slate-950">
-              Used car financing questions, answered
-            </h2>
-            <p className="mt-3 text-sm leading-6 text-slate-600 sm:text-base">
-              Get clear answers about applying for used car financing, estimating payments and preparing for the next
-              step at My Car in Fredericksburg, Virginia.
+      {/* REVIEW SECTION: do not fabricate My Car testimonials */}
+      <section className="bg-white px-5 py-16 sm:py-20">
+        <div className="mx-auto max-w-5xl">
+          <h2 className="text-center text-3xl font-extrabold tracking-tight text-[#0a2946]">
+            Real customers. Real experiences.
+          </h2>
+          <p className="mx-auto mt-3 max-w-2xl text-center text-sm leading-6 text-slate-600">
+            Hear from My Car customers about their vehicle-shopping experiences. Verified testimonials can be featured
+            here once approved for publication.
+          </p>
+          <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-7 text-center">
+            <p className="text-sm font-medium text-slate-700">
+              We value transparent conversations, clear information and helping customers explore available vehicles.
             </p>
-          </div>
-
-          <div className="mx-auto mt-9 max-w-3xl space-y-3">
-            {FINANCE_FAQS.map((item) => (
-              <details key={item.question} className="group rounded-xl border border-slate-200 bg-white p-5 shadow-sm">
-                <summary className="cursor-pointer list-none font-semibold text-slate-950 transition group-hover:text-primary">
-                  {item.question}
-                </summary>
-                <p className="mt-3 text-sm leading-6 text-slate-600">{item.answer}</p>
-              </details>
-            ))}
-          </div>
-
-          <div className="mx-auto mt-8 flex max-w-3xl flex-col items-center justify-center gap-3 sm:flex-row">
             <a
-              href="/inventory"
-              className="inline-flex min-h-11 items-center justify-center gap-2 rounded-lg border border-slate-300 bg-white px-5 py-2.5 text-sm font-bold text-slate-900 transition hover:border-primary hover:text-primary"
+              href="/contact"
+              className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-blue-700 hover:underline"
             >
-              Browse Used Vehicles
-              <CarFront className="size-4" />
+              Questions? Contact My Car <ArrowRight className="h-4 w-4" />
             </a>
+          </div>
+        </div>
+      </section>
+
+      {/* READY TO APPLY — REALISTIC LIFESTYLE ART DIRECTION */}
+      <section className="bg-white px-5 pb-20 pt-6">
+        <div className="mx-auto grid max-w-5xl items-center gap-12 border-t border-slate-200 pt-14 md:grid-cols-2">
+          <div>
+            <h2 className="text-3xl font-extrabold text-[#0a2946]">Ready to apply?</h2>
+            <p className="mt-4 max-w-md text-sm leading-7 text-slate-600">
+              Explore financing for your next vehicle with My Car. Complete our secure application, and our finance team
+              will follow up about available next steps.
+            </p>
             <button
               type="button"
-              onClick={scrollToApplication}
-              className="inline-flex min-h-11 cursor-pointer items-center justify-center gap-2 rounded-lg bg-[#F7941D] px-5 py-2.5 text-sm font-bold text-slate-950 shadow-[0_10px_24px_rgba(247,148,29,0.22)] transition hover:bg-[#ea8718]"
+              onClick={openFinanceModal}
+              className="mt-7 rounded-full bg-[#086bc8] px-7 py-3 text-sm font-semibold text-white hover:bg-[#0759a7]"
             >
               Start My Finance Application
-              <ArrowRight className="size-4" />
             </button>
+          </div>
+          <div className="relative min-h-[310px] overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#07477a,#0b2b4c)] sm:min-h-[370px]">
+            <div className="absolute -right-8 -top-12 h-52 w-52 rounded-full border-[38px] border-blue-500/20" />
+            <img
+              src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=950&q=85"
+              alt="Person exploring options on a smartphone"
+              className="absolute inset-0 h-full w-full object-cover object-center opacity-80 mix-blend-luminosity"
+              loading="lazy"
+            />
+            <div className="absolute bottom-6 left-6 rounded-xl border border-white/30 bg-white/95 px-5 py-3 shadow-xl">
+              <span className="flex items-center gap-2 text-sm font-bold text-[#0a2946]">
+                <CarFront className="h-5 w-5 text-blue-700" /> Find your next car
+              </span>
+              <span className="mt-1 block text-xs text-slate-500">Browse real My Car inventory</span>
+            </div>
+            <a
+              href="/search"
+              className="absolute bottom-6 right-5 rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
+            >
+              Shop Cars
+            </a>
+          </div>
+        </div>
+      </section>
+
+      {/* FAQ WITH NATIVE ACCESSIBLE EXPAND/COLLAPSE */}
+      <section className="border-y border-slate-200 bg-[#f5f7fa] px-5 py-16 sm:py-20">
+        <div className="mx-auto grid max-w-5xl gap-10 md:grid-cols-[.8fr_1.2fr] md:gap-16">
+          <div>
+            <h2 className="text-3xl font-extrabold text-[#0a2946]">We’re here to help</h2>
+            <p className="mt-3 text-sm leading-6 text-slate-600">
+              Have questions about financing your next car? Start with these common questions.
+            </p>
+          </div>
+          <div className="divide-y divide-slate-200 border-t border-slate-200">
+            {FINANCE_FAQS.map((item) => (
+              <details key={item.question} className="group py-4">
+                <summary className="flex cursor-pointer list-none items-center justify-between gap-4 text-sm font-semibold text-[#0a2946] [&::-webkit-details-marker]:hidden">
+                  {item.question}
+                  <Plus className="h-4 w-4 shrink-0 transition-transform group-open:rotate-45" />
+                </summary>
+                <p className="mt-3 pr-8 text-sm leading-6 text-slate-600">{item.answer}</p>
+              </details>
+            ))}
           </div>
         </div>
       </section>
@@ -2516,7 +2675,11 @@ function FinanceAccountStep({ defaultEmail, defaultName }: { defaultEmail: strin
   async function submitAccount() {
     const cleanEmail = email.trim().toLowerCase();
     if (!cleanEmail || password.length < (mode === "signup" ? 8 : 1)) {
-      toast.error(mode === "signup" ? "Enter your email and a password of at least 8 characters." : "Enter your email and password.");
+      toast.error(
+        mode === "signup"
+          ? "Enter your email and a password of at least 8 characters."
+          : "Enter your email and password.",
+      );
       return;
     }
     setBusy(true);
@@ -2535,7 +2698,9 @@ function FinanceAccountStep({ defaultEmail, defaultName }: { defaultEmail: strin
       }
       const { error } = await supabase.auth.signInWithPassword({ email: cleanEmail, password });
       if (error) {
-        toast.error(error.message.toLowerCase().includes("invalid") ? "That email and password didn't work." : error.message);
+        toast.error(
+          error.message.toLowerCase().includes("invalid") ? "That email and password didn't work." : error.message,
+        );
         return;
       }
       void linkLegacyProfile({}).catch(() => undefined);
@@ -2550,11 +2715,22 @@ function FinanceAccountStep({ defaultEmail, defaultName }: { defaultEmail: strin
   return (
     <div className="space-y-4">
       <div className="space-y-1.5">
-        <Label htmlFor="fin-acc-email" className="text-xs font-medium text-slate-600">Email</Label>
-        <Input id="fin-acc-email" type="email" autoComplete="email" value={email} onChange={(e) => setEmail(e.target.value)} className="h-12" />
+        <Label htmlFor="fin-acc-email" className="text-xs font-medium text-slate-600">
+          Email
+        </Label>
+        <Input
+          id="fin-acc-email"
+          type="email"
+          autoComplete="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
+          className="h-12"
+        />
       </div>
       <div className="space-y-1.5">
-        <Label htmlFor="fin-acc-password" className="text-xs font-medium text-slate-600">Password</Label>
+        <Label htmlFor="fin-acc-password" className="text-xs font-medium text-slate-600">
+          Password
+        </Label>
         <Input
           id="fin-acc-password"
           type="password"
@@ -2581,12 +2757,17 @@ function FinanceAccountStep({ defaultEmail, defaultName }: { defaultEmail: strin
       </Button>
       <p className="text-center text-sm text-slate-600">
         {mode === "signup" ? "Already have an account?" : "New to MyCar?"}{" "}
-        <button type="button" className="font-semibold text-[#1473d1] hover:underline" onClick={() => setMode(mode === "signup" ? "signin" : "signup")}>
+        <button
+          type="button"
+          className="font-semibold text-[#1473d1] hover:underline"
+          onClick={() => setMode(mode === "signup" ? "signin" : "signup")}
+        >
           {mode === "signup" ? "Sign in" : "Create one"}
         </button>
       </p>
       <div className="rounded-lg bg-slate-50 p-3 text-[11px] leading-5 text-slate-500">
-        By continuing, you agree to be contacted by My Car Business Services LLC about your application. We never sell your information.
+        By continuing, you agree to be contacted by My Car Business Services LLC about your application. We never sell
+        your information.
       </div>
     </div>
   );
