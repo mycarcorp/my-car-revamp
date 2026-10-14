@@ -37,6 +37,8 @@ import { supabase } from "@/integrations/supabase/app-client";
 import { registerAccount } from "@/lib/account.functions";
 import { linkLegacyProfile } from "@/lib/legacy-auth.functions";
 
+import financeHeroCar from "@/assets/finance-hero-car.png";
+import financeModel from "@/assets/finance-model.png";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 
 export const Route = createFileRoute("/finance")({
@@ -817,12 +819,12 @@ function FinancePage() {
       </section>
 
       {/* AUTO-ADVANCING FEATURED INVENTORY AND HOW IT WORKS */}
-      <section className="bg-[#f5f7fa] px-5 py-16 sm:py-20">
+      <section className="bg-white px-5 py-16 sm:py-20">
         <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:gap-16">
           <div className="min-w-0">
-            <div className="relative mx-auto flex h-[265px] max-w-xl items-center justify-center overflow-hidden rounded-xl bg-white/50 sm:h-[330px]">
-              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-[#f5f7fa] to-transparent sm:w-24" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-[#f5f7fa] to-transparent sm:w-24" />
+            <div className="relative mx-auto flex h-[265px] max-w-xl items-center justify-center overflow-hidden sm:h-[340px]">
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-white via-white/80 to-transparent sm:w-32" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-white via-white/80 to-transparent sm:w-32" />
               {featuredVehicles.length ? (
                 [-1, 0, 1].map((offset) => {
                   const item =
@@ -831,11 +833,11 @@ function FinancePage() {
                   return (
                     <div
                       key={`${item.id}-${offset}`}
-                      className={`absolute w-[57%] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg transition-all duration-700 ease-in-out ${offset === 0 ? "z-10 translate-x-0 scale-100 opacity-100" : offset === -1 ? "z-0 -translate-x-[62%] scale-[.82] opacity-45" : "z-0 translate-x-[62%] scale-[.82] opacity-45"}`}
+                      className={`absolute w-[57%] overflow-hidden rounded-2xl bg-white shadow-[0_10px_30px_rgba(10,41,70,.14)] transition-all duration-[900ms] ease-[cubic-bezier(.4,0,.2,1)] ${offset === 0 ? "z-10 translate-x-0 scale-100 opacity-100" : offset === -1 ? "z-0 -translate-x-[70%] scale-[.84] opacity-70" : "z-0 translate-x-[70%] scale-[.84] opacity-70"}`}
                     >
-                      <div className="flex aspect-[4/3] items-center justify-center bg-slate-100">
+                      <div className="flex aspect-[16/10] items-center justify-center overflow-hidden bg-slate-100">
                         {photo ? (
-                          <img src={photo} alt={vehicleTitle(item)} className="h-full w-full object-contain" />
+                          <img src={photo} alt={vehicleTitle(item)} className="h-full w-full object-cover" />
                         ) : (
                           <CarFront className="h-16 w-16 text-slate-300" />
                         )}
@@ -853,9 +855,9 @@ function FinancePage() {
                   <p className="text-sm">Current inventory will appear here.</p>
                 </div>
               )}
-              <div className="absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-lg bg-emerald-700 px-4 py-2 text-center text-white shadow-lg">
+              <div className="absolute left-1/2 top-[44%] z-30 -translate-x-1/2 rounded-lg bg-[#00a862] px-4 py-2 text-center text-white shadow-lg">
                 <span className="block text-[10px] font-semibold">
-                  {featuredEstimate !== null ? "Estimated monthly payment" : "Financing options"}
+                  {featuredEstimate !== null ? "Real Payment" : "Financing options"}
                 </span>
                 <span className="block text-lg font-extrabold">
                   {featuredEstimate !== null
