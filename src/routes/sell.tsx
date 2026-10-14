@@ -307,7 +307,7 @@ function SellPage() {
               Get an offer for your car in minutes
             </h1>
             <p className="mt-5 text-base leading-6 text-white/95">
-              Sell or trade your car with a simple online request.
+              Sell or trade your car 100% online.
               <br />
               No guesswork. Clear next steps.
             </p>
