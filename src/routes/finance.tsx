@@ -426,23 +426,35 @@ function FinancePage() {
   );
 
   // Carousel uses genuine inventory and makes no personalized approval claims.
-  const featuredVehicles = useMemo(() => inventory.filter((v) => Number(v.price_cents) > 0).slice(0, 8), [inventory]);
+  const featuredVehicles = useMemo(
+    () => inventory.filter((v) => Number(v.price_cents) > 0 && Boolean(displayPhoto(v))).slice(0, 8),
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [inventory],
+  );
   const [featureIndex, setFeatureIndex] = useState(0);
+  const [estimatorModalOpen, setEstimatorModalOpen] = useState(false);
+  const [showEstimatorTab, setShowEstimatorTab] = useState(false);
+  useEffect(() => {
+    const onScroll = () => setShowEstimatorTab(window.scrollY > 520);
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
   useEffect(() => {
     if (featuredVehicles.length < 2 || typeof window === "undefined") return;
     const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
     if (media?.matches) return;
     const id = window.setInterval(() => {
       if (!document.hidden) setFeatureIndex((i) => (i + 1) % featuredVehicles.length);
-    }, 4500);
+    }, 3500);
     return () => window.clearInterval(id);
   }, [featuredVehicles.length]);
-  const displayPhoto = (v: (typeof inventory)[number] | undefined) => {
+  function displayPhoto(v: (typeof inventory)[number] | undefined) {
     if (!v) return undefined;
     return [...(v.vehicle_photos ?? [])]
       .sort((a, b) => a.position - b.position)
-      .find((photo) => /^https?:\/\//i.test(photo.url) && !/\.(mp4|mov|webm)(\?|$)/i.test(photo.url))?.url;
-  };
+      .find((photo) => Boolean(photo.url) && !/\.(mp4|mov|webm|m4v)(\?|$)/i.test(photo.url))?.url;
+  }
   const heroVehicle = featuredVehicles[0];
   const heroPhoto = displayPhoto(heroVehicle);
   const featuredEstimate = useMemo(() => {
@@ -903,13 +915,13 @@ function FinancePage() {
         </div>
         <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-5 pt-8 sm:pt-12 lg:grid-cols-[1.25fr_.75fr] lg:gap-10">
           <div className="relative flex min-h-[260px] items-end justify-center sm:min-h-[380px]">
-            <div className="absolute bottom-3 left-1/2 h-8 w-[78%] -translate-x-1/2 rounded-[50%] bg-black/25 blur-xl" />
+            <div className="absolute bottom-3 left-1/2 z-[5] h-10 w-[74%] -translate-x-1/2 rounded-[50%] bg-black/30 blur-2xl lg:bottom-0" />
             <img
               src={financeHeroCar}
               alt="White sedan available to finance at My Car"
               width={1536}
               height={864}
-              className="animate-in fade-in slide-in-from-left-8 relative z-10 w-full max-w-[640px] object-contain duration-700 drop-shadow-[0_25px_25px_rgba(0,0,0,.22)] lg:translate-y-10"
+              className="animate-in fade-in slide-in-from-left-8 relative z-10 w-full max-w-[640px] -scale-x-100 object-contain duration-1000 drop-shadow-[0_28px_22px_rgba(0,0,0,.28)] lg:translate-y-10"
             />
             <div className="animate-in fade-in zoom-in-95 absolute left-2 top-4 z-20 rounded-xl bg-white px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,.18)] delay-300 duration-700 sm:left-6 sm:top-8">
               <span className="block text-[11px] font-semibold text-slate-500">Est. monthly payment</span>
@@ -999,14 +1011,15 @@ function FinancePage() {
                   return (
                     <div
                       key={`${item.id}-${offset}`}
-                      className={`absolute w-[57%] overflow-hidden rounded-2xl bg-white shadow-[0_10px_30px_rgba(10,41,70,.14)] transition-all duration-[900ms] ease-[cubic-bezier(.4,0,.2,1)] ${offset === 0 ? "z-10 translate-x-0 scale-100 opacity-100" : offset === -1 ? "z-0 -translate-x-[70%] scale-[.84] opacity-70" : "z-0 translate-x-[70%] scale-[.84] opacity-70"}`}
+                      className={`absolute w-[57%] overflow-hidden rounded-2xl bg-white shadow-[0_10px_30px_rgba(10,41,70,.14)] transition-all duration-[900ms] ease-[cubic-bezier(.4,0,.2,1)] ${offset === 0 ? "z-10 translate-x-0 scale-100 opacity-100 shadow-[0_20px_45px_rgba(10,41,70,.22)]" : offset === -1 ? "z-0 -translate-x-[70%] scale-[.84] opacity-70" : "z-0 translate-x-[70%] scale-[.84] opacity-70"}`}
                     >
                       <div className="flex aspect-[16/10] items-center justify-center overflow-hidden bg-slate-100">
-                        {photo ? (
-                          <img src={photo} alt={vehicleTitle(item)} className="h-full w-full object-cover" />
-                        ) : (
-                          <img src={financeHeroCar} alt={vehicleTitle(item)} className="h-full w-full object-contain p-3" />
-                        )}
+                        <img
+                          src={photo}
+                          alt={vehicleTitle(item)}
+                          loading="lazy"
+                          className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
+                        />
                       </div>
                       <div className="p-3">
                         <p className="truncate text-xs font-semibold text-[#0a2946]">{vehicleTitle(item)}</p>
@@ -1021,7 +1034,7 @@ function FinancePage() {
                   <p className="text-sm">Current inventory will appear here.</p>
                 </div>
               )}
-              <div className="absolute left-1/2 top-[44%] z-30 -translate-x-1/2 rounded-lg bg-[#00a862] px-4 py-2 text-center text-white shadow-lg">
+              <div key={featureIndex} className="animate-in fade-in zoom-in-95 absolute left-1/2 top-[40%] z-30 -translate-x-1/2 rounded-lg bg-[#00a862] duration-500 px-4 py-2 text-center text-white shadow-lg">
                 <span className="block text-[10px] font-semibold">
                   {featuredEstimate !== null ? "Real Payment" : "Financing options"}
                 </span>
