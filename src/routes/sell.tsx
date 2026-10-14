@@ -303,9 +303,6 @@ function SellPage() {
       <section className="bg-[#10385d] text-white">
         <div className="mx-auto grid max-w-[1100px] items-center gap-10 px-5 py-12 sm:px-8 md:grid-cols-[1fr_420px] md:gap-16 md:py-14 lg:px-12">
           <div className="mx-auto w-full max-w-md md:mx-0">
-            <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#8bc4ff]">
-              Sell or trade with My Car
-            </p>
             <h1 className="font-display text-[clamp(2.25rem,4.5vw,3.65rem)] font-extrabold uppercase leading-[0.99] tracking-[-0.035em]">
               Get an offer for your car in minutes
             </h1>
