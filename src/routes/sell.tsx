@@ -304,7 +304,7 @@ function SellPage() {
         <div className="mx-auto grid max-w-[1100px] items-center gap-10 px-5 py-12 sm:px-8 md:grid-cols-[1fr_420px] md:gap-16 md:py-14 lg:px-12">
           <div className="mx-auto w-full max-w-md md:mx-0">
             <h1 className="font-display text-[clamp(2.25rem,4.5vw,3.65rem)] font-extrabold uppercase leading-[0.99] tracking-[-0.035em]">
-              Get an offer for your car in minutes
+              Get an offer for your car 2 minutes
             </h1>
             <p className="mt-5 text-base leading-6 text-white/95">
               Sell or trade your car 100% online.
