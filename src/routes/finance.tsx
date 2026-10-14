@@ -37,6 +37,8 @@ import { supabase } from "@/integrations/supabase/app-client";
 import { registerAccount } from "@/lib/account.functions";
 import { linkLegacyProfile } from "@/lib/legacy-auth.functions";
 
+import financeHeroCar from "@/assets/finance-hero-car.png";
+import financeModel from "@/assets/finance-model.png";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 
 export const Route = createFileRoute("/finance")({
@@ -728,39 +730,41 @@ function FinancePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(FINANCE_FAQ_SCHEMA) }} />
       {/* CARVANA-INSPIRED FINANCING HERO — My Car branding and qualified claims */}
       <section className="relative overflow-hidden bg-white pb-10 sm:pb-16">
-        <div className="absolute inset-x-0 top-0 h-[240px] bg-[#082846] sm:h-[310px]" />
-        <div className="absolute inset-x-0 top-0 h-[240px] bg-[linear-gradient(145deg,#0869b8_0%,#064980_36%,#082846_36%,#082846_100%)] sm:h-[310px]" />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-5 pt-10 sm:pt-14 lg:grid-cols-[1.1fr_.9fr] lg:gap-12">
-          <div className="relative flex min-h-[245px] items-end justify-center sm:min-h-[310px]">
-            {heroPhoto ? (
-              <img
-                src={heroPhoto}
-                alt={heroVehicle ? vehicleTitle(heroVehicle) : "Vehicle available at My Car"}
-                className="relative z-10 h-[245px] w-full object-contain drop-shadow-[0_22px_22px_rgba(0,0,0,.2)] sm:h-[310px]"
-              />
-            ) : (
-              <div className="relative z-10 flex h-[245px] w-full items-center justify-center text-white/70">
-                <CarFront className="h-32 w-32" />
-              </div>
-            )}
-            <div className="absolute left-1 top-2 z-20 rounded-xl border border-white/40 bg-[#123d66]/85 px-4 py-3 text-white shadow-xl backdrop-blur-sm sm:left-8">
-              <span className="block text-[11px] font-semibold">Payment planning</span>
-              <span className="mt-1 block text-lg font-bold">Explore your options</span>
+        <div className="absolute inset-x-0 top-0 h-[260px] overflow-hidden bg-[#0b2a4a] sm:h-[340px] lg:h-[380px]">
+          <div className="absolute -left-24 top-0 h-full w-[60%] skew-x-[-22deg] bg-[#0e3a66]" />
+          <div className="absolute left-[30%] top-0 h-full w-[22%] skew-x-[-22deg] bg-[#123f70]/70" />
+          <div className="absolute -right-10 bottom-0 h-[55%] w-[38%] skew-x-[-22deg] bg-[#0a2340]" />
+        </div>
+        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-5 pt-8 sm:pt-12 lg:grid-cols-[1.25fr_.75fr] lg:gap-10">
+          <div className="relative flex min-h-[260px] items-end justify-center sm:min-h-[380px]">
+            <div className="absolute bottom-3 left-1/2 h-8 w-[78%] -translate-x-1/2 rounded-[50%] bg-black/25 blur-xl" />
+            <img
+              src={financeHeroCar}
+              alt="White sedan available to finance at My Car"
+              width={1536}
+              height={864}
+              className="animate-in fade-in slide-in-from-left-8 relative z-10 w-full max-w-[640px] object-contain duration-700 drop-shadow-[0_25px_25px_rgba(0,0,0,.22)] lg:translate-y-10"
+            />
+            <div className="animate-in fade-in zoom-in-95 absolute left-2 top-4 z-20 rounded-xl bg-white px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,.18)] delay-300 duration-700 sm:left-6 sm:top-8">
+              <span className="block text-[11px] font-semibold text-slate-500">Est. monthly payment</span>
+              <span className="mt-0.5 block text-xl font-extrabold text-[#0a2946]">
+                {featuredEstimate !== null ? `$${Math.round(featuredEstimate).toLocaleString()}/mo*` : "Low monthly"}
+              </span>
             </div>
           </div>
-          <div className="relative z-20 rounded-xl border border-slate-200 bg-white p-7 shadow-[0_15px_45px_rgba(0,0,0,.1)] sm:p-9">
+          <div className="animate-in fade-in slide-in-from-bottom-4 relative z-20 rounded-2xl bg-white p-7 shadow-[0_18px_50px_rgba(10,41,70,.16)] duration-700 sm:p-9 lg:mt-10">
             <p className="text-xs font-semibold uppercase tracking-[.2em] text-blue-700">My Car Financing</p>
-            <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight text-[#0a2946] sm:text-4xl">
-              FINANCING FOR EVERYONE
+            <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight text-[#0a2946] sm:text-[2.5rem]">
+              Financing for everyone
             </h1>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Explore financing for your next vehicle in Fredericksburg, Virginia. Apply online and our team will
-              contact you about available next steps.
+              Get pre-qualified online in minutes with no impact to your credit score, then shop cars with real
+              payments.
             </p>
             <button
               type="button"
               onClick={openFinanceModal}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#086bc8] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#0759a7]"
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-[#086bc8] px-6 py-3.5 text-sm font-bold text-white transition hover:bg-[#0759a7]"
             >
               Start My Application <ArrowRight className="h-4 w-4" />
             </button>
@@ -769,10 +773,6 @@ function FinancePage() {
             </p>
           </div>
         </div>
-        <p className="relative mx-auto mt-5 max-w-5xl px-5 text-center text-[11px] text-slate-500">
-          Vehicle photos reflect current inventory when available. Payment figures depend on vehicle, application and
-          lender terms.
-        </p>
       </section>
 
       {/* CREDIT TYPES BENEFITS */}
@@ -819,27 +819,27 @@ function FinancePage() {
       </section>
 
       {/* AUTO-ADVANCING FEATURED INVENTORY AND HOW IT WORKS */}
-      <section className="bg-[#f5f7fa] px-5 py-16 sm:py-20">
+      <section className="bg-white px-5 py-16 sm:py-20">
         <div className="mx-auto grid max-w-6xl items-center gap-12 lg:grid-cols-2 lg:gap-16">
           <div className="min-w-0">
-            <div className="relative mx-auto flex h-[265px] max-w-xl items-center justify-center overflow-hidden rounded-xl bg-white/50 sm:h-[330px]">
-              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-[#f5f7fa] to-transparent sm:w-24" />
-              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-[#f5f7fa] to-transparent sm:w-24" />
+            <div className="relative mx-auto flex h-[265px] max-w-xl items-center justify-center overflow-hidden sm:h-[340px]">
+              <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-white via-white/80 to-transparent sm:w-32" />
+              <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-white via-white/80 to-transparent sm:w-32" />
               {featuredVehicles.length ? (
                 [-1, 0, 1].map((offset) => {
                   const item =
-                    featuredVehicles[(featureIndex + offset + featuredVehicles.length) % featuredVehicles.length];
+                    featuredVehicles[(featureIndex + offset + featuredVehicles.length) % featuredVehicles.length]!;
                   const photo = displayPhoto(item);
                   return (
                     <div
                       key={`${item.id}-${offset}`}
-                      className={`absolute w-[57%] overflow-hidden rounded-xl border border-slate-200 bg-white shadow-lg transition-all duration-700 ease-in-out ${offset === 0 ? "z-10 translate-x-0 scale-100 opacity-100" : offset === -1 ? "z-0 -translate-x-[62%] scale-[.82] opacity-45" : "z-0 translate-x-[62%] scale-[.82] opacity-45"}`}
+                      className={`absolute w-[57%] overflow-hidden rounded-2xl bg-white shadow-[0_10px_30px_rgba(10,41,70,.14)] transition-all duration-[900ms] ease-[cubic-bezier(.4,0,.2,1)] ${offset === 0 ? "z-10 translate-x-0 scale-100 opacity-100" : offset === -1 ? "z-0 -translate-x-[70%] scale-[.84] opacity-70" : "z-0 translate-x-[70%] scale-[.84] opacity-70"}`}
                     >
-                      <div className="flex aspect-[4/3] items-center justify-center bg-slate-100">
+                      <div className="flex aspect-[16/10] items-center justify-center overflow-hidden bg-slate-100">
                         {photo ? (
-                          <img src={photo} alt={vehicleTitle(item)} className="h-full w-full object-contain" />
+                          <img src={photo} alt={vehicleTitle(item)} className="h-full w-full object-cover" />
                         ) : (
-                          <CarFront className="h-16 w-16 text-slate-300" />
+                          <img src={financeHeroCar} alt={vehicleTitle(item)} className="h-full w-full object-contain p-3" />
                         )}
                       </div>
                       <div className="p-3">
@@ -855,9 +855,9 @@ function FinancePage() {
                   <p className="text-sm">Current inventory will appear here.</p>
                 </div>
               )}
-              <div className="absolute bottom-4 left-1/2 z-30 -translate-x-1/2 rounded-lg bg-emerald-700 px-4 py-2 text-center text-white shadow-lg">
+              <div className="absolute left-1/2 top-[44%] z-30 -translate-x-1/2 rounded-lg bg-[#00a862] px-4 py-2 text-center text-white shadow-lg">
                 <span className="block text-[10px] font-semibold">
-                  {featuredEstimate !== null ? "Estimated monthly payment" : "Financing options"}
+                  {featuredEstimate !== null ? "Real Payment" : "Financing options"}
                 </span>
                 <span className="block text-lg font-extrabold">
                   {featuredEstimate !== null
@@ -1178,26 +1178,33 @@ function FinancePage() {
               Start My Finance Application
             </button>
           </div>
-          <div className="relative min-h-[310px] overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#07477a,#0b2b4c)] sm:min-h-[370px]">
-            <div className="absolute -right-8 -top-12 h-52 w-52 rounded-full border-[38px] border-blue-500/20" />
+          <div className="relative mx-auto h-[360px] w-full max-w-[460px] sm:h-[420px]">
+            <div className="absolute bottom-0 left-[12%] right-[6%] top-[14%] rounded-2xl bg-[#0b2a4a]" />
             <img
-              src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=950&q=85"
-              alt="Person exploring options on a smartphone"
-              className="absolute inset-0 h-full w-full object-cover object-center opacity-80 mix-blend-luminosity"
+              src={financeModel}
+              alt="Smiling customer checking financing on his phone"
+              width={1024}
+              height={1280}
               loading="lazy"
+              className="absolute bottom-0 left-1/2 h-[100%] w-auto -translate-x-1/2 object-contain object-bottom"
             />
-            <div className="absolute bottom-6 left-6 rounded-xl border border-white/30 bg-white/95 px-5 py-3 shadow-xl">
-              <span className="flex items-center gap-2 text-sm font-bold text-[#0a2946]">
-                <CarFront className="h-5 w-5 text-blue-700" /> Find your next car
-              </span>
-              <span className="mt-1 block text-xs text-slate-500">Browse real My Car inventory</span>
+            <div className="animate-in fade-in slide-in-from-left-4 absolute left-0 top-[30%] z-10 flex items-center gap-3 rounded-xl bg-white px-3 py-2.5 shadow-[0_12px_30px_rgba(0,0,0,.18)] duration-700">
+              <div className="h-10 w-14 overflow-hidden rounded-md bg-slate-100">
+                <img src={financeHeroCar} alt="" className="h-full w-full object-contain" />
+              </div>
+              <div>
+                <span className="block text-xs font-bold text-[#0a2946]">Find your next car</span>
+                <a href="/search" className="text-[11px] font-semibold text-blue-700 hover:underline">
+                  Shop Cars
+                </a>
+              </div>
             </div>
-            <a
-              href="/search"
-              className="absolute bottom-6 right-5 rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-            >
-              Shop Cars
-            </a>
+            <div className="animate-in fade-in slide-in-from-right-4 absolute bottom-8 right-0 z-10 rounded-xl bg-white px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,.18)] delay-200 duration-700">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#00a862]">
+                <ShieldCheck className="h-3.5 w-3.5" /> Pre-qualified
+              </span>
+              <span className="mt-0.5 block text-sm font-extrabold text-[#0a2946]">No impact to credit</span>
+            </div>
           </div>
         </div>
       </section>

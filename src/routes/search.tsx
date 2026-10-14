@@ -448,7 +448,7 @@ function RangeFilter({
         step={step}
         value={[low, high]}
         disabled={disabled}
-        onValueChange={(v) => onChange([v[0], v[1]])}
+        onValueChange={(v) => onChange([v[0] ?? 0, v[1] ?? 0])}
         aria-label={label}
         className="py-2"
       />
@@ -657,7 +657,7 @@ function FilterSidebar({
               max={maxPayment}
               step={25}
               value={[filters.paymentMax ?? maxPayment]}
-              onValueChange={(v) => onChange({ paymentMax: v[0] >= maxPayment ? undefined : v[0] })}
+              onValueChange={(v) => onChange({ paymentMax: (v[0] ?? 0) >= maxPayment ? undefined : v[0] })}
               className="mt-3 mb-1"
             />
             <div className="flex justify-between text-[10px] text-slate-500">
@@ -753,7 +753,7 @@ function FilterSidebar({
               max={mpgMax}
               step={1}
               value={[filters.mpgMin ?? 0]}
-              onValueChange={(v) => onChange({ mpgMin: v[0] <= 0 ? undefined : v[0] })}
+              onValueChange={(v) => onChange({ mpgMin: (v[0] ?? 0) <= 0 ? undefined : v[0] })}
               className="py-3"
             />
             <div className="flex justify-between text-[10px] text-slate-500">
