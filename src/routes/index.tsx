@@ -21,6 +21,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Textarea } from "@/components/ui/textarea";
 import { LeadForm } from "@/components/LeadForm";
 import { VehicleCard } from "@/components/VehicleCard";
+import { ReturningHero, ReturningSections, useVisitorState } from "@/components/ReturningVisitor";
 import { useAuth } from "@/hooks/useAuth";
 import { ctaButtonClass } from "@/lib/ui";
 import {
@@ -153,6 +154,7 @@ function Home() {
   const { data: featured, isLoading: featuredLoading } = useQuery(featuredVehiclesQuery());
   const { data: facets, isLoading: facetsLoading } = useQuery(facetsQuery());
   const { data: areas } = useQuery(serviceAreasQuery());
+  const visitor = useVisitorState();
   const [term, setTerm] = useState("");
   const [carFinderOpen, setCarFinderOpen] = useState(false);
   const [carFinder, setCarFinder] = useState<CarFinderForm>(EMPTY_CAR_FINDER_FORM);
@@ -219,8 +221,10 @@ function Home() {
         }
       `}</style>
 
+      {visitor.returning && visitor.summary && <ReturningHero summary={visitor.summary} />}
+
       {/* HERO */}
-      <section className="relative isolate overflow-hidden bg-[#07111b]">
+      <section className={visitor.returning ? "hidden" : "relative isolate overflow-hidden bg-[#07111b]"}>
         <img
           src="https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=80"
           alt="Modern premium car highlighted on the MyCar dealership lot"
@@ -304,6 +308,10 @@ function Home() {
           </div>
         </div>
       </section>
+
+      {visitor.returning && visitor.summary && (
+        <ReturningSections summary={visitor.summary} settings={settings} onClear={visitor.clear} />
+      )}
 
       {/* TRUST BAR */}
       {badges.some((b) => b.enabled) && (

@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { trackEvent } from "@/lib/visitor-personalization";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
