@@ -869,7 +869,6 @@ function VehicleDetail() {
             {selectedSection === "features" && (
               <section className="py-8">
                 <div className="rounded-2xl bg-[#f5f7fa] px-5 py-8 sm:px-8">
-                  <p className="text-center text-xs font-bold uppercase tracking-widest text-[#d68b17]">More to Love</p>
                   <h2 className="mt-2 text-center text-2xl font-extrabold">Features & Highlights</h2>
                   <div className="mt-6 grid gap-4 sm:grid-cols-2">
                     <div className="rounded-xl bg-white p-5">
