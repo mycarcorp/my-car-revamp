@@ -970,17 +970,17 @@ function FinancePage() {
               {
                 icon: ShieldCheck,
                 heading: "Financing options",
-                copy: "Our team can help you explore financing programs available through participating lenders.",
+                copy: "All credit situations welcome. Get pre-qualified for an auto loan, even with bad credit, no credit or past bankruptcy.",
               },
               {
-                icon: CarFront,
+                icon: BadgeDollarSign,
                 heading: "Affordable vehicles",
-                copy: "Browse our actual inventory and compare available cars, prices and mileage.",
+                copy: "Explore budget-friendly cars. Choose from vehicles with manageable monthly payments.",
               },
               {
                 icon: Calculator,
-                heading: "Plan your payment",
-                copy: "Use our payment estimator to explore different down payments and loan terms.",
+                heading: "Low down payments",
+                copy: "Get on the road today without draining your savings.",
               },
             ].map(({ icon: Icon, heading, copy }) => (
               <article key={heading} className="rounded-xl border border-blue-100 bg-white p-6 shadow-sm">
