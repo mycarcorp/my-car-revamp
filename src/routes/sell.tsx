@@ -1,5 +1,6 @@
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
+import { trackEvent } from "@/lib/visitor-personalization";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowRight,
@@ -187,6 +188,9 @@ function SellPage() {
   const [heroError, setHeroError] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [intent, setIntent] = useState<Intent>("sell");
+  useEffect(() => {
+    if (intent === "trade") trackEvent("trade_intent");
+  }, [intent]);
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");

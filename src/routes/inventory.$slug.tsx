@@ -1,4 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { trackEvent } from "@/lib/visitor-personalization";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
@@ -293,6 +294,20 @@ function VehicleDetail() {
   const priceCurrency = getPriceCurrency(v);
 
   const numericPrice = Number(v.price_cents) / 100;
+
+  useEffect(() => {
+    trackEvent("vehicle_view", {
+      vehicle: {
+        id: String(v.id),
+        slug: v.slug,
+        make: v.make,
+        model: v.model,
+        body: v.body_style,
+        priceCents: v.price_cents,
+        year: v.year,
+      },
+    });
+  }, [v.id]);
 
   const [selectedSection, setSelectedSection] = useState("overview");
   const [galleryOpen, setGalleryOpen] = useState(false);

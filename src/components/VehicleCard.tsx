@@ -44,7 +44,7 @@ function normalizeUrl(url: string): string {
   return `/${url.replace(/^\.\/?/, "")}`;
 }
 
-function vehicleMedia(vehicle: VehicleWithPhotos): Media[] {
+export function vehicleMedia(vehicle: VehicleWithPhotos): Media[] {
   const raw = vehicle as unknown as LooseObject;
   const collections = [raw.vehicle_photos, raw.photos, raw.images, raw.gallery, raw.vehicle_images];
   const items: unknown[] = [];

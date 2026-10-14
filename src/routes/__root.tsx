@@ -18,6 +18,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { captureAttribution } from "@/lib/attribution";
+import { beginVisit, trackPath } from "@/lib/visitor-personalization";
 
 function NotFoundComponent() {
   return (
@@ -148,6 +149,12 @@ function RootComponent() {
   useEffect(() => {
     if (!isAdmin) captureAttribution();
   }, [pathname, searchStr, isAdmin]);
+
+  useEffect(() => {
+    if (isAdmin) return;
+    beginVisit();
+    trackPath(pathname);
+  }, [pathname, isAdmin]);
 
   useEffect(() => {
     if (isAdmin) return;
