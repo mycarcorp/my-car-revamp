@@ -1143,9 +1143,7 @@ function FinancePage() {
           <h2 className="text-center text-3xl font-extrabold tracking-tight text-[#0a2946]">
             Real customers. Real Reviews. Real Happy.
           </h2>
-          <p className="mx-auto mt-3 text-center text-xs text-slate-500">
-            Customer testimonials from Carvana, shown as design references — not My Car customer reviews.
-          </p>
+
           <div className="mt-10 grid gap-5 md:grid-cols-3">
             {[
               {
