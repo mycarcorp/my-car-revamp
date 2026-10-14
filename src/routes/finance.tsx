@@ -940,24 +940,20 @@ function FinancePage() {
             </div>
           </div>
           <div className="animate-in fade-in slide-in-from-bottom-4 relative z-20 rounded-2xl bg-white p-7 shadow-[0_18px_50px_rgba(10,41,70,.16)] duration-700 sm:p-9 lg:mt-10">
-            <p className="text-xs font-semibold uppercase tracking-[.2em] text-blue-700">My Car Financing</p>
             <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight text-[#0a2946] sm:text-[2.5rem]">
               Financing for everyone
             </h1>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Get pre-qualified online in minutes with no impact to your credit score, then shop cars with real
-              payments.
+              Get pre-qualified for an auto loan in minutes.{" "}
+              <strong className="font-bold text-slate-900">No hit to your credit.</strong>
             </p>
             <button
               type="button"
               onClick={openFinanceModal}
               className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-[#086bc8] px-6 py-3.5 text-sm font-bold text-white transition hover:bg-[#0759a7]"
             >
-              Start My Application <ArrowRight className="h-4 w-4" />
+              Get your terms <ArrowRight className="h-4 w-4" />
             </button>
-            <p className="mt-3 text-center text-[11px] leading-4 text-slate-500">
-              Submitting an application is not a guarantee of approval or specific financing terms.
-            </p>
           </div>
         </div>
       </section>
