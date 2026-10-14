@@ -441,7 +441,7 @@ function FinancePage() {
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
 
-  // One continuously running interval drives BOTH the carousel and estimator prompt.
+  // One continuously running interval alternates a sliding vehicle and its Real Payment pop.
   // Deriving the phase and vehicle index from the same tick prevents timeout stalls,
   // dependency-reset loops and mismatched vehicle images/payment estimates.
   const [carouselTick, setCarouselTick] = useState(0);
@@ -449,7 +449,7 @@ function FinancePage() {
     if (featuredVehicles.length < 2 || estimatorModalOpen) return;
     const timer = window.setInterval(() => {
       if (!document.hidden) setCarouselTick((tick) => tick + 1);
-    }, 2600);
+    }, 3000);
     return () => window.clearInterval(timer);
   }, [featuredVehicles.length, estimatorModalOpen]);
 
@@ -999,21 +999,36 @@ function FinancePage() {
               <div className="pointer-events-none absolute inset-y-0 left-0 z-20 w-16 bg-gradient-to-r from-white via-white/80 to-transparent sm:w-32" />
               <div className="pointer-events-none absolute inset-y-0 right-0 z-20 w-16 bg-gradient-to-l from-white via-white/80 to-transparent sm:w-32" />
               {featuredVehicles.length ? (
-                [-1, 0, 1].map((offset) => {
-                  const item =
-                    featuredVehicles[(featureIndex + offset + featuredVehicles.length) % featuredVehicles.length]!;
+                featuredVehicles.map((item, index) => {
+                  // Keep a stable DOM node for each VIN/listing. This allows cards
+                  // to move along the horizontal track instead of instantly swapping.
+                  const count = featuredVehicles.length;
+                  let distance = (index - featureIndex + count) % count;
+                  if (distance > count / 2) distance -= count;
+                  // Odd-sized lists can otherwise jump when wrapping; only the
+                  // three nearest positions are visible, with offscreen buffer cards.
+                  const visible = Math.abs(distance) <= 1;
                   const photo = displayPhoto(item);
                   return (
                     <div
-                      key={`${item.id}-${offset}`}
-                      className={`absolute w-[57%] overflow-hidden rounded-2xl bg-white shadow-[0_10px_30px_rgba(10,41,70,.14)] transition-all duration-[900ms] ease-[cubic-bezier(.4,0,.2,1)] ${offset === 0 ? "z-10 translate-x-0 scale-100 opacity-100 shadow-[0_20px_45px_rgba(10,41,70,.22)]" : offset === -1 ? "z-0 -translate-x-[70%] scale-[.84] opacity-70" : "z-0 translate-x-[70%] scale-[.84] opacity-70"}`}
+                      key={item.id}
+                      aria-hidden={!visible}
+                      className="absolute w-[57%] overflow-hidden rounded-2xl bg-white shadow-[0_10px_30px_rgba(10,41,70,.14)] transition-[transform,opacity,filter] duration-[1050ms] ease-[cubic-bezier(.22,1,.36,1)] motion-reduce:transition-none"
+                      style={{
+                        transform: `translateX(${distance * 75}%) scale(${distance === 0 ? 1 : 0.83})`,
+                        opacity: distance === 0 ? 1 : visible ? 0.65 : 0,
+                        filter: distance === 0 ? "none" : "saturate(.85)",
+                        zIndex: distance === 0 ? 12 : visible ? 5 : 0,
+                        pointerEvents: distance === 0 ? "auto" : "none",
+                        boxShadow: distance === 0 ? "0 20px 45px rgba(10,41,70,.22)" : undefined,
+                      }}
                     >
                       <div className="flex aspect-[16/10] items-center justify-center overflow-hidden bg-slate-100">
                         <img
                           src={photo}
                           alt={vehicleTitle(item)}
-                          loading="lazy"
-                          className="h-full w-full object-cover transition-transform duration-700 hover:scale-105"
+                          loading={distance === 0 ? "eager" : "lazy"}
+                          className="h-full w-full object-cover"
                         />
                       </div>
                       <div className="p-3">
@@ -1029,28 +1044,22 @@ function FinancePage() {
                   <p className="text-sm">Current inventory will appear here.</p>
                 </div>
               )}
-              {featuredVehicles.length > 1 && carouselPhase === "estimate" && (
-                <button
-                  type="button"
-                  onClick={() => setEstimatorModalOpen(true)}
-                  className="animate-in fade-in zoom-in-95 absolute bottom-3 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-blue-100 bg-white px-5 py-3 text-sm font-bold text-[#086bc8] shadow-[0_12px_36px_rgba(10,41,70,.22)] transition hover:scale-105 hover:bg-blue-50"
+              {/* The green REAL PAYMENT card is the interstitial pop: vehicle slides,
+                   then its estimated payment pops up before the next slide. */}
+              {featuredVehicles.length > 0 && carouselPhase === "estimate" && (
+                <div
+                  key={`real-payment-${carouselTick}`}
+                  className="absolute left-1/2 top-[39%] z-30 -translate-x-1/2 rounded-xl bg-[#00a862] px-5 py-3 text-center text-white shadow-[0_18px_45px_rgba(0,95,58,.30)] animate-in fade-in zoom-in-75 slide-in-from-bottom-3 duration-500 motion-reduce:animate-none"
+                  aria-live="off"
                 >
-                  <Calculator className="h-4 w-4" /> Estimate your payment <ArrowRight className="h-4 w-4" />
-                </button>
+                  <span className="block whitespace-nowrap text-[11px] font-bold tracking-wide">Real Payment</span>
+                  <span className="block whitespace-nowrap text-xl font-extrabold">
+                    {featuredEstimate !== null
+                      ? `$${Math.round(featuredEstimate).toLocaleString()}/mo*`
+                      : "Explore financing"}
+                  </span>
+                </div>
               )}
-              <div
-                key={featureIndex}
-                className="animate-in fade-in zoom-in-95 absolute left-1/2 top-[40%] z-30 -translate-x-1/2 rounded-lg bg-[#00a862] duration-500 px-4 py-2 text-center text-white shadow-lg"
-              >
-                <span className="block text-[10px] font-semibold">
-                  {featuredEstimate !== null ? "Real Payment" : "Financing options"}
-                </span>
-                <span className="block text-lg font-extrabold">
-                  {featuredEstimate !== null
-                    ? `$${Math.round(featuredEstimate).toLocaleString()}/mo*`
-                    : "Explore today"}
-                </span>
-              </div>
             </div>
             <div
               className="mt-5 flex items-center justify-center gap-2"
