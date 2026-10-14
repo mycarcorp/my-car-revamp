@@ -7,30 +7,25 @@ import {
   BadgeDollarSign,
   CalendarCheck,
   CarFront,
-  Check,
   ChevronDown,
   ChevronLeft,
   ChevronRight,
-  Heart,
-  Images,
-  Menu,
-  RotateCcw,
   Search,
   SlidersHorizontal,
-  Sparkles,
   Tag,
   X,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { allVehiclesQuery, type VehicleWithPhotos } from "@/lib/queries";
+import { allVehiclesQuery, siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
+import { VehicleCard } from "@/components/VehicleCard";
 
 /*
  * My Car /search inventory page.
  * Paste into the SAME file that currently declares createFileRoute('/search').
  * Real photos/prices come from allVehiclesQuery(), never from mock inventory.
- * IMPORTANT: Check vehicleDetailUrl() against your EXISTING VehicleCard's detail route.
+ * VehicleCard owns media normalization, gallery, favorites and navigation.
  * A true 360-degree spin requires a separately supplied, ordered 360 frame set.
  */
 
@@ -76,39 +71,6 @@ const isRecent = (v: VehicleWithPhotos) => {
   return timestamp > 0 && Date.now() - timestamp >= 0 && Date.now() - timestamp <= 7 * 86400000;
 };
 const vehicleTitle = (v: VehicleWithPhotos) => `${v.year} ${v.make} ${v.model}`;
-
-// Review this URL against the <Link> in your existing components/VehicleCard.tsx.
-// Change only this helper if your vehicle-detail route differs.
-const vehicleDetailUrl = (v: VehicleWithPhotos) => `/vehicles/${encodeURIComponent(String(v.id))}`;
-
-function photosOf(v: VehicleWithPhotos): string[] {
-  // Supports common shapes: photos: string[], photos: [{url}], vehicle_photos, images,
-  // and direct image/cover fields. Unknown feed fields are safely ignored.
-  const item = v as unknown as Record<string, unknown>;
-  const raw = item.photos ?? item.vehicle_photos ?? item.images ?? [];
-  const arr = Array.isArray(raw) ? raw : [];
-  const sorted = [...arr].sort((a, b) => {
-    const rank = (x: unknown) => {
-      if (!x || typeof x !== "object") return 0;
-      const r = x as Record<string, unknown>;
-      return Number(r.sort_order ?? r.position ?? r.order_index ?? 0);
-    };
-    return rank(a) - rank(b);
-  });
-  const url = (x: unknown): string => {
-    if (typeof x === "string") return x;
-    if (!x || typeof x !== "object") return "";
-    const r = x as Record<string, unknown>;
-    for (const key of ["url", "photo_url", "image_url", "public_url", "src", "full_url", "original_url"]) {
-      if (typeof r[key] === "string") return r[key] as string;
-    }
-    return "";
-  };
-  const direct = [item.primary_photo_url, item.image_url, item.photo_url, item.thumbnail_url, item.cover_image_url].map(
-    url,
-  );
-  return [...new Set([...sorted.map(url), ...direct].filter((x) => /^https?:\/\//i.test(x)))];
-}
 
 export const Route = createFileRoute("/search")({
   validateSearch: (raw: Record<string, unknown>): Filters => ({
@@ -236,120 +198,6 @@ function FilterGroup({
     </div>
   );
 }
-function VehicleTile({
-  vehicle,
-  onGallery,
-  saved,
-  toggleSaved,
-}: {
-  vehicle: VehicleWithPhotos;
-  onGallery: (v: VehicleWithPhotos, photoIndex: number) => void;
-  saved: boolean;
-  toggleSaved: (id: string) => void;
-}) {
-  const photos = useMemo(() => photosOf(vehicle), [vehicle]);
-  const [photoIndex, setPhotoIndex] = useState(0);
-  const price = priceOf(vehicle);
-  const previous = previousPriceOf(vehicle);
-  const changePhoto = (direction: number) => setPhotoIndex((i) => (i + direction + photos.length) % photos.length);
-  return (
-    <article className="group flex min-w-0 flex-col overflow-hidden rounded-lg border border-border bg-card shadow-sm transition-all duration-200 hover:-translate-y-0.5 hover:border-primary/30 hover:shadow-md">
-      <div className="relative aspect-[1.55/1] overflow-hidden bg-[#f3f5f7]">
-        <a
-          href={vehicleDetailUrl(vehicle)}
-          className="block h-full w-full"
-          aria-label={`View ${vehicleTitle(vehicle)} details`}
-        >
-          {photos.length ? (
-            <img
-              src={photos[Math.min(photoIndex, photos.length - 1)]}
-              alt={`${vehicleTitle(vehicle)} – view ${photoIndex + 1}`}
-              loading="lazy"
-              className="h-full w-full object-contain transition-opacity duration-300"
-            />
-          ) : (
-            <div className="flex h-full items-center justify-center text-muted-foreground">
-              <CarFront className="h-14 w-14 opacity-30" />
-            </div>
-          )}
-        </a>
-        <div className="pointer-events-none absolute left-2 top-2 flex flex-wrap gap-1">
-          {isDrop(vehicle) ? (
-            <span className="rounded-full bg-emerald-600 px-2 py-1 text-[10px] font-bold text-white">Price Drop</span>
-          ) : isRecent(vehicle) ? (
-            <span className="rounded-full bg-blue-600 px-2 py-1 text-[10px] font-bold text-white">Recent</span>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          className="absolute right-2 top-2 rounded-full bg-white/95 p-1.5 text-slate-700 shadow-sm hover:text-red-500"
-          onClick={() => toggleSaved(String(vehicle.id))}
-          aria-label={saved ? "Remove from saved vehicles" : "Save vehicle"}
-        >
-          <Heart className={`h-4 w-4 ${saved ? "fill-red-500 text-red-500" : ""}`} />
-        </button>
-        {photos.length > 1 && (
-          <>
-            <button
-              type="button"
-              onClick={() => changePhoto(-1)}
-              aria-label="Previous vehicle image"
-              className="absolute left-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-1.5 text-slate-900 shadow opacity-100 transition hover:bg-white sm:opacity-0 sm:group-hover:opacity-100"
-            >
-              <ChevronLeft className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => changePhoto(1)}
-              aria-label="Next vehicle image"
-              className="absolute right-2 top-1/2 -translate-y-1/2 rounded-full bg-white/90 p-1.5 text-slate-900 shadow opacity-100 transition hover:bg-white sm:opacity-0 sm:group-hover:opacity-100"
-            >
-              <ChevronRight className="h-4 w-4" />
-            </button>
-            <button
-              type="button"
-              onClick={() => onGallery(vehicle, photoIndex)}
-              className="absolute bottom-2 right-2 rounded-full bg-white/90 p-1.5 text-slate-900 shadow hover:bg-white"
-              aria-label="Open fullscreen vehicle photo gallery"
-            >
-              <Images className="h-4 w-4" />
-            </button>
-            <div className="pointer-events-none absolute bottom-2 left-1/2 flex -translate-x-1/2 gap-1">
-              {photos.slice(0, 6).map((_, i) => (
-                <span
-                  key={i}
-                  className={`h-1.5 w-1.5 rounded-full ${photoIndex === i ? "bg-primary" : "bg-white/90"}`}
-                />
-              ))}
-            </div>
-          </>
-        )}
-      </div>
-      <div className="flex flex-1 flex-col p-3">
-        <a href={vehicleDetailUrl(vehicle)} className="text-[13px] font-bold leading-5 hover:text-primary">
-          {vehicleTitle(vehicle)}
-        </a>
-        <p className="mt-0.5 text-[11px] text-muted-foreground">
-          {vehicle.trim || "Used vehicle"}
-          {vehicle.mileage != null ? ` · ${integer(Number(vehicle.mileage))} miles` : ""}
-        </p>
-        <div className="mt-2 flex flex-wrap items-baseline gap-2">
-          <span className="text-xl font-extrabold tracking-tight">{price > 0 ? money(price) : "Call for price"}</span>
-          {isDrop(vehicle) && <span className="text-xs text-muted-foreground line-through">{money(previous)}</span>}
-        </div>
-        {isDrop(vehicle) && (
-          <p className="mt-1 text-xs font-semibold text-emerald-700">Save {money(previous - price)}</p>
-        )}
-        <div className="mt-auto border-t border-border/70 pt-3 text-[11px] text-muted-foreground">
-          <span className="inline-flex items-center gap-1">
-            <Check className="h-3 w-3 text-emerald-600" />
-            {vehicle.status === "pending" ? "Availability pending" : "Available at My Car"}
-          </span>
-        </div>
-      </div>
-    </article>
-  );
-}
 function Promotion({ type }: { type: "finance" | "trade" | "schedule" | "deals" }) {
   const config = {
     finance: {
@@ -399,118 +247,13 @@ function Promotion({ type }: { type: "finance" | "trade" | "schedule" | "deals" 
     </article>
   );
 }
-function Gallery({
-  vehicle,
-  initialIndex,
-  close,
-}: {
-  vehicle: VehicleWithPhotos;
-  initialIndex: number;
-  close: () => void;
-}) {
-  const photos = useMemo(() => photosOf(vehicle), [vehicle]);
-  const [index, setIndex] = useState(initialIndex);
-  useEffect(() => {
-    const handle = (event: KeyboardEvent) => {
-      if (event.key === "Escape") close();
-      if (event.key === "ArrowRight" && photos.length) setIndex((i) => (i + 1) % photos.length);
-      if (event.key === "ArrowLeft" && photos.length) setIndex((i) => (i - 1 + photos.length) % photos.length);
-    };
-    document.addEventListener("keydown", handle);
-    const prior = document.body.style.overflow;
-    document.body.style.overflow = "hidden";
-    return () => {
-      document.removeEventListener("keydown", handle);
-      document.body.style.overflow = prior;
-    };
-  }, [close, photos.length]);
-  let touchX = 0;
-  return (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label={`${vehicleTitle(vehicle)} photo gallery`}
-      className="fixed inset-0 z-[100] flex flex-col bg-slate-950/95 text-white"
-    >
-      <div className="flex items-center justify-between border-b border-white/10 px-4 py-3">
-        <div>
-          <div className="font-bold">{vehicleTitle(vehicle)}</div>
-          <div className="text-xs text-white/60">
-            {photos.length ? `${index + 1} of ${photos.length} photos` : "No photos available"}
-          </div>
-        </div>
-        <button type="button" onClick={close} className="rounded-full p-2 hover:bg-white/10" aria-label="Close gallery">
-          <X className="h-6 w-6" />
-        </button>
-      </div>
-      <div
-        className="relative flex min-h-0 flex-1 items-center justify-center p-4"
-        onTouchStart={(e) => {
-          touchX = e.touches[0].clientX;
-        }}
-        onTouchEnd={(e) => {
-          if (!photos.length) return;
-          const difference = e.changedTouches[0].clientX - touchX;
-          if (Math.abs(difference) > 45)
-            setIndex((i) => (i + (difference < 0 ? 1 : -1) + photos.length) % photos.length);
-        }}
-      >
-        {photos.length ? (
-          <img
-            src={photos[index]}
-            className="max-h-full max-w-full object-contain"
-            alt={`${vehicleTitle(vehicle)} view ${index + 1}`}
-          />
-        ) : (
-          <CarFront className="h-20 w-20 opacity-40" />
-        )}
-        {photos.length > 1 && (
-          <>
-            <button
-              type="button"
-              onClick={() => setIndex((i) => (i - 1 + photos.length) % photos.length)}
-              className="absolute left-3 rounded-full bg-white/20 p-2 hover:bg-white/30"
-              aria-label="Previous"
-            >
-              <ChevronLeft />
-            </button>
-            <button
-              type="button"
-              onClick={() => setIndex((i) => (i + 1) % photos.length)}
-              className="absolute right-3 rounded-full bg-white/20 p-2 hover:bg-white/30"
-              aria-label="Next"
-            >
-              <ChevronRight />
-            </button>
-          </>
-        )}
-      </div>
-      <div className="flex items-center justify-center gap-2 overflow-x-auto border-t border-white/10 p-3">
-        {photos.slice(0, 30).map((url, i) => (
-          <button
-            key={`${url}-${i}`}
-            onClick={() => setIndex(i)}
-            className={`h-12 w-20 shrink-0 overflow-hidden rounded border-2 ${i === index ? "border-blue-400" : "border-transparent"}`}
-            aria-label={`View photo ${i + 1}`}
-          >
-            <img src={url} alt="" className="h-full w-full object-cover" />
-          </button>
-        ))}
-      </div>
-      <div className="pb-3 text-center text-[11px] text-white/60">
-        360° rotation is shown only when the vehicle feed supplies a real 360° image sequence.
-      </div>
-    </div>
-  );
-}
-
 function SearchPage() {
   const params = Route.useSearch();
   const navigate = useNavigate({ from: "/search" });
   const { data: allVehicles = [], isLoading, isError } = useQuery(allVehiclesQuery());
+  const { data: settings } = useQuery(siteSettingsQuery());
   const [filters, setFilters] = useState<Filters>(params);
   const [mobileFilters, setMobileFilters] = useState(false);
-  const [gallery, setGallery] = useState<{ vehicle: VehicleWithPhotos; index: number } | null>(null);
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [onlySaved, setOnlySaved] = useState(false);
   useEffect(() => {
@@ -520,16 +263,20 @@ function SearchPage() {
       setSavedIds([]);
     }
   }, []);
-  const toggleSaved = useCallback((id: string) => {
-    setSavedIds((old) => {
-      const next = old.includes(id) ? old.filter((v) => v !== id) : [...old, id];
+  useEffect(() => {
+    const sync = () => {
       try {
-        localStorage.setItem("mycar-saved-vehicles", JSON.stringify(next));
+        setSavedIds(JSON.parse(localStorage.getItem("mycar-saved-vehicles") || "[]"));
       } catch {
-        /* private browsing */
+        setSavedIds([]);
       }
-      return next;
-    });
+    };
+    window.addEventListener("storage", sync);
+    window.addEventListener("focus", sync);
+    return () => {
+      window.removeEventListener("storage", sync);
+      window.removeEventListener("focus", sync);
+    };
   }, []);
   // A single source of truth for shareable filters, back/forward, and pagination.
   useEffect(() => {
@@ -904,15 +651,7 @@ function SearchPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {displayed.flatMap((vehicle, i) => {
                 const absolute = (page - 1) * PAGE_SIZE + i + 1;
-                const elements: React.ReactNode[] = [
-                  <VehicleTile
-                    key={`vehicle-${vehicle.id}`}
-                    vehicle={vehicle}
-                    saved={savedIds.includes(String(vehicle.id))}
-                    toggleSaved={toggleSaved}
-                    onGallery={(v, index) => setGallery({ vehicle: v, index })}
-                  />,
-                ];
+                const elements = [<VehicleCard key={`vehicle-${vehicle.id}`} vehicle={vehicle} settings={settings} />];
                 // Insert a conversion card in one vehicle-sized grid slot, after selected vehicles.
                 if (absolute === 6) elements.push(<Promotion key="promo-finance" type="finance" />);
                 if (absolute === 15) elements.push(<Promotion key="promo-trade" type="trade" />);
@@ -1013,14 +752,6 @@ function SearchPage() {
             </div>
           </div>
         </div>
-      )}
-      {gallery && (
-        <Gallery
-          key={String(gallery.vehicle.id)}
-          vehicle={gallery.vehicle}
-          initialIndex={gallery.index}
-          close={() => setGallery(null)}
-        />
       )}
     </div>
   );
