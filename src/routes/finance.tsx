@@ -432,7 +432,6 @@ function FinancePage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
     [inventory],
   );
-  const [featureIndex, setFeatureIndex] = useState(0);
   const [estimatorModalOpen, setEstimatorModalOpen] = useState(false);
   const [showEstimatorTab, setShowEstimatorTab] = useState(false);
   useEffect(() => {
@@ -441,30 +440,21 @@ function FinancePage() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
-  // Alternate automatically: featured car -> payment prompt -> next car.
-  // The callout stays inside the carousel, so autoplay is never blocked by a forced modal.
-  const [carouselPhase, setCarouselPhase] = useState<"vehicle" | "estimate">("vehicle");
+
+  // One continuously running interval drives BOTH the carousel and estimator prompt.
+  // Deriving the phase and vehicle index from the same tick prevents timeout stalls,
+  // dependency-reset loops and mismatched vehicle images/payment estimates.
+  const [carouselTick, setCarouselTick] = useState(0);
   useEffect(() => {
     if (featuredVehicles.length < 2 || estimatorModalOpen) return;
-    if (typeof window === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
-    const delay = carouselPhase === "vehicle" ? 3500 : 1800;
-    const timeout = window.setTimeout(() => {
-      if (document.hidden) return;
-      if (carouselPhase === "vehicle") setCarouselPhase("estimate");
-      else {
-        setFeatureIndex((i) => (i + 1) % featuredVehicles.length);
-        setCarouselPhase("vehicle");
-      }
-    }, delay);
-    return () => window.clearTimeout(timeout);
-  }, [featuredVehicles.length, carouselPhase, estimatorModalOpen, featureIndex]);
-  useEffect(() => {
-    const handleVisibility = () => {
-      if (!document.hidden) setCarouselPhase("vehicle");
-    };
-    document.addEventListener("visibilitychange", handleVisibility);
-    return () => document.removeEventListener("visibilitychange", handleVisibility);
-  }, []);
+    const timer = window.setInterval(() => {
+      if (!document.hidden) setCarouselTick((tick) => tick + 1);
+    }, 2600);
+    return () => window.clearInterval(timer);
+  }, [featuredVehicles.length, estimatorModalOpen]);
+
+  const carouselPhase = carouselTick % 2 === 0 ? "vehicle" : "estimate";
+  const featureIndex = featuredVehicles.length ? Math.floor(carouselTick / 2) % featuredVehicles.length : 0;
   function displayPhoto(v: (typeof inventory)[number] | undefined) {
     if (!v) return undefined;
     return [...(v.vehicle_photos ?? [])]
@@ -1137,35 +1127,29 @@ function FinancePage() {
         </DialogContent>
       </Dialog>
 
-      {/* CARVANA REFERENCE REVIEWS — attribute accurately, never claim My Car customers */}
+      {/* AUTHENTIC MY CAR GOOGLE REVIEWS */}
       <section className="bg-white px-5 py-16 sm:py-20">
         <div className="mx-auto max-w-5xl">
           <h2 className="text-center text-3xl font-extrabold tracking-tight text-[#0a2946]">
             Real customers. Real Reviews. Real Happy.
           </h2>
-
+          <p className="mt-3 text-center text-sm text-slate-500">What customers are saying about My Car on Google</p>
           <div className="mt-10 grid gap-5 md:grid-cols-3">
             {[
               {
                 quote:
-                  "The whole process was very smooth [from] applying, to selecting the car we wanted. I really liked how clear and accurate the monthly payment would be.",
-                name: "Brian S.",
-                location: "GA",
-                date: "July 2025",
+                  "Amazing Experience. They went above and beyond to get us approved at the very end of the day! We were desperate to find a car asap. They made it so easy. We came to them before deciding to go home, it was the end of the day. Unsure if we would even be approved. They made it happen and their attitude was so upbeat for as stressed as we were when we came in. They will make it happen for you. Their kindness and understanding was so genuine and appreciated. I highly recommend, if you are looking to buy a car please check these guys out. Very honest, Very helpful, Very Affordable. With good clean quality cars in the lot.",
+                name: "Shannon Cook",
               },
               {
                 quote:
-                  "This is my second purchase and this time I had a trade in that had negative equity. The dealerships shamed me for this, but not Carvana! I received the best offer for my trade...Carvana is a game changer and THE best option to purchase a car.",
-                name: "Catrice B.",
-                location: "CA",
-                date: "July 2025",
+                  "I've been trying to get a vehicle for a while I did the credit application and I don't have the best of credit but they help me two weeks later I was driving off the lot the was very professional and mechanic team made sure nothing was wrong with the car I'll refer anyone to them",
+                name: "michael Thomas",
               },
               {
                 quote:
-                  "This entire process was so easy and helpful! They let you determine how much you can afford a month and then present vehicles to you in that range. ZERO hassle. All the numbers are there for you to make the right financial decision for yourself!",
-                name: "Keith K.",
-                location: "TX",
-                date: "January 2024",
+                  "Ty and Rory were very nice and helpful. All it took was a little patience and I got the car that I’ve wanted for years at a great deal. I didn’t have the most money or the best of credit but they made it happen for me.",
+                name: "Andre Williams",
               },
             ].map((review) => (
               <figure
@@ -1174,13 +1158,13 @@ function FinancePage() {
               >
                 <div className="flex gap-1 text-amber-500" role="img" aria-label="5 out of 5 stars">
                   {Array.from({ length: 5 }, (_, i) => (
-                    <Star key={i} className="h-4 w-4 fill-current" />
+                    <Star key={i} className="h-4 w-4 fill-current" aria-hidden="true" />
                   ))}
                 </div>
                 <blockquote className="mt-4 flex-1 text-sm leading-7 text-slate-700">“{review.quote}”</blockquote>
                 <figcaption className="mt-6 border-t border-slate-100 pt-4 text-xs text-slate-600">
-                  <span className="font-bold text-[#0a2946]">{review.name}</span> from {review.location}
-                  <span className="mt-1 block">{review.date} · Carvana customer</span>
+                  <span className="font-bold text-[#0a2946]">{review.name}</span>
+                  <span className="mt-1 block">Google review · My Car Business Services LLC</span>
                 </figcaption>
               </figure>
             ))}
