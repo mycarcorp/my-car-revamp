@@ -3,10 +3,9 @@ import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useState } from "react";
 import { ArrowRight, CalendarCheck, Car, CreditCard, History, RefreshCcw, Search, Tag, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { VehicleCard } from "@/components/VehicleCard";
+import { VehicleCard, vehicleMedia } from "@/components/VehicleCard";
 import { ctaButtonClass } from "@/lib/ui";
 import { allVehiclesQuery, type SiteSettings, type VehicleWithPhotos } from "@/lib/queries";
-import { vehicleMedia } from "@/lib/vehicle-media";
 import {
   beginVisit,
   clearProfile,
@@ -92,7 +91,7 @@ export function ReturningHero({ summary }: { summary: InterestSummary }) {
   const lead = summary.ranked[0];
   const vehicleFirst = lead === "vehicle" && top;
   const msg = MESSAGES[(lead && lead !== "vehicle" ? lead : "shopping") as keyof typeof MESSAGES];
-  const photo = top ? vehicleMedia(top).find((m) => m.type !== "video")?.url : undefined;
+  const photo = top ? vehicleMedia(top).find((m) => (m as { type?: string }).type !== "video")?.url : undefined;
 
   return (
     <section className="relative isolate overflow-hidden bg-[#07111b]">

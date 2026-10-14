@@ -187,6 +187,9 @@ function SellPage() {
   const [heroError, setHeroError] = useState("");
   const [formOpen, setFormOpen] = useState(false);
   const [intent, setIntent] = useState<Intent>("sell");
+  useEffect(() => {
+    if (intent === "trade") trackEvent("trade_intent");
+  }, [intent]);
   const [customerName, setCustomerName] = useState("");
   const [customerEmail, setCustomerEmail] = useState("");
   const [customerPhone, setCustomerPhone] = useState("");
