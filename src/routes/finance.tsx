@@ -828,7 +828,7 @@ function FinancePage() {
               {featuredVehicles.length ? (
                 [-1, 0, 1].map((offset) => {
                   const item =
-                    featuredVehicles[(featureIndex + offset + featuredVehicles.length) % featuredVehicles.length];
+                    featuredVehicles[(featureIndex + offset + featuredVehicles.length) % featuredVehicles.length]!;
                   const photo = displayPhoto(item);
                   return (
                     <div
