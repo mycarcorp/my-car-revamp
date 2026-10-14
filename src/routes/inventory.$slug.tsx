@@ -785,9 +785,6 @@ function VehicleDetail() {
               <section className="pb-10 pt-7">
                 <div className="overflow-hidden rounded-2xl bg-[#f4f6f9]">
                   <div className="px-5 pt-8 text-center sm:px-9">
-                    <p className="text-[11px] font-bold uppercase tracking-[0.24em] text-[#ee991f]">
-                      Get to know your next car
-                    </p>
                     <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-[#123a5b] sm:text-3xl">
                       Why You’ll Love This {v.model}
                     </h2>
