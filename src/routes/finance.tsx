@@ -728,39 +728,41 @@ function FinancePage() {
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(FINANCE_FAQ_SCHEMA) }} />
       {/* CARVANA-INSPIRED FINANCING HERO — My Car branding and qualified claims */}
       <section className="relative overflow-hidden bg-white pb-10 sm:pb-16">
-        <div className="absolute inset-x-0 top-0 h-[240px] bg-[#082846] sm:h-[310px]" />
-        <div className="absolute inset-x-0 top-0 h-[240px] bg-[linear-gradient(145deg,#0869b8_0%,#064980_36%,#082846_36%,#082846_100%)] sm:h-[310px]" />
-        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-5 pt-10 sm:pt-14 lg:grid-cols-[1.1fr_.9fr] lg:gap-12">
-          <div className="relative flex min-h-[245px] items-end justify-center sm:min-h-[310px]">
-            {heroPhoto ? (
-              <img
-                src={heroPhoto}
-                alt={heroVehicle ? vehicleTitle(heroVehicle) : "Vehicle available at My Car"}
-                className="relative z-10 h-[245px] w-full object-contain drop-shadow-[0_22px_22px_rgba(0,0,0,.2)] sm:h-[310px]"
-              />
-            ) : (
-              <div className="relative z-10 flex h-[245px] w-full items-center justify-center text-white/70">
-                <CarFront className="h-32 w-32" />
-              </div>
-            )}
-            <div className="absolute left-1 top-2 z-20 rounded-xl border border-white/40 bg-[#123d66]/85 px-4 py-3 text-white shadow-xl backdrop-blur-sm sm:left-8">
-              <span className="block text-[11px] font-semibold">Payment planning</span>
-              <span className="mt-1 block text-lg font-bold">Explore your options</span>
+        <div className="absolute inset-x-0 top-0 h-[260px] overflow-hidden bg-[#0b2a4a] sm:h-[340px] lg:h-[380px]">
+          <div className="absolute -left-24 top-0 h-full w-[60%] skew-x-[-22deg] bg-[#0e3a66]" />
+          <div className="absolute left-[30%] top-0 h-full w-[22%] skew-x-[-22deg] bg-[#123f70]/70" />
+          <div className="absolute -right-10 bottom-0 h-[55%] w-[38%] skew-x-[-22deg] bg-[#0a2340]" />
+        </div>
+        <div className="relative mx-auto grid max-w-6xl items-center gap-8 px-5 pt-8 sm:pt-12 lg:grid-cols-[1.25fr_.75fr] lg:gap-10">
+          <div className="relative flex min-h-[260px] items-end justify-center sm:min-h-[380px]">
+            <div className="absolute bottom-3 left-1/2 h-8 w-[78%] -translate-x-1/2 rounded-[50%] bg-black/25 blur-xl" />
+            <img
+              src={financeHeroCar}
+              alt="White sedan available to finance at My Car"
+              width={1536}
+              height={864}
+              className="animate-in fade-in slide-in-from-left-8 relative z-10 w-full max-w-[640px] object-contain duration-700 drop-shadow-[0_25px_25px_rgba(0,0,0,.22)] lg:translate-y-10"
+            />
+            <div className="animate-in fade-in zoom-in-95 absolute left-2 top-4 z-20 rounded-xl bg-white px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,.18)] delay-300 duration-700 sm:left-6 sm:top-8">
+              <span className="block text-[11px] font-semibold text-slate-500">Est. monthly payment</span>
+              <span className="mt-0.5 block text-xl font-extrabold text-[#0a2946]">
+                {featuredEstimate !== null ? `$${Math.round(featuredEstimate).toLocaleString()}/mo*` : "Low monthly"}
+              </span>
             </div>
           </div>
-          <div className="relative z-20 rounded-xl border border-slate-200 bg-white p-7 shadow-[0_15px_45px_rgba(0,0,0,.1)] sm:p-9">
+          <div className="animate-in fade-in slide-in-from-bottom-4 relative z-20 rounded-2xl bg-white p-7 shadow-[0_18px_50px_rgba(10,41,70,.16)] duration-700 sm:p-9 lg:mt-10">
             <p className="text-xs font-semibold uppercase tracking-[.2em] text-blue-700">My Car Financing</p>
-            <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight text-[#0a2946] sm:text-4xl">
-              FINANCING FOR EVERYONE
+            <h1 className="mt-3 text-3xl font-extrabold leading-tight tracking-tight text-[#0a2946] sm:text-[2.5rem]">
+              Financing for everyone
             </h1>
             <p className="mt-3 text-sm leading-6 text-slate-600">
-              Explore financing for your next vehicle in Fredericksburg, Virginia. Apply online and our team will
-              contact you about available next steps.
+              Get pre-qualified online in minutes with no impact to your credit score, then shop cars with real
+              payments.
             </p>
             <button
               type="button"
               onClick={openFinanceModal}
-              className="mt-6 flex w-full items-center justify-center gap-2 rounded-full bg-[#086bc8] px-6 py-3 text-sm font-bold text-white transition hover:bg-[#0759a7]"
+              className="mt-6 flex w-full items-center justify-center gap-2 rounded-lg bg-[#086bc8] px-6 py-3.5 text-sm font-bold text-white transition hover:bg-[#0759a7]"
             >
               Start My Application <ArrowRight className="h-4 w-4" />
             </button>
@@ -769,10 +771,6 @@ function FinancePage() {
             </p>
           </div>
         </div>
-        <p className="relative mx-auto mt-5 max-w-5xl px-5 text-center text-[11px] text-slate-500">
-          Vehicle photos reflect current inventory when available. Payment figures depend on vehicle, application and
-          lender terms.
-        </p>
       </section>
 
       {/* CREDIT TYPES BENEFITS */}
