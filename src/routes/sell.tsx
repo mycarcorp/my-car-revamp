@@ -1,1062 +1,1073 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef, useState } from "react";
 import {
-  ArrowLeft,
   ArrowRight,
-  BadgeCheck,
-  Calculator,
-  Camera,
-  Check,
-  ChevronLeft,
-  ChevronRight,
-  ClipboardCheck,
-  Copy,
-  Fuel,
-  Gauge,
-  Heart,
-  Images,
-  Info,
-  Mail,
-  MapPin,
-  Maximize2,
-  Phone,
-  Search,
-  Share2,
-  ShieldCheck,
-  SlidersHorizontal,
-  Sparkles,
-  Star,
-  Tag,
-  X,
+  BadgeDollarSign,
   CarFront,
-  CreditCard,
-  CalendarDays,
-  CheckCircle2,
+  Check,
+  Handshake,
+  ImagePlus,
+  Plus,
+  Minus,
+  Search,
+  TrendingUp,
+  X,
+  Camera,
+  Banknote,
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
-import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { LeadForm } from "@/components/LeadForm";
-import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
-import { allVehiclesQuery, siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
+import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
+import { allVehiclesQuery, type VehicleWithPhotos } from "@/lib/queries";
 
-export const Route = createFileRoute("/inventory/$slug")({
-  head: ({ params }) => ({
+export const Route = createFileRoute("/sell")({
+  head: () => ({
     meta: [
-      { title: `Vehicle Details | My Car — Fredericksburg, VA` },
+      { title: "Sell or Trade Your Car in Fredericksburg, VA | My Car" },
       {
         name: "description",
         content:
-          "See actual vehicle photographs, equipment, specifications, pricing and availability at My Car in Fredericksburg, Virginia.",
+          "Sell or trade your vehicle with My Car in Fredericksburg, VA. Submit your plate, VIN, mileage and condition to request an offer from our team.",
       },
-      { property: "og:type", content: "product" },
+      { property: "og:title", content: "Sell or Trade Your Car | My Car" },
+      {
+        property: "og:description",
+        content:
+          "Get started with a simple online sell or trade-in request. Our team reviews your vehicle details and follows up.",
+      },
+      { property: "og:url", content: "https://mycarcorp.com/sell" },
+      { property: "og:type", content: "website" },
     ],
-    links: [{ rel: "canonical", href: `https://mycarcorp.com/inventory/${encodeURIComponent(params.slug)}` }],
+    links: [{ rel: "canonical", href: "https://mycarcorp.com/sell" }],
   }),
-  component: VehicleDetailsPage,
+  component: SellPage,
 });
 
-type Tab = "overview" | "features" | "details" | "pricing" | "reviews" | "inspection" | "more";
-type Media = { url: string; video: boolean; alt: string };
-type Inquiry = "availability" | "question";
-const TABS: { id: Tab; label: string }[] = [
-  { id: "overview", label: "Overview" },
-  { id: "features", label: "Features" },
-  { id: "details", label: "Vehicle Details" },
-  { id: "pricing", label: "Pricing" },
-  { id: "reviews", label: "Reviews" },
-  { id: "inspection", label: "Inspection" },
-  { id: "more", label: "More Cars" },
+type EntryTab = "plate" | "vin";
+type Intent = "sell" | "trade";
+type PickerTab = "matching" | "all";
+type WishList = {
+  makeModel: string;
+  minYear: string;
+  maxPrice: string;
+  maxMileage: string;
+  bodyType: string;
+};
+const EMPTY_WISH: WishList = { makeModel: "", minYear: "", maxPrice: "", maxMileage: "", bodyType: "" };
+const US_STATES = [
+  ["AL", "Alabama"],
+  ["AK", "Alaska"],
+  ["AZ", "Arizona"],
+  ["AR", "Arkansas"],
+  ["CA", "California"],
+  ["CO", "Colorado"],
+  ["CT", "Connecticut"],
+  ["DE", "Delaware"],
+  ["DC", "District of Columbia"],
+  ["FL", "Florida"],
+  ["GA", "Georgia"],
+  ["HI", "Hawaii"],
+  ["ID", "Idaho"],
+  ["IL", "Illinois"],
+  ["IN", "Indiana"],
+  ["IA", "Iowa"],
+  ["KS", "Kansas"],
+  ["KY", "Kentucky"],
+  ["LA", "Louisiana"],
+  ["ME", "Maine"],
+  ["MD", "Maryland"],
+  ["MA", "Massachusetts"],
+  ["MI", "Michigan"],
+  ["MN", "Minnesota"],
+  ["MS", "Mississippi"],
+  ["MO", "Missouri"],
+  ["MT", "Montana"],
+  ["NE", "Nebraska"],
+  ["NV", "Nevada"],
+  ["NH", "New Hampshire"],
+  ["NJ", "New Jersey"],
+  ["NM", "New Mexico"],
+  ["NY", "New York"],
+  ["NC", "North Carolina"],
+  ["ND", "North Dakota"],
+  ["OH", "Ohio"],
+  ["OK", "Oklahoma"],
+  ["OR", "Oregon"],
+  ["PA", "Pennsylvania"],
+  ["RI", "Rhode Island"],
+  ["SC", "South Carolina"],
+  ["SD", "South Dakota"],
+  ["TN", "Tennessee"],
+  ["TX", "Texas"],
+  ["UT", "Utah"],
+  ["VT", "Vermont"],
+  ["VA", "Virginia"],
+  ["WA", "Washington"],
+  ["WV", "West Virginia"],
+  ["WI", "Wisconsin"],
+  ["WY", "Wyoming"],
+] as const;
+
+const FAQS: { q: string; a: string }[] = [
+  {
+    q: "How do I sell my car to My Car?",
+    a: "Enter your license plate, VIN or vehicle details and complete the short request. Our team reviews the information and contacts you about valuation and next steps.",
+  },
+  {
+    q: "Can I sell my car without buying a vehicle from My Car?",
+    a: "You can select Sell My Vehicle without choosing a replacement. Our team will review the request and discuss available options.",
+  },
+  {
+    q: "How do I trade in my current vehicle?",
+    a: "Select Trade My Vehicle, provide details about your current car and optionally choose a vehicle from our available inventory. We will review the trade-in information with you.",
+  },
+  {
+    q: "How is the value of my car determined?",
+    a: "An offer may take into account the vehicle's year, make, model, trim, mileage, condition, title status, market demand and an inspection. The online form requests information; it does not generate an automated guaranteed offer.",
+  },
+  {
+    q: "What documents do I need to sell or trade my car?",
+    a: "Typically, you'll need valid identification, registration, title or lender information if financed, and any keys or relevant records. Our team will confirm which documents apply to your situation.",
+  },
+  {
+    q: "Can I sell my car if I still owe money on it?",
+    a: "You can still submit a request for a financed vehicle. Provide the title/lien information; our team can review the payoff situation and explain your options.",
+  },
+  {
+    q: "Can I trade in a vehicle with negative equity?",
+    a: "You can request a trade-in review even if your payoff may be higher than the vehicle's value. Whether a deal is possible depends on your vehicle, lender payoff and financing terms.",
+  },
+  {
+    q: "Will you buy my vehicle if it has damage or high mileage?",
+    a: "You're welcome to submit the vehicle details and accurately describe its condition. Our team will determine whether an offer is possible.",
+  },
+  {
+    q: "Is the offer guaranteed from the information I enter?",
+    a: "No. A submitted request is not an instant binding offer. Final figures, if offered, may depend on verification of vehicle information, title and condition.",
+  },
+  {
+    q: "How and when would I get paid?",
+    a: "Payment method and timing depend on the agreed transaction and verification of ownership or lien payoff. Our team will explain the process before you finalize.",
+  },
+  {
+    q: "Can I use my trade-in toward any vehicle in My Car inventory?",
+    a: "You can browse available inventory and select cars you like while submitting your trade request. Availability, vehicle pricing and deal terms are confirmed by the team.",
+  },
 ];
-const PHONE = "(540) 426-3322";
-const PHONE_LINK = "tel:+15404263322";
-const SAVED_KEY = "mycar-saved-vehicles";
-const s = (v: unknown): string => (v == null ? "" : String(v));
-const words = (v: unknown) => s(v).trim();
-const obj = (v: unknown): Record<string, unknown> => (v && typeof v === "object" ? (v as Record<string, unknown>) : {});
-function getMedia(vehicle: VehicleWithPhotos): Media[] {
-  const raw = obj(vehicle);
-  const entries: unknown[] = [];
-  for (const field of ["vehicle_photos", "photos", "images", "gallery", "vehicle_images"]) {
-    if (Array.isArray(raw[field])) entries.push(...(raw[field] as unknown[]));
-  }
-  for (const field of ["primary_photo_url", "primary_image_url", "image_url", "photo_url", "cover_image_url"]) {
-    if (raw[field]) entries.push(raw[field]);
-  }
-  entries.sort(
-    (a, b) => Number(obj(a).position ?? obj(a).sort_order ?? 999) - Number(obj(b).position ?? obj(b).sort_order ?? 999),
-  );
-  const seen = new Set<string>();
-  return entries.flatMap((item) => {
-    const data = obj(item);
-    let url =
-      typeof item === "string"
-        ? item
-        : words(data.url ?? data.photo_url ?? data.image_url ?? data.public_url ?? data.src);
-    if (!url || /^javascript:|^data:/i.test(url)) return [];
-    if (url.startsWith("//")) url = `https:${url}`;
-    else if (!/^https?:\/\//i.test(url) && !url.startsWith("/")) url = `/${url}`;
-    if (seen.has(url)) return [];
-    seen.add(url);
-    return [
-      {
-        url,
-        video: /\.(mp4|webm|mov)(\?|$)/i.test(url),
-        alt: words(data.alt ?? data.alt_text) || vehicleTitle(vehicle),
-      },
-    ];
-  });
+
+function digits(value: string, max?: number) {
+  const s = value.replace(/\D/g, "");
+  return max ? s.slice(0, max) : s;
 }
-function num(v: unknown, fallback = 0) {
-  const n = Number(v);
-  return Number.isFinite(n) ? n : fallback;
+function phoneFormat(value: string) {
+  const s = digits(value, 10);
+  if (s.length <= 3) return s ? `(${s}` : "";
+  if (s.length <= 6) return `(${s.slice(0, 3)}) ${s.slice(3)}`;
+  return `(${s.slice(0, 3)}) ${s.slice(3, 6)}-${s.slice(6)}`;
 }
-function cash(v: number) {
-  return formatUsd(Math.max(0, Math.round(v)));
+function vehiclePhoto(vehicle: VehicleWithPhotos) {
+  return [...(vehicle.vehicle_photos ?? [])].sort((a, b) => a.position - b.position)[0]?.url;
 }
-function getSaved(): string[] {
-  try {
-    const value = JSON.parse(localStorage.getItem(SAVED_KEY) || "[]");
-    return Array.isArray(value) ? value.map(String) : [];
-  } catch {
-    return [];
-  }
+function numeric(text: string) {
+  const n = Number(text.replace(/[^0-9.]/g, ""));
+  return Number.isFinite(n) ? n : 0;
 }
-function Spec({ label, value }: { label: string; value: unknown }) {
-  return (
-    <div className="flex items-start justify-between gap-4 border-b border-slate-200 py-3 text-sm">
-      <dt className="text-slate-500">{label}</dt>
-      <dd className="max-w-[65%] text-right font-semibold text-[#142f4c]">{words(value) || "—"}</dd>
-    </div>
-  );
-}
-function VehicleDetailsPage() {
-  const { slug } = Route.useParams();
-  const { data: vehicles = [], isLoading, isError } = useQuery(allVehiclesQuery());
-  const { data: settings } = useQuery(siteSettingsQuery());
-  const vehicle = useMemo(() => vehicles.find((v) => v.slug === slug), [vehicles, slug]);
-  const media = useMemo(() => (vehicle ? getMedia(vehicle) : []), [vehicle]);
-  const images = useMemo(() => media.filter((m) => !m.video), [media]);
-  const [photoIndex, setPhotoIndex] = useState(0);
-  const [galleryOpen, setGalleryOpen] = useState(false);
-  const [galleryTab, setGalleryTab] = useState<"all" | "exterior" | "interior">("all");
-  const [activeTab, setActiveTab] = useState<Tab>("overview");
-  const [saved, setSaved] = useState(false);
-  const [inquiry, setInquiry] = useState<Inquiry | null>(null);
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [phone, setPhone] = useState("");
+
+function SellPage() {
+  const [entryTab, setEntryTab] = useState<EntryTab>("plate");
+  const [plate, setPlate] = useState("");
+  const [plateState, setPlateState] = useState("VA");
+  const [vin, setVin] = useState("");
+  const [heroError, setHeroError] = useState("");
+  const [formOpen, setFormOpen] = useState(false);
+  const [intent, setIntent] = useState<Intent>("sell");
+  const [customerName, setCustomerName] = useState("");
+  const [customerEmail, setCustomerEmail] = useState("");
+  const [customerPhone, setCustomerPhone] = useState("");
+  const [customerAddress, setCustomerAddress] = useState("");
+  const [ymm, setYmm] = useState("");
+  const [mileage, setMileage] = useState("");
+  const [zip, setZip] = useState("");
+  const [condition, setCondition] = useState("good");
+  const [titleStatus, setTitleStatus] = useState("clean");
   const [message, setMessage] = useState("");
-  const [downPayment, setDownPayment] = useState(0);
-  const [term, setTerm] = useState(72);
-  const [apr, setApr] = useState(8.9);
-  const [copied, setCopied] = useState(false);
-  const [brokenImages, setBrokenImages] = useState<string[]>([]);
-  const formRef = useRef<HTMLDivElement>(null);
-  const tabsRef = useRef<HTMLDivElement>(null);
-  const sections = useRef<Record<string, HTMLElement | null>>({});
+  const [photoNames, setPhotoNames] = useState<string[]>([]);
+  const [wish, setWish] = useState<WishList>(EMPTY_WISH);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [pickerTab, setPickerTab] = useState<PickerTab>("all");
+  const [pickerSearch, setPickerSearch] = useState("");
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [openFaq, setOpenFaq] = useState<number | null>(null);
+  const leadScope = useRef<HTMLDivElement>(null);
 
-  useEffect(() => {
-    setPhotoIndex(0);
-    setActiveTab("overview");
-    setBrokenImages([]);
-  }, [slug]);
-  useEffect(() => {
-    if (vehicle) setSaved(getSaved().includes(String(vehicle.id)));
-  }, [vehicle?.id]);
-  useEffect(() => {
-    if (!settings) return;
-    const fromSite = num(settings.finance_apr, 8.9);
-    if (fromSite >= 0 && fromSite <= 40) setApr(fromSite);
-    setTerm(Math.max(12, Math.min(96, num(settings.finance_term_months, 72))));
-  }, [settings]);
-  useEffect(() => {
-    if (!inquiry || !formRef.current) return;
-    const scope = formRef.current;
-    for (const [label, value] of [
-      ["Full name", name],
-      ["Email", email],
-      ["Phone", phone],
-    ]) {
-      const target = Array.from(scope.querySelectorAll("label")).find(
-        (el) => el.textContent?.trim().toLowerCase() === label.toLowerCase(),
-      );
-      if (!target) continue;
-      const id = target.getAttribute("for");
-      const input = id
-        ? (document.getElementById(id) as HTMLInputElement | null)
-        : (target.parentElement?.querySelector("input") as HTMLInputElement | null);
-      if (input && input.value !== value) {
-        Object.getOwnPropertyDescriptor(HTMLInputElement.prototype, "value")?.set?.call(input, value);
-        input.dispatchEvent(new Event("input", { bubbles: true }));
-        input.dispatchEvent(new Event("change", { bubbles: true }));
-      }
-      if (target.parentElement) (target.parentElement as HTMLElement).style.display = "none";
-    }
-  }, [inquiry, name, email, phone]);
-
-  useEffect(() => {
-    if (!galleryOpen) return;
-    const key = (event: KeyboardEvent) => {
-      if (event.key === "ArrowRight") setPhotoIndex((i) => (images.length ? (i + 1) % images.length : 0));
-      if (event.key === "ArrowLeft")
-        setPhotoIndex((i) => (images.length ? (i - 1 + images.length) % images.length : 0));
-    };
-    window.addEventListener("keydown", key);
-    return () => window.removeEventListener("keydown", key);
-  }, [galleryOpen, images.length]);
-
-  useEffect(() => {
-    const watcher = new IntersectionObserver(
-      (entries) => {
-        const visible = entries
-          .filter((e) => e.isIntersecting)
-          .sort((a, b) => b.intersectionRatio - a.intersectionRatio)[0];
-        if (visible) setActiveTab(visible.target.id.replace("vdp-", "") as Tab);
-      },
-      { rootMargin: "-135px 0px -52% 0px", threshold: [0, 0.1, 0.4] },
-    );
-    for (const el of Object.values(sections.current)) if (el) watcher.observe(el);
-    return () => watcher.disconnect();
-  }, [vehicle?.id]);
-
-  function navigateTab(tab: Tab) {
-    setActiveTab(tab);
-    const el = sections.current[tab];
-    if (el) el.scrollIntoView({ behavior: "smooth", block: "start" });
-  }
-  function toggleSaved() {
-    if (!vehicle) return;
-    const id = String(vehicle.id);
-    const previous = getSaved();
-    const next = previous.includes(id) ? previous.filter((x) => x !== id) : [...previous, id];
-    localStorage.setItem(SAVED_KEY, JSON.stringify(next));
-    setSaved(next.includes(id));
-    window.dispatchEvent(new Event("mycar-favorites-changed"));
-  }
-  async function share() {
-    if (!vehicle) return;
-    const url = window.location.href;
-    try {
-      if (navigator.share) await navigator.share({ title: vehicleTitle(vehicle), url });
-      else {
-        await navigator.clipboard.writeText(url);
-        setCopied(true);
-        window.setTimeout(() => setCopied(false), 2200);
-      }
-    } catch {
-      /* Dismissed share sheet */
-    }
-  }
-  function movePhoto(n: number) {
-    setPhotoIndex((i) => (images.length ? (i + n + images.length) % images.length : 0));
-  }
-
-  if (isLoading)
-    return (
-      <main className="mx-auto max-w-7xl px-5 py-24 text-center text-slate-500">Loading vehicle information…</main>
-    );
-  if (isError || !vehicle)
-    return (
-      <main className="mx-auto max-w-5xl px-5 py-24 text-center">
-        <CarFront className="mx-auto mb-5 size-12 text-slate-400" />
-        <h1 className="text-3xl font-bold">Vehicle not found</h1>
-        <p className="mt-3 text-slate-500">This vehicle may no longer be listed. Browse our current inventory.</p>
-        <Link to="/search" className="mt-6 inline-flex rounded-full bg-[#086ac8] px-7 py-3 font-semibold text-white">
-          Browse inventory
-        </Link>
-      </main>
-    );
-
-  const title = vehicleTitle(vehicle);
-  const price = num(vehicle.price_cents);
-  const oldPrice = num(vehicle.prior_price_cents);
-  const discounted = oldPrice > price && price > 0;
-  const down = Math.min(price / 100, Math.max(0, downPayment));
-  const monthly =
-    price > 0
-      ? monthlyPayment(price, { apr, termMonths: term, downPercent: price > 0 ? (down * 10000) / price : 0 })
-      : 0;
-  const features = Array.isArray(vehicle.features) ? vehicle.features.filter(Boolean) : [];
-  const specs: [string, unknown][] = [
-    ["VIN", vehicle.vin],
-    ["Stock number", vehicle.stock_number],
-    ["Mileage", formatMiles(vehicle.mileage)],
-    ["Body style", vehicle.body_style],
-    ["Exterior color", vehicle.exterior_color],
-    ["Interior color", vehicle.interior_color],
-    ["Transmission", vehicle.transmission],
-    ["Drivetrain", vehicle.drivetrain],
-    ["Fuel type", vehicle.fuel_type],
-    ["Engine", vehicle.engine],
-  ];
-  const raw = obj(vehicle);
-  for (const [label, key] of [
-    ["City MPG", "mpg_city"],
-    ["Highway MPG", "mpg_highway"],
-    ["Combined MPG", "mpg_combined"],
-  ]) {
-    if (raw[key] !== undefined && raw[key] !== null) specs.push([label, raw[key]]);
-  }
-  const recommended = vehicles
-    .filter((v) => v.id !== vehicle.id && (v.status === "available" || v.status === "pending"))
-    .sort((a, b) => Number(a.make !== vehicle.make) - Number(b.make !== vehicle.make))
-    .slice(0, 4);
-  const galleryImages = images.filter((m) => !brokenImages.includes(m.url));
-  const currentImage = galleryImages[Math.min(photoIndex, Math.max(0, galleryImages.length - 1))];
-
-  const photo = (m: Media, className: string, loading: "eager" | "lazy" = "lazy") => (
-    <img
-      src={m.url}
-      alt={m.alt}
-      loading={loading}
-      onError={() => {
-        setBrokenImages((p) => [...p, m.url]);
-        setPhotoIndex(0);
-      }}
-      className={className}
-    />
+  const { data: allVehicles = [], isLoading: inventoryLoading } = useQuery(allVehiclesQuery());
+  const inventory = useMemo(
+    () => allVehicles.filter((v) => v.status === "available" || v.status === "pending"),
+    [allVehicles],
   );
+  const selectedVehicles = useMemo(() => inventory.filter((v) => selectedIds.includes(v.id)), [inventory, selectedIds]);
+  const options = useMemo(
+    () => ({
+      names: [...new Set(inventory.map((v) => `${v.make} ${v.model}`))].sort(),
+      bodies: [...new Set(inventory.map((v) => v.body_style).filter((v): v is string => Boolean(v)))].sort(),
+    }),
+    [inventory],
+  );
+  const matchingVehicles = useMemo(
+    () =>
+      inventory.filter((v) => {
+        const has = Object.values(wish).some(Boolean);
+        if (!has) return false;
+        if (
+          wish.makeModel &&
+          !`${v.make} ${v.model} ${v.trim ?? ""}`.toLowerCase().includes(wish.makeModel.toLowerCase())
+        )
+          return false;
+        if (wish.minYear && v.year < numeric(wish.minYear)) return false;
+        if (wish.maxPrice && Number(v.price_cents) / 100 > numeric(wish.maxPrice)) return false;
+        if (wish.maxMileage && v.mileage > numeric(wish.maxMileage)) return false;
+        if (wish.bodyType && !(v.body_style ?? "").toLowerCase().includes(wish.bodyType.toLowerCase())) return false;
+        return true;
+      }),
+    [inventory, wish],
+  );
+  const pickerVehicles = useMemo(() => {
+    const source = pickerTab === "matching" ? matchingVehicles : inventory;
+    const q = pickerSearch.trim().toLowerCase();
+    return !q
+      ? source
+      : source.filter((v) =>
+          [v.year, v.make, v.model, v.trim, v.vin, v.stock_number].join(" ").toLowerCase().includes(q),
+        );
+  }, [pickerTab, pickerSearch, inventory, matchingVehicles]);
+
+  // Keep the established LeadForm's contact fields in sync without replacing its API/submission pipeline.
+  useEffect(() => {
+    if (!formOpen) return;
+    const scope = leadScope.current;
+    if (!scope) return;
+    const contacts = [
+      { label: "Full name", value: customerName },
+      { label: "Email", value: customerEmail },
+      { label: "Phone", value: phoneFormat(customerPhone) },
+    ];
+    contacts.forEach(({ label, value }) => {
+      const labelNode = Array.from(scope.querySelectorAll("label"))
+        .filter((el) => el.textContent?.trim().toLowerCase() === label.toLowerCase())
+        .at(-1);
+      if (!labelNode) return;
+      const fieldId = labelNode.getAttribute("for");
+      const field = fieldId
+        ? scope.querySelector<HTMLInputElement | HTMLTextAreaElement>(`#${CSS.escape(fieldId)}`)
+        : labelNode.parentElement?.querySelector<HTMLInputElement | HTMLTextAreaElement>("input,textarea");
+      if (field && field.value !== value) {
+        const proto = field instanceof HTMLTextAreaElement ? HTMLTextAreaElement.prototype : HTMLInputElement.prototype;
+        Object.getOwnPropertyDescriptor(proto, "value")?.set?.call(field, value);
+        field.dispatchEvent(new Event("input", { bubbles: true }));
+        field.dispatchEvent(new Event("change", { bubbles: true }));
+      }
+      if (labelNode.parentElement) labelNode.parentElement.style.display = "none";
+    });
+  }, [formOpen, customerName, customerEmail, customerPhone]);
+
+  function startOffer(nextIntent: Intent = "sell") {
+    setIntent(nextIntent);
+    setHeroError("");
+    setFormOpen(true);
+  }
+  function submitHero(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (entryTab === "plate" && (!plate.trim() || !plateState)) {
+      setHeroError("Enter your license plate and state to continue.");
+      return;
+    }
+    if (entryTab === "vin" && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin.trim().toUpperCase())) {
+      setHeroError("Enter a valid 17-character VIN to continue.");
+      return;
+    }
+    startOffer("sell");
+  }
+  function toggleVehicle(id: string) {
+    setSelectedIds((ids) => (ids.includes(id) ? ids.filter((v) => v !== id) : [...ids, id]));
+  }
 
   return (
-    <main className="min-h-screen bg-white pb-20 text-[#142f4c] md:pb-0">
-      <div className="mx-auto max-w-[1240px] px-4 pb-8 pt-5 sm:px-6 lg:px-10">
-        <div className="mb-5 flex flex-wrap items-center justify-between gap-3 text-xs">
-          <div className="flex items-center gap-1.5 text-slate-500">
-            <Link to="/search" className="hover:text-[#086ac8]">
-              Inventory
-            </Link>
-            <ChevronRight className="size-3" />
-            <span className="font-medium text-[#142f4c]">{title}</span>
-          </div>
-          <div className="flex items-center gap-2">
-            <button
-              type="button"
-              onClick={share}
-              className="inline-flex items-center gap-1 rounded-full border px-3 py-2 hover:bg-slate-50"
-            >
-              <Share2 className="size-3.5" />
-              {copied ? "Copied" : "Share"}
-            </button>
-            <button
-              type="button"
-              onClick={toggleSaved}
-              className="inline-flex items-center gap-1 rounded-full border px-3 py-2 hover:bg-slate-50"
-            >
-              <Heart className={`size-3.5 ${saved ? "fill-red-500 text-red-500" : ""}`} />
-              {saved ? "Saved" : "Save"}
-            </button>
-          </div>
-        </div>
-
-        {/* Carvana-inspired photography mosaic. Only the photos attached to THIS VIN are used. */}
-        <div className="grid gap-4 lg:grid-cols-[minmax(0,1.6fr)_minmax(310px,0.9fr)] lg:items-start">
-          <div className="min-w-0">
-            <div className="grid grid-cols-4 grid-rows-2 gap-2 overflow-hidden rounded-2xl bg-[#f1f4f7] sm:h-[430px] lg:h-[490px]">
-              <button
-                type="button"
-                onClick={() => setGalleryOpen(true)}
-                className="group relative col-span-4 row-span-2 flex min-h-[290px] items-center justify-center bg-[#f1f4f7] sm:col-span-3"
-                aria-label="Open full vehicle photo gallery"
-              >
-                {currentImage ? (
-                  photo(
-                    currentImage,
-                    "h-full max-h-[490px] w-full object-contain transition-transform duration-500 group-hover:scale-[1.025]",
-                    "eager",
-                  )
-                ) : (
-                  <div className="flex flex-col items-center gap-2 text-slate-400">
-                    <Camera className="size-12" /> Photos coming soon
-                  </div>
-                )}
-                <span className="absolute bottom-4 left-4 inline-flex items-center gap-2 rounded-full bg-white/95 px-4 py-2 text-xs font-semibold text-[#142f4c] shadow-lg">
-                  <Images className="size-4" /> View all {galleryImages.length} photos
-                </span>
-                {galleryImages.length > 1 && (
-                  <span className="absolute bottom-4 right-4 rounded-full bg-white/95 px-3 py-2 text-xs font-semibold">
-                    {Math.min(photoIndex + 1, galleryImages.length)} / {galleryImages.length}
-                  </span>
-                )}
-              </button>
-              <div className="hidden grid-rows-2 gap-2 sm:grid">
-                {galleryImages.slice(1, 3).map((m, i) => (
-                  <button
-                    key={m.url}
-                    type="button"
-                    onClick={() => {
-                      setPhotoIndex(i + 1);
-                      setGalleryOpen(true);
-                    }}
-                    className="group relative min-h-0 overflow-hidden bg-white"
-                  >
-                    {photo(m, "h-full w-full object-cover transition-transform duration-500 group-hover:scale-110")}
-                  </button>
-                ))}
-              </div>
-            </div>
-            <div className="mt-3 flex items-center gap-2">
-              <button
-                type="button"
-                disabled={galleryImages.length < 2}
-                onClick={() => movePhoto(-1)}
-                className="flex size-10 shrink-0 items-center justify-center rounded-full border disabled:opacity-40"
-                aria-label="Previous photo"
-              >
-                <ChevronLeft className="size-5" />
-              </button>
-              <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-2" style={{ scrollbarWidth: "thin" }}>
-                {galleryImages.map((m, i) => (
-                  <button
-                    type="button"
-                    key={m.url}
-                    onClick={() => setPhotoIndex(i)}
-                    className={`h-16 w-24 shrink-0 overflow-hidden rounded-md border-2 bg-slate-50 transition ${photoIndex === i ? "border-[#086ac8] ring-1 ring-[#086ac8]" : "border-transparent hover:border-slate-300"}`}
-                  >
-                    {photo(m, "h-full w-full object-cover")}
-                  </button>
-                ))}
-              </div>
-              <button
-                type="button"
-                disabled={galleryImages.length < 2}
-                onClick={() => movePhoto(1)}
-                className="flex size-10 shrink-0 items-center justify-center rounded-full border disabled:opacity-40"
-                aria-label="Next photo"
-              >
-                <ChevronRight className="size-5" />
-              </button>
-            </div>
-          </div>
-
-          {/* Desktop booking and pricing card */}
-          <aside className="hidden lg:block lg:sticky lg:top-24">
-            <div className="rounded-2xl border border-slate-200 bg-white p-6 shadow-[0_10px_35px_rgba(15,40,65,0.07)]">
-              <div className="mb-2 flex items-center justify-between gap-2">
-                <span className="rounded-full bg-blue-50 px-3 py-1 text-[11px] font-bold text-[#086ac8]">
-                  {vehicle.status === "pending" ? "Sale pending" : "Available inventory"}
-                </span>
-                {discounted && (
-                  <span className="rounded-full bg-emerald-50 px-3 py-1 text-[11px] font-bold text-emerald-700">
-                    Price reduced
-                  </span>
-                )}
-              </div>
-              <h1 className="mt-4 text-[26px] font-extrabold leading-8 tracking-tight">{title}</h1>
-              <p className="mt-1 text-sm text-slate-500">
-                {formatMiles(vehicle.mileage)} · Stock #{vehicle.stock_number}
-              </p>
-              <div className="mt-5 flex items-end gap-3">
-                <strong className="text-4xl font-extrabold tracking-tight">{cash(price)}</strong>
-                {discounted && <span className="pb-1 text-base text-slate-400 line-through">{cash(oldPrice)}</span>}
-              </div>
-              {price > 0 && (
-                <div className="mt-4 rounded-lg bg-[#f0f5fa] p-3">
-                  <p className="text-[13px] font-bold text-[#164a7a]">Est. {cash(monthly * 100)}/mo</p>
-                  <p className="mt-1 text-[10px] leading-4 text-slate-500">
-                    Illustrative estimate at {apr}% APR for {term} months with {cash(down * 100)} down. Excludes taxes
-                    and fees. Not an offer or credit approval.
-                  </p>
-                  <button
-                    type="button"
-                    onClick={() => navigateTab("pricing")}
-                    className="mt-1 text-xs font-bold text-[#086ac8] underline underline-offset-2"
-                  >
-                    Adjust estimate
-                  </button>
-                </div>
-              )}
-              <div className="mt-5 grid gap-2">
-                <Button
-                  onClick={() => setInquiry("availability")}
-                  className="h-12 rounded-full bg-[#086ac8] font-bold text-white hover:bg-[#064f96]"
-                >
-                  Check availability <ArrowRight className="ml-2 size-4" />
-                </Button>
-                <a
-                  href={`/finance?vehicle=${encodeURIComponent(vehicle.slug)}`}
-                  className="flex h-11 items-center justify-center rounded-full border border-[#086ac8] text-sm font-bold text-[#086ac8] hover:bg-blue-50"
-                >
-                  Get pre-qualified
-                </a>
-                <a
-                  href={`/schedule?vehicle=${encodeURIComponent(vehicle.slug)}`}
-                  className="flex h-11 items-center justify-center rounded-full border text-sm font-semibold hover:bg-slate-50"
-                >
-                  Schedule a test drive
-                </a>
-                <Link
-                  to="/sell"
-                  className="flex h-11 items-center justify-center rounded-full border text-sm font-semibold hover:bg-slate-50"
-                >
-                  Value my trade
-                </Link>
-              </div>
-              <a
-                href={PHONE_LINK}
-                className="mt-5 flex items-center justify-center gap-2 text-sm font-semibold text-[#086ac8]"
-              >
-                <Phone className="size-4" />
-                {PHONE}
-              </a>
-            </div>
-          </aside>
-        </div>
-      </div>
-
-      <div
-        ref={tabsRef}
-        className="sticky top-0 z-30 border-y border-slate-200 bg-white/95 shadow-[0_5px_15px_rgba(0,0,0,0.04)] backdrop-blur lg:top-0"
-      >
-        <nav
-          aria-label="Vehicle page sections"
-          className="mx-auto flex max-w-[1240px] gap-1 overflow-x-auto px-3 sm:px-6 lg:px-10"
-          style={{ scrollbarWidth: "none" }}
-        >
-          {TABS.map((tab) => (
-            <button
-              key={tab.id}
-              type="button"
-              onClick={() => navigateTab(tab.id)}
-              className={`shrink-0 border-b-[3px] px-3 py-4 text-xs font-semibold transition sm:px-4 sm:text-sm ${activeTab === tab.id ? "border-[#086ac8] text-[#086ac8]" : "border-transparent text-slate-600 hover:text-[#086ac8]"}`}
-            >
-              {tab.label}
-            </button>
-          ))}
-        </nav>
-      </div>
-
-      <div className="mx-auto grid max-w-[1240px] gap-8 px-4 pb-20 pt-9 sm:px-6 lg:grid-cols-[minmax(0,1fr)_350px] lg:px-10">
-        <div className="min-w-0 space-y-16">
-          <section
-            id="vdp-overview"
-            ref={(el) => {
-              sections.current.overview = el;
-            }}
-            className="scroll-mt-24"
-          >
-            <div className="mb-3 flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">
-                {vehicle.year} {vehicle.make}
-              </span>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">
-                {vehicle.body_style || "Vehicle"}
-              </span>
-              <span className="rounded-full bg-slate-100 px-3 py-1 text-xs font-semibold">
-                {formatMiles(vehicle.mileage)}
-              </span>
-            </div>
-            <h2 className="text-2xl font-extrabold sm:text-3xl">Why you'll love this {vehicle.model}</h2>
-            <p className="mt-4 whitespace-pre-line text-sm leading-7 text-slate-600">
-              {words(vehicle.description) ||
-                `Discover this ${title} at My Car in Fredericksburg, Virginia. Explore the actual vehicle photos, review its listed equipment and specifications, and contact our team to verify availability or arrange a visit.`}
+    <main className="min-h-screen bg-white text-[#133656]">
+      {/* Shared site header/footer are provided by the app layout. */}
+      <section className="bg-[#10385d] text-white">
+        <div className="mx-auto grid max-w-[1100px] items-center gap-10 px-5 py-12 sm:px-8 md:grid-cols-[1fr_420px] md:gap-16 md:py-14 lg:px-12">
+          <div className="mx-auto w-full max-w-md md:mx-0">
+            <p className="mb-3 text-xs font-bold uppercase tracking-[0.14em] text-[#8bc4ff]">
+              Sell or trade with My Car
             </p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-3">
-              <div className="rounded-xl bg-[#f3f7fa] p-5">
-                <Gauge className="size-6 text-[#086ac8]" />
-                <p className="mt-3 text-xs text-slate-500">Mileage</p>
-                <p className="mt-1 font-bold">{formatMiles(vehicle.mileage)}</p>
-              </div>
-              <div className="rounded-xl bg-[#f3f7fa] p-5">
-                <Fuel className="size-6 text-[#086ac8]" />
-                <p className="mt-3 text-xs text-slate-500">Fuel type</p>
-                <p className="mt-1 font-bold">{vehicle.fuel_type || "Ask dealership"}</p>
-              </div>
-              <div className="rounded-xl bg-[#f3f7fa] p-5">
-                <CarFront className="size-6 text-[#086ac8]" />
-                <p className="mt-3 text-xs text-slate-500">Body style</p>
-                <p className="mt-1 font-bold">{vehicle.body_style || "Ask dealership"}</p>
-              </div>
-            </div>
-          </section>
-
-          <section
-            id="vdp-features"
-            ref={(el) => {
-              sections.current.features = el;
-            }}
-            className="scroll-mt-24"
-          >
-            <h2 className="text-2xl font-extrabold sm:text-3xl">Features & equipment</h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Equipment recorded for this vehicle. Confirm individual options with our team.
+            <h1 className="font-display text-[clamp(2.25rem,4.5vw,3.65rem)] font-extrabold uppercase leading-[0.99] tracking-[-0.035em]">
+              Get an offer for your car in minutes
+            </h1>
+            <p className="mt-5 text-base leading-6 text-white/95">
+              Sell or trade your car with a simple online request.
+              <br />
+              No guesswork. Clear next steps.
             </p>
-            {features.length ? (
-              <div className="mt-6 grid gap-x-7 gap-y-4 sm:grid-cols-2">
-                {features.map((f, i) => (
-                  <div key={`${f}-${i}`} className="flex items-start gap-3 text-sm">
-                    <Check className="mt-0.5 size-4 shrink-0 text-emerald-600" />
-                    <span>{f}</span>
-                  </div>
-                ))}
+          </div>
+          <form
+            onSubmit={submitHero}
+            className="rounded-[14px] bg-white p-5 text-[#173552] shadow-[0_18px_45px_rgba(0,0,0,0.12)] sm:p-6"
+          >
+            <div
+              className="grid grid-cols-2 border-b border-slate-200"
+              role="tablist"
+              aria-label="Vehicle identification"
+            >
+              <button
+                type="button"
+                role="tab"
+                aria-selected={entryTab === "plate"}
+                onClick={() => {
+                  setEntryTab("plate");
+                  setHeroError("");
+                }}
+                className={`border-b-2 pb-3 text-sm font-semibold transition ${entryTab === "plate" ? "border-[#0872cf] text-[#153c61]" : "border-transparent text-slate-500 hover:text-[#153c61]"}`}
+              >
+                License Plate
+              </button>
+              <button
+                type="button"
+                role="tab"
+                aria-selected={entryTab === "vin"}
+                onClick={() => {
+                  setEntryTab("vin");
+                  setHeroError("");
+                }}
+                className={`border-b-2 pb-3 text-sm font-semibold transition ${entryTab === "vin" ? "border-[#0872cf] text-[#153c61]" : "border-transparent text-slate-500 hover:text-[#153c61]"}`}
+              >
+                VIN
+              </button>
+            </div>
+            {entryTab === "plate" ? (
+              <div className="mt-5 grid grid-cols-[minmax(0,1fr)_112px] gap-2">
+                <Input
+                  aria-label="License plate"
+                  autoComplete="off"
+                  value={plate}
+                  onChange={(e) =>
+                    setPlate(
+                      e.target.value
+                        .toUpperCase()
+                        .replace(/[^A-Z0-9 -]/g, "")
+                        .slice(0, 12),
+                    )
+                  }
+                  placeholder="License Plate"
+                  className="h-12 rounded-md border-slate-300 text-sm"
+                />
+                <Select value={plateState} onValueChange={setPlateState}>
+                  <SelectTrigger aria-label="Plate state" className="h-12 rounded-md border-slate-300 text-sm">
+                    <SelectValue placeholder="State" />
+                  </SelectTrigger>
+                  <SelectContent className="max-h-72">
+                    {US_STATES.map(([code, name]) => (
+                      <SelectItem key={code} value={code}>
+                        {code} — {name}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
               </div>
             ) : (
-              <div className="mt-6 rounded-xl border border-slate-200 bg-slate-50 p-6 text-sm text-slate-600">
-                A full feature list isn't currently available for this listing. Call us to confirm specific equipment.
+              <div className="mt-5">
+                <Input
+                  aria-label="Vehicle identification number"
+                  value={vin}
+                  onChange={(e) =>
+                    setVin(
+                      e.target.value
+                        .toUpperCase()
+                        .replace(/[^A-HJ-NPR-Z0-9]/g, "")
+                        .slice(0, 17),
+                    )
+                  }
+                  placeholder="Enter 17-character VIN"
+                  maxLength={17}
+                  className="h-12 rounded-md border-slate-300 text-sm"
+                />
+                <p className="mt-1.5 text-xs text-slate-500">{vin.length}/17 characters</p>
               </div>
             )}
-          </section>
-
-          <section
-            id="vdp-details"
-            ref={(el) => {
-              sections.current.details = el;
-            }}
-            className="scroll-mt-24"
-          >
-            <h2 className="text-2xl font-extrabold sm:text-3xl">Vehicle details</h2>
-            <p className="mt-2 text-sm text-slate-500">Listing-specific facts and specifications.</p>
-            <dl className="mt-5 grid gap-x-8 sm:grid-cols-2">
-              {specs.map(([label, value]) => (
-                <Spec key={label} label={label} value={value} />
-              ))}
-            </dl>
-            <button
-              type="button"
-              onClick={() => setInquiry("question")}
-              className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-[#086ac8] hover:underline"
+            {heroError && (
+              <p role="alert" className="mt-2 text-xs font-medium text-red-600">
+                {heroError}
+              </p>
+            )}
+            <Button
+              type="submit"
+              className="mt-4 h-12 w-full rounded-full bg-[#0969c5] text-sm font-bold text-white hover:bg-[#0756a2]"
             >
-              Have a question about these details? <ArrowRight className="size-4" />
-            </button>
-          </section>
-
-          <section
-            id="vdp-pricing"
-            ref={(el) => {
-              sections.current.pricing = el;
-            }}
-            className="scroll-mt-24"
-          >
-            <h2 className="text-2xl font-extrabold sm:text-3xl">Pricing & payment estimate</h2>
-            <p className="mt-2 text-sm text-slate-500">
-              Explore an illustrative monthly payment. Final terms depend on credit, lender approval and applicable
-              charges.
+              Get My Offer <ArrowRight className="ml-2 size-4" />
+            </Button>
+            <p className="mt-3 text-center text-[11px] leading-4 text-slate-500">
+              No instant quote is generated. Our team reviews your request.
             </p>
-            <div className="mt-6 rounded-2xl border border-slate-200 p-5 sm:p-7">
-              <div className="flex flex-wrap items-center justify-between gap-3 border-b pb-5">
-                <div>
-                  <p className="text-xs text-slate-500">Listed vehicle price</p>
-                  <strong className="mt-1 block text-3xl">{cash(price)}</strong>
-                </div>
-                {discounted && (
-                  <div className="rounded-lg bg-emerald-50 p-3 text-sm font-bold text-emerald-700">
-                    Price drop: {cash(oldPrice - price)}
-                  </div>
-                )}
-              </div>
-              <div className="mt-6 grid gap-5 sm:grid-cols-3">
-                <div>
-                  <Label htmlFor="vdp-down" className="mb-2 block text-xs">
-                    Down payment ($)
-                  </Label>
-                  <Input
-                    id="vdp-down"
-                    type="number"
-                    inputMode="decimal"
-                    min={0}
-                    max={Math.round(price / 100)}
-                    value={downPayment}
-                    onChange={(e) =>
-                      setDownPayment(Math.min(Math.max(0, num(e.target.value)), Math.round(price / 100)))
-                    }
-                    className="h-11"
-                  />
-                </div>
-                <div>
-                  <Label htmlFor="vdp-term" className="mb-2 block text-xs">
-                    Loan term (months)
-                  </Label>
-                  <select
-                    id="vdp-term"
-                    value={term}
-                    onChange={(e) => setTerm(num(e.target.value))}
-                    className="h-11 w-full rounded-md border border-slate-200 bg-white px-3 text-sm"
-                  >
-                    {[36, 48, 60, 66, 72, 75, 84, 96].map((m) => (
-                      <option key={m} value={m}>
-                        {m} months
-                      </option>
-                    ))}
-                    {![36, 48, 60, 66, 72, 75, 84, 96].includes(term) && <option value={term}>{term} months</option>}
-                  </select>
-                </div>
-                <div>
-                  <Label htmlFor="vdp-apr" className="mb-2 block text-xs">
-                    APR (%)
-                  </Label>
-                  <Input
-                    id="vdp-apr"
-                    type="number"
-                    min={0}
-                    max={40}
-                    step={0.1}
-                    value={apr}
-                    onChange={(e) => setApr(Math.max(0, Math.min(40, num(e.target.value))))}
-                    className="h-11"
-                  />
-                </div>
-              </div>
-              <div className="mt-6 rounded-xl bg-[#f0f5fa] px-5 py-6">
-                <p className="text-sm text-slate-600">Estimated monthly payment</p>
-                <p className="mt-1 text-4xl font-extrabold text-[#086ac8]">
-                  {cash(monthly * 100)}
-                  <span className="text-base font-semibold">/mo</span>
-                </p>
-                <p className="mt-3 text-xs leading-5 text-slate-500">
-                  Illustrative only; excludes taxes, registration, documentation fees and other charges. Rates, terms
-                  and down payments may vary. Not an offer, approval or guaranteed rate.
-                </p>
-              </div>
-              <div className="mt-5 flex flex-wrap gap-3">
-                <a
-                  href={`/finance?vehicle=${encodeURIComponent(vehicle.slug)}`}
-                  className="inline-flex min-h-11 items-center rounded-full bg-[#086ac8] px-6 text-sm font-bold text-white hover:bg-[#0756a6]"
-                >
-                  Apply for financing <ArrowRight className="ml-2 size-4" />
-                </a>
-                <button
-                  type="button"
-                  onClick={() => setInquiry("availability")}
-                  className="inline-flex min-h-11 items-center rounded-full border px-6 text-sm font-semibold hover:bg-slate-50"
-                >
-                  Ask about this vehicle
-                </button>
-              </div>
-            </div>
-          </section>
+          </form>
+        </div>
+      </section>
 
-          <section
-            id="vdp-reviews"
-            ref={(el) => {
-              sections.current.reviews = el;
-            }}
-            className="scroll-mt-24"
+      <div className="mx-auto max-w-[1020px] px-5 pb-20 pt-9 sm:px-8 lg:px-12">
+        {/* Value tracker-style secondary conversion */}
+        <section className="grid items-center gap-5 rounded-xl bg-[#f3f6f9] p-5 sm:grid-cols-[130px_1fr_auto] sm:gap-7 sm:px-8 sm:py-5">
+          <div className="relative mx-auto flex h-[94px] w-[130px] items-center justify-center rounded-2xl bg-gradient-to-br from-[#e1f1ff] to-white">
+            <CarFront className="size-[76px] text-[#1d6fac]" strokeWidth={1.3} />
+            <TrendingUp className="absolute -right-1 top-1 size-6 text-[#1499e7]" />
+          </div>
+          <div>
+            <div className="flex items-center gap-1.5 text-sm font-bold text-[#136bac]">
+              <TrendingUp className="size-5" /> Vehicle Value
+            </div>
+            <h2 className="mt-1 text-lg font-bold leading-6 text-[#173552] sm:text-xl">
+              Wondering what your car is worth?
+            </h2>
+            <p className="mt-2 text-xs leading-5 text-slate-600">
+              Not ready to sell? Start with your vehicle details and explore your options.
+            </p>
+          </div>
+          <Button
+            type="button"
+            variant="outline"
+            onClick={() => startOffer("sell")}
+            className="rounded-full border-[#123f68] bg-transparent px-5 text-[#123f68] hover:bg-[#e3edf6]"
           >
-            <h2 className="text-2xl font-extrabold sm:text-3xl">Reviews</h2>
-            <p className="mt-3 text-sm leading-7 text-slate-600">
-              Customer feedback helps buyers choose confidently. We display only verified, approved My Car customer
-              reviews when available. Ask our team for recent reviews or vehicle-specific ownership information.
+            Request My Value
+          </Button>
+        </section>
+
+        {/* Carvana-like, minimalist three-step process */}
+        <section className="pt-16 sm:pt-20">
+          <h2 className="text-2xl font-bold tracking-tight">How it works</h2>
+          <p className="mt-2 text-sm text-slate-500">Start selling or trading in three simple steps.</p>
+          <div className="mt-9 grid gap-9 md:grid-cols-3 md:gap-8">
+            {[
+              {
+                Icon: BadgeDollarSign,
+                title: "Get your offer",
+                description: "Share a few details about your vehicle so our team can review your request.",
+              },
+              {
+                Icon: Handshake,
+                title: "Sell or trade",
+                description: "Sell your current vehicle or explore a trade toward one from our inventory.",
+              },
+              {
+                Icon: Banknote,
+                title: "Complete the deal",
+                description: "Review the details with our team and finalize an agreed transaction.",
+              },
+            ].map(({ Icon, title, description }) => (
+              <div key={title} className="flex items-start gap-4">
+                <Icon className="mt-0.5 size-8 shrink-0 text-[#1495ec]" strokeWidth={1.5} />
+                <div>
+                  <h3 className="text-sm font-bold">{title}</h3>
+                  <p className="mt-2 text-xs leading-5 text-slate-500">{description}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Frequently asked questions */}
+        <section className="mt-20 grid gap-9 md:grid-cols-[0.75fr_1.25fr] md:gap-14" id="sell-faq">
+          <div>
+            <h2 className="text-2xl font-bold tracking-tight">Frequently asked questions</h2>
+            <p className="mt-3 max-w-xs text-sm leading-6 text-slate-500">
+              Have questions about selling or trading your car? We’ve got you covered.
             </p>
             <a
-              href="https://www.google.com/maps/search/?api=1&query=My+Car+4720+Harrison+Road+Fredericksburg+VA"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="mt-5 inline-flex items-center gap-2 rounded-full border border-[#086ac8] px-5 py-3 text-sm font-semibold text-[#086ac8] hover:bg-blue-50"
+              href="mailto:socials@mycarcorp.com?subject=Sell%20or%20Trade%20Question"
+              className="mt-5 inline-flex min-h-9 items-center justify-center rounded-full border border-[#174368] px-4 text-xs font-semibold transition hover:bg-slate-50"
             >
-              <Star className="size-4" /> Find My Car customer reviews <ArrowRight className="size-4" />
+              Ask Us a Question
             </a>
-          </section>
-
-          <section
-            id="vdp-inspection"
-            ref={(el) => {
-              sections.current.inspection = el;
-            }}
-            className="scroll-mt-24"
-          >
-            <h2 className="text-2xl font-extrabold sm:text-3xl">Condition & inspection</h2>
-            <p className="mt-3 text-sm leading-7 text-slate-600">
-              See the actual vehicle gallery above, including available interior and exterior photos. Inspection
-              documents, vehicle-history reports and warranty details should be obtained directly from My Car when
-              available.
-            </p>
-            <div className="mt-6 grid gap-3 sm:grid-cols-2">
-              <div className="flex gap-3 rounded-xl border p-5">
-                <ShieldCheck className="size-7 shrink-0 text-[#086ac8]" />
-                <div>
-                  <h3 className="font-bold">Vehicle condition</h3>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    Ask about any visible cosmetic wear, mechanical inspection findings and service history.
-                  </p>
-                </div>
-              </div>
-              <div className="flex gap-3 rounded-xl border p-5">
-                <ClipboardCheck className="size-7 shrink-0 text-[#086ac8]" />
-                <div>
-                  <h3 className="font-bold">Vehicle history</h3>
-                  <p className="mt-2 text-xs leading-5 text-slate-500">
-                    Request an available vehicle-history report from our team. No inspection or history claims are made
-                    without records.
-                  </p>
-                </div>
-              </div>
-            </div>
-            <button
-              type="button"
-              onClick={() => setInquiry("question")}
-              className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-[#086ac8] hover:underline"
-            >
-              Request inspection or history details <ArrowRight className="size-4" />
-            </button>
-          </section>
-
-          <section
-            id="vdp-more"
-            ref={(el) => {
-              sections.current.more = el;
-            }}
-            className="scroll-mt-24"
-          >
-            <div className="flex flex-wrap items-end justify-between gap-3">
-              <div>
-                <h2 className="text-2xl font-extrabold sm:text-3xl">More cars you might like</h2>
-                <p className="mt-2 text-sm text-slate-500">Other listings from the current My Car inventory.</p>
-              </div>
-              <Link to="/search" className="text-sm font-bold text-[#086ac8] hover:underline">
-                Shop all cars <ArrowRight className="inline size-4" />
-              </Link>
-            </div>
-            {recommended.length ? (
-              <div className="mt-6 grid gap-4 sm:grid-cols-2">
-                {recommended.map((v) => {
-                  const cover = getMedia(v).find((m) => !m.video);
-                  return (
-                    <Link
-                      key={v.id}
-                      to="/inventory/$slug"
-                      params={{ slug: v.slug }}
-                      className="group overflow-hidden rounded-xl border border-slate-200 transition hover:-translate-y-1 hover:shadow-md"
-                    >
-                      <div className="flex h-44 items-center justify-center bg-[#f0f3f6]">
-                        {cover ? (
-                          <img
-                            src={cover.url}
-                            alt={vehicleTitle(v)}
-                            loading="lazy"
-                            className="h-full w-full object-contain transition group-hover:scale-105"
-                          />
-                        ) : (
-                          <Camera className="size-9 text-slate-400" />
-                        )}
-                      </div>
-                      <div className="p-4">
-                        <p className="font-bold">{vehicleTitle(v)}</p>
-                        <p className="mt-1 text-xs text-slate-500">{formatMiles(v.mileage)}</p>
-                        <p className="mt-2 text-xl font-bold text-[#086ac8]">{cash(num(v.price_cents))}</p>
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="mt-5 text-sm text-slate-500">More listings will appear here when available.</p>
-            )}
-          </section>
-        </div>
-        <aside className="hidden lg:block">
-          <div className="sticky top-24 space-y-5">
-            <div className="rounded-2xl border border-slate-200 bg-[#f8fafc] p-6">
-              <h3 className="font-extrabold">Interested in this vehicle?</h3>
-              <p className="mt-2 text-sm text-slate-600">
-                Our Fredericksburg team can help verify availability, answer questions and arrange your visit.
-              </p>
-              <Button
-                onClick={() => setInquiry("availability")}
-                className="mt-5 h-11 w-full rounded-full bg-[#086ac8] font-bold text-white hover:bg-[#0756a6]"
-              >
-                Check availability
-              </Button>
-              <a
-                href={PHONE_LINK}
-                className="mt-4 flex items-center justify-center gap-2 text-sm font-bold text-[#086ac8]"
-              >
-                <Phone className="size-4" />
-                {PHONE}
-              </a>
-            </div>
-            <div className="rounded-xl border p-5 text-xs text-slate-600">
-              <MapPin className="mb-2 size-5 text-[#086ac8]" />
-              <strong className="block text-sm text-[#142f4c]">My Car — Fredericksburg</strong>
-              <p className="mt-1">4720 Harrison Rd, Fredericksburg, VA 22408</p>
-            </div>
           </div>
-        </aside>
+          <div className="border-t border-slate-200">
+            {FAQS.map(({ q, a }, index) => (
+              <div key={q} className="border-b border-slate-200">
+                <button
+                  type="button"
+                  aria-expanded={openFaq === index}
+                  onClick={() => setOpenFaq((current) => (current === index ? null : index))}
+                  className="flex w-full items-center justify-between gap-5 py-4 text-left text-[13px] font-semibold leading-5 transition hover:text-[#0969c5]"
+                >
+                  <span>{q}</span>
+                  {openFaq === index ? <Minus className="size-4 shrink-0" /> : <Plus className="size-4 shrink-0" />}
+                </button>
+                {openFaq === index && <p className="pb-5 pr-7 text-[13px] leading-6 text-slate-600">{a}</p>}
+              </div>
+            ))}
+          </div>
+        </section>
+
+        {/* Bottom promotional CTA */}
+        <section className="mt-20 overflow-hidden rounded-xl bg-[#10385d] text-white sm:grid sm:grid-cols-2">
+          <div className="flex flex-col items-start justify-center px-7 py-10 sm:px-9 sm:py-12">
+            <h2 className="text-xl font-bold sm:text-2xl">Trade in and move into your next car</h2>
+            <p className="mt-3 max-w-sm text-xs leading-5 text-white/85">
+              Find the vehicle you want, then let My Car review your current vehicle as a possible trade-in.
+            </p>
+            <Button
+              type="button"
+              variant="outline"
+              onClick={() => startOffer("trade")}
+              className="mt-6 rounded-full border-white bg-transparent text-white hover:bg-white hover:text-[#10385d]"
+            >
+              Get Started <ArrowRight className="ml-2 size-4" />
+            </Button>
+          </div>
+          <div className="relative min-h-[220px] bg-gradient-to-br from-[#b8d8ee] to-[#e9f3fa]">
+            <img
+              src="https://images.unsplash.com/photo-1529156069898-49953e39b3ac?auto=format&fit=crop&w=1000&q=85"
+              alt="Friends enjoying time together"
+              className="absolute inset-0 size-full object-cover"
+              loading="lazy"
+            />
+          </div>
+        </section>
       </div>
 
-      {/* Mobile persistent action bar */}
-      <div className="fixed inset-x-0 bottom-0 z-40 flex items-center justify-between gap-3 border-t border-slate-200 bg-white px-4 py-3 shadow-[0_-8px_30px_rgba(0,0,0,0.09)] lg:hidden">
-        <div className="min-w-0">
-          <p className="truncate text-xs font-bold">
-            {vehicle.year} {vehicle.make} {vehicle.model}
-          </p>
-          <p className="text-lg font-extrabold">{cash(price)}</p>
-        </div>
-        <Button
-          onClick={() => setInquiry("availability")}
-          className="h-11 shrink-0 rounded-full bg-[#086ac8] px-5 font-bold text-white"
-        >
-          Check availability
-        </Button>
-      </div>
-
-      {/* Fullscreen, keyboard-accessible photo viewer */}
-      <Dialog open={galleryOpen} onOpenChange={setGalleryOpen}>
-        <DialogContent className="flex h-[96dvh] max-h-[96dvh] w-[98vw] max-w-[1500px] flex-col gap-0 overflow-hidden border-0 bg-[#0d1725] p-0 text-white [&>button]:right-4 [&>button]:top-4 [&>button]:text-white">
-          <DialogHeader className="border-b border-white/15 px-5 py-4 text-left">
-            <DialogTitle className="pr-10 text-lg font-bold text-white">{title}</DialogTitle>
-            <DialogDescription className="text-xs text-white/60">
-              Actual photos of this inventory unit · {galleryImages.length} photos · Use arrow keys to browse
+      {/* The short hero entry continues into the EXISTING LeadForm submission, not a fabricated instant valuation. */}
+      <Dialog open={formOpen} onOpenChange={setFormOpen}>
+        <DialogContent className="flex max-h-[94dvh] w-[calc(100%-1.5rem)] max-w-4xl flex-col gap-0 overflow-hidden rounded-2xl p-0 sm:w-full">
+          <DialogHeader className="border-b border-slate-200 bg-white px-5 py-4 text-left sm:px-7">
+            <DialogTitle className="text-xl font-bold text-[#12385c]">
+              Request Your {intent === "trade" ? "Trade-In" : "Vehicle"} Offer
+            </DialogTitle>
+            <DialogDescription className="mt-1 text-sm">
+              Complete your details so the My Car team can review your vehicle.
             </DialogDescription>
           </DialogHeader>
-          <div className="flex flex-wrap gap-2 border-b border-white/10 px-5 py-3">
-            {["all", "exterior", "interior"].map((x) => (
-              <button
-                key={x}
-                type="button"
-                onClick={() => setGalleryTab(x as typeof galleryTab)}
-                className={`rounded-full px-4 py-2 text-xs font-semibold capitalize ${galleryTab === x ? "bg-white text-slate-900" : "bg-white/10 text-white hover:bg-white/20"}`}
-              >
-                {x === "all" ? `All photos (${galleryImages.length})` : x}
-              </button>
-            ))}
-            <span className="ml-auto self-center text-xs text-white/60">
-              {galleryImages.length ? Math.min(photoIndex + 1, galleryImages.length) : 0} / {galleryImages.length}
-            </span>
-          </div>
-          <div className="relative flex min-h-0 flex-1 items-center justify-center bg-[#111b29] px-12 py-4 sm:px-20">
-            {currentImage ? (
-              <img
-                key={currentImage.url}
-                src={currentImage.url}
-                alt={currentImage.alt}
-                className="max-h-full max-w-full object-contain"
-              />
-            ) : (
-              <Camera className="size-12 text-white/50" />
-            )}
-            <button
-              type="button"
-              onClick={() => movePhoto(-1)}
-              disabled={galleryImages.length < 2}
-              aria-label="Previous photo"
-              className="absolute left-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 disabled:opacity-30 sm:left-5"
+          <div className="min-h-0 overflow-y-auto bg-[#f7f9fb] px-4 py-5 sm:px-7">
+            <div
+              ref={leadScope}
+              className="rounded-xl border border-slate-200 bg-white p-4 sm:p-6 [&_button[type=submit]]:!bg-[#0969c5] [&_button[type=submit]]:!text-white [&_button[type=submit]]:!rounded-full"
             >
-              <ChevronLeft className="size-6" />
-            </button>
-            <button
-              type="button"
-              onClick={() => movePhoto(1)}
-              disabled={galleryImages.length < 2}
-              aria-label="Next photo"
-              className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/15 hover:bg-white/25 disabled:opacity-30 sm:right-5"
-            >
-              <ChevronRight className="size-6" />
-            </button>
-          </div>
-          <div className="flex shrink-0 gap-2 overflow-x-auto border-t border-white/15 p-3">
-            {galleryImages.map((m, i) => (
-              <button
-                key={m.url}
-                type="button"
-                onClick={() => setPhotoIndex(i)}
-                className={`h-16 w-24 shrink-0 overflow-hidden rounded border-2 ${photoIndex === i ? "border-[#56a9ff]" : "border-transparent opacity-65 hover:opacity-100"}`}
+              <LeadForm
+                leadType="trade"
+                submitLabel={intent === "trade" ? "Request My Trade-In Offer" : "Request My Offer"}
+                successTitle="Your request has been received"
+                successBody="Our team will review your vehicle information and follow up with next steps."
+                messageLabel="Damage, service history, or anything else we should know"
+                collectDetails={() => ({
+                  customer_name: customerName,
+                  customer_email: customerEmail,
+                  customer_phone: phoneFormat(customerPhone),
+                  customer_address: customerAddress,
+                  lead_type: intent === "trade" ? "trade" : "sell",
+                  intent,
+                  vin,
+                  plate,
+                  license_state: plateState,
+                  year_make_model: ymm,
+                  mileage,
+                  zip,
+                  condition,
+                  title_status: titleStatus,
+                  additional_vehicle_information: message,
+                  customer_wish_list: intent === "trade" ? JSON.stringify(wish) : "",
+                  selected_vehicle_ids: intent === "trade" ? selectedIds.join(",") : "",
+                  selected_vehicles:
+                    intent === "trade"
+                      ? JSON.stringify(
+                          selectedVehicles.map((v) => ({
+                            id: v.id,
+                            title: vehicleTitle(v),
+                            stock_number: v.stock_number,
+                            vin: v.vin,
+                            price_cents: v.price_cents,
+                          })),
+                        )
+                      : "",
+                  vehicle_photo_names: photoNames.join(","),
+                  lead_source: "mycarcorp.com",
+                  lead_page: "/sell",
+                })}
               >
-                <img src={m.url} alt={m.alt} className="h-full w-full object-cover" />
-              </button>
-            ))}
+                <div className="space-y-6">
+                  <div
+                    className="grid grid-cols-2 gap-2 rounded-lg bg-slate-100 p-1"
+                    role="group"
+                    aria-label="Sell or trade"
+                  >
+                    <button
+                      type="button"
+                      onClick={() => setIntent("sell")}
+                      className={`min-h-11 rounded-md px-3 text-sm font-semibold transition ${intent === "sell" ? "bg-white text-[#0969c5] shadow" : "text-slate-600"}`}
+                    >
+                      Sell My Vehicle
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIntent("trade")}
+                      className={`min-h-11 rounded-md px-3 text-sm font-semibold transition ${intent === "trade" ? "bg-white text-[#0969c5] shadow" : "text-slate-600"}`}
+                    >
+                      Trade My Vehicle
+                    </button>
+                  </div>
+                  <div>
+                    <h3 className="mb-4 border-b border-slate-100 pb-2 text-sm font-bold text-[#12385c]">
+                      Your Contact Information
+                    </h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="Full Name" htmlFor="sell-fullname">
+                        <Input
+                          id="sell-fullname"
+                          autoComplete="name"
+                          required
+                          value={customerName}
+                          onChange={(e) => setCustomerName(e.target.value)}
+                          placeholder="First and last name"
+                        />
+                      </Field>
+                      <Field label="Email" htmlFor="sell-email">
+                        <Input
+                          id="sell-email"
+                          type="email"
+                          autoComplete="email"
+                          required
+                          value={customerEmail}
+                          onChange={(e) => setCustomerEmail(e.target.value)}
+                          placeholder="name@example.com"
+                        />
+                      </Field>
+                      <Field label="Phone" htmlFor="sell-phone">
+                        <Input
+                          id="sell-phone"
+                          autoComplete="tel"
+                          type="tel"
+                          required
+                          value={phoneFormat(customerPhone)}
+                          onChange={(e) => setCustomerPhone(digits(e.target.value, 10))}
+                          placeholder="(555) 123-4567"
+                        />
+                      </Field>
+                      <Field label="Address" htmlFor="sell-address">
+                        <Input
+                          id="sell-address"
+                          autoComplete="street-address"
+                          value={customerAddress}
+                          onChange={(e) => setCustomerAddress(e.target.value)}
+                          placeholder="Street, city, state"
+                        />
+                      </Field>
+                    </div>
+                  </div>
+                  <div>
+                    <h3 className="mb-4 border-b border-slate-100 pb-2 text-sm font-bold text-[#12385c]">
+                      Your Vehicle
+                    </h3>
+                    <div className="grid gap-4 sm:grid-cols-2">
+                      <Field label="VIN (if available)" htmlFor="sell-vin">
+                        <Input
+                          id="sell-vin"
+                          value={vin}
+                          maxLength={17}
+                          onChange={(e) =>
+                            setVin(
+                              e.target.value
+                                .toUpperCase()
+                                .replace(/[^A-HJ-NPR-Z0-9]/g, "")
+                                .slice(0, 17),
+                            )
+                          }
+                          placeholder="17-character VIN"
+                        />
+                      </Field>
+                      <div className="grid grid-cols-[1fr_108px] gap-2">
+                        <Field label="License Plate" htmlFor="sell-plate">
+                          <Input
+                            id="sell-plate"
+                            value={plate}
+                            onChange={(e) => setPlate(e.target.value.toUpperCase())}
+                            placeholder="Plate"
+                          />
+                        </Field>
+                        <div className="space-y-1.5">
+                          <Label>State</Label>
+                          <Select value={plateState} onValueChange={setPlateState}>
+                            <SelectTrigger>
+                              <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent className="max-h-56">
+                              {US_STATES.map(([code, name]) => (
+                                <SelectItem key={code} value={code}>
+                                  {code} — {name}
+                                </SelectItem>
+                              ))}
+                            </SelectContent>
+                          </Select>
+                        </div>
+                      </div>
+                      <div className="sm:col-span-2">
+                        <Field label="Or Year, Make, Model and Trim" htmlFor="sell-ymm">
+                          <Input
+                            id="sell-ymm"
+                            required={!vin.trim() && !plate.trim()}
+                            value={ymm}
+                            onChange={(e) => setYmm(e.target.value)}
+                            placeholder="2019 Toyota RAV4 XLE"
+                          />
+                        </Field>
+                      </div>
+                      <Field label="Mileage" htmlFor="sell-mileage">
+                        <Input
+                          id="sell-mileage"
+                          inputMode="numeric"
+                          required
+                          value={mileage}
+                          onChange={(e) => setMileage(digits(e.target.value))}
+                          placeholder="e.g. 65000"
+                        />
+                      </Field>
+                      <Field label="ZIP Code" htmlFor="sell-zip">
+                        <Input
+                          id="sell-zip"
+                          inputMode="numeric"
+                          maxLength={5}
+                          required
+                          value={zip}
+                          onChange={(e) => setZip(digits(e.target.value, 5))}
+                          placeholder="22407"
+                        />
+                      </Field>
+                      <Choice
+                        label="Condition"
+                        value={condition}
+                        onChange={setCondition}
+                        options={[
+                          ["excellent", "Excellent"],
+                          ["good", "Good"],
+                          ["fair", "Fair"],
+                          ["rough", "Rough / Not Running"],
+                        ]}
+                      />
+                      <Choice
+                        label="Title Status"
+                        value={titleStatus}
+                        onChange={setTitleStatus}
+                        options={[
+                          ["clean", "Clean, in Hand"],
+                          ["lien", "Lien / Loan Payoff"],
+                          ["salvage", "Salvage or Rebuilt"],
+                          ["lost", "Lost Title"],
+                        ]}
+                      />
+                    </div>
+                    <div className="mt-4">
+                      <Field label="Additional vehicle information" htmlFor="sell-message">
+                        <Textarea
+                          id="sell-message"
+                          value={message}
+                          onChange={(e) => setMessage(e.target.value)}
+                          rows={3}
+                          placeholder="Damage, service history, accident history or anything we should know"
+                        />
+                      </Field>
+                    </div>
+                    <div className="mt-4">
+                      <Label htmlFor="sell-photos" className="text-sm">
+                        Vehicle photos (optional)
+                      </Label>
+                      <label
+                        htmlFor="sell-photos"
+                        className="mt-2 flex cursor-pointer flex-col items-center justify-center rounded-lg border border-dashed border-slate-300 bg-slate-50 px-5 py-6 text-center hover:border-[#0969c5]"
+                      >
+                        <ImagePlus className="size-7 text-[#0969c5]" />
+                        <span className="mt-2 text-xs font-semibold">Choose vehicle photos</span>
+                        <span className="mt-1 text-[11px] text-slate-500">
+                          JPG or PNG. Photo names are recorded; files are not uploaded by this form.
+                        </span>
+                        <input
+                          id="sell-photos"
+                          type="file"
+                          accept="image/jpeg,image/png"
+                          multiple
+                          className="sr-only"
+                          onChange={(e) => setPhotoNames(Array.from(e.target.files ?? []).map((f) => f.name))}
+                        />
+                      </label>
+                      {photoNames.length > 0 && (
+                        <p className="mt-2 text-xs text-slate-500">Selected: {photoNames.join(", ")}</p>
+                      )}
+                    </div>
+                  </div>
+                  {intent === "trade" && (
+                    <div className="space-y-4 rounded-xl border border-[#c9deee] bg-[#f4f9fe] p-4">
+                      <div>
+                        <h3 className="text-sm font-bold text-[#12385c]">What are you looking for next?</h3>
+                        <p className="mt-1 text-xs text-slate-500">
+                          Optional — explore My Car's actual available inventory.
+                        </p>
+                      </div>
+                      <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
+                        <Field label="Make or Model" htmlFor="trade-make">
+                          <Input
+                            id="trade-make"
+                            list="sell-trade-models"
+                            value={wish.makeModel}
+                            onChange={(e) => setWish((w) => ({ ...w, makeModel: e.target.value }))}
+                            placeholder="Any make or model"
+                          />
+                          <datalist id="sell-trade-models">
+                            {options.names.map((n) => (
+                              <option key={n} value={n} />
+                            ))}
+                          </datalist>
+                        </Field>
+                        <Field label="Year or newer" htmlFor="trade-year">
+                          <Input
+                            id="trade-year"
+                            inputMode="numeric"
+                            value={wish.minYear}
+                            onChange={(e) => setWish((w) => ({ ...w, minYear: digits(e.target.value, 4) }))}
+                            placeholder="Any year"
+                          />
+                        </Field>
+                        <Field label="Max Price" htmlFor="trade-price">
+                          <Input
+                            id="trade-price"
+                            inputMode="numeric"
+                            value={wish.maxPrice}
+                            onChange={(e) => setWish((w) => ({ ...w, maxPrice: e.target.value }))}
+                            placeholder="Any price"
+                          />
+                        </Field>
+                        <Field label="Max Mileage" htmlFor="trade-miles">
+                          <Input
+                            id="trade-miles"
+                            inputMode="numeric"
+                            value={wish.maxMileage}
+                            onChange={(e) => setWish((w) => ({ ...w, maxMileage: e.target.value }))}
+                            placeholder="Any mileage"
+                          />
+                        </Field>
+                        <Field label="Body Type" htmlFor="trade-body">
+                          <Input
+                            id="trade-body"
+                            list="sell-trade-bodies"
+                            value={wish.bodyType}
+                            onChange={(e) => setWish((w) => ({ ...w, bodyType: e.target.value }))}
+                            placeholder="Any body style"
+                          />
+                          <datalist id="sell-trade-bodies">
+                            {options.bodies.map((n) => (
+                              <option key={n} value={n} />
+                            ))}
+                          </datalist>
+                        </Field>
+                      </div>
+                      <div className="flex flex-wrap items-center gap-3">
+                        <Button
+                          type="button"
+                          variant="outline"
+                          onClick={() => {
+                            setPickerTab("matching");
+                            setPickerSearch("");
+                            setPickerOpen(true);
+                          }}
+                          className="rounded-full border-[#0969c5] text-[#0969c5]"
+                        >
+                          <Search className="mr-2 size-4" /> Find Matching Vehicles ({matchingVehicles.length})
+                        </Button>
+                        <Button
+                          type="button"
+                          variant="ghost"
+                          onClick={() => {
+                            setPickerTab("all");
+                            setPickerSearch("");
+                            setPickerOpen(true);
+                          }}
+                          className="text-[#0969c5]"
+                        >
+                          Browse All Inventory <ArrowRight className="ml-1 size-4" />
+                        </Button>
+                      </div>
+                      {selectedVehicles.length > 0 && (
+                        <div className="grid gap-2 sm:grid-cols-2">
+                          {selectedVehicles.map((v) => (
+                            <div
+                              key={v.id}
+                              className="flex items-center gap-3 rounded-lg border border-slate-200 bg-white p-2"
+                            >
+                              {vehiclePhoto(v) ? (
+                                <img
+                                  src={vehiclePhoto(v)}
+                                  alt={vehicleTitle(v)}
+                                  className="h-16 w-24 rounded object-cover"
+                                />
+                              ) : (
+                                <div className="flex h-16 w-24 items-center justify-center bg-slate-100">
+                                  <CarFront />
+                                </div>
+                              )}
+                              <div className="min-w-0 flex-1">
+                                <p className="truncate text-xs font-bold">{vehicleTitle(v)}</p>
+                                <p className="text-xs text-slate-600">{formatUsd(Number(v.price_cents))}</p>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => toggleVehicle(v.id)}
+                                aria-label={`Remove ${vehicleTitle(v)}`}
+                                className="rounded-md p-1 hover:bg-slate-100"
+                              >
+                                <X className="size-4" />
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  <p className="text-[11px] leading-5 text-slate-500">
+                    Submitting does not guarantee an offer. Vehicle details and any final valuation are subject to
+                    review and verification.
+                  </p>
+                </div>
+              </LeadForm>
+            </div>
           </div>
-          {galleryTab !== "all" && (
-            <p className="px-4 pb-2 text-center text-[11px] text-white/60">
-              Photo categories aren't tagged in the inventory feed; showing all actual vehicle photos instead of
-              guessing which are {galleryTab}.
-            </p>
-          )}
         </DialogContent>
       </Dialog>
 
-      {/* Uses existing LeadForm processing (no new unverified webhook). */}
-      <Dialog
-        open={Boolean(inquiry)}
-        onOpenChange={(open) => {
-          if (!open) setInquiry(null);
-        }}
-      >
-        <DialogContent className="max-h-[90dvh] max-w-xl overflow-y-auto">
-          <DialogHeader>
-            <DialogTitle>
-              {inquiry === "availability" ? "Check vehicle availability" : "Ask about this vehicle"}
-            </DialogTitle>
-            <DialogDescription>
-              {title} · Stock #{vehicle.stock_number}. Our team will review your request and follow up.
-            </DialogDescription>
+      <Dialog open={pickerOpen} onOpenChange={setPickerOpen}>
+        <DialogContent className="flex max-h-[85dvh] max-w-4xl flex-col gap-0 overflow-hidden p-0">
+          <DialogHeader className="border-b p-5 text-left">
+            <DialogTitle>Choose Vehicles From My Car Inventory</DialogTitle>
+            <DialogDescription>Select any vehicles you may want to trade toward.</DialogDescription>
           </DialogHeader>
-          <div
-            ref={formRef}
-            className="[&_button[type=submit]]:!rounded-full [&_button[type=submit]]:!bg-[#086ac8] [&_button[type=submit]]:!text-white"
-          >
-            <LeadForm
-              leadType="availability"
-              submitLabel={inquiry === "availability" ? "Check availability" : "Send my question"}
-              successTitle="Request received"
-              successBody="Thank you. Our team will follow up with you about this vehicle."
-              messageLabel="Questions about this vehicle"
-              collectDetails={() => ({
-                vehicle_id: vehicle.id,
-                vehicle_slug: vehicle.slug,
-                vehicle_title: title,
-                vin: vehicle.vin,
-                stock_number: vehicle.stock_number,
-                price_cents: vehicle.price_cents,
-                lead_source: "mycarcorp.com",
-                lead_page: `/inventory/${vehicle.slug}`,
-                lead_intent: inquiry,
-                customer_name: name,
-                customer_email: email,
-                customer_phone: phone,
-                message,
-              })}
-            >
-              <div className="grid gap-4 sm:grid-cols-2">
-                <div className="space-y-1.5">
-                  <Label htmlFor="vdp-name">Full Name</Label>
-                  <Input
-                    id="vdp-name"
-                    required
-                    value={name}
-                    onChange={(e) => setName(e.target.value)}
-                    autoComplete="name"
-                  />
-                </div>
-                <div className="space-y-1.5">
-                  <Label htmlFor="vdp-email">Email</Label>
-                  <Input
-                    id="vdp-email"
-                    required
-                    type="email"
-                    value={email}
-                    onChange={(e) => setEmail(e.target.value)}
-                    autoComplete="email"
-                  />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="vdp-phone">Phone</Label>
-                  <Input
-                    id="vdp-phone"
-                    required
-                    type="tel"
-                    value={phone}
-                    onChange={(e) => setPhone(e.target.value)}
-                    autoComplete="tel"
-                  />
-                </div>
-                <div className="space-y-1.5 sm:col-span-2">
-                  <Label htmlFor="vdp-message">Your question (optional)</Label>
-                  <Textarea
-                    id="vdp-message"
-                    rows={3}
-                    value={message}
-                    onChange={(e) => setMessage(e.target.value)}
-                    placeholder="Anything else we can help with?"
-                  />
-                </div>
+          <div className="border-b p-4">
+            <div className="mb-3 flex gap-2">
+              <Button
+                type="button"
+                size="sm"
+                variant={pickerTab === "matching" ? "default" : "outline"}
+                onClick={() => setPickerTab("matching")}
+              >
+                Matching ({matchingVehicles.length})
+              </Button>
+              <Button
+                type="button"
+                size="sm"
+                variant={pickerTab === "all" ? "default" : "outline"}
+                onClick={() => setPickerTab("all")}
+              >
+                All Vehicles ({inventory.length})
+              </Button>
+            </div>
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 size-4 -translate-y-1/2 text-slate-400" />
+              <Input
+                value={pickerSearch}
+                onChange={(e) => setPickerSearch(e.target.value)}
+                placeholder="Search make, model, VIN or stock number"
+                className="pl-9"
+              />
+            </div>
+          </div>
+          <div className="min-h-0 flex-1 overflow-y-auto p-4">
+            {inventoryLoading ? (
+              <p className="py-12 text-center text-sm text-slate-500">Loading inventory...</p>
+            ) : pickerVehicles.length === 0 ? (
+              <p className="py-12 text-center text-sm text-slate-500">
+                No vehicles matched. Try All Vehicles or update your preferences.
+              </p>
+            ) : (
+              <div className="grid gap-3 sm:grid-cols-2">
+                {pickerVehicles.map((v) => (
+                  <button
+                    key={v.id}
+                    type="button"
+                    onClick={() => toggleVehicle(v.id)}
+                    className={`flex gap-3 rounded-lg border p-2 text-left transition hover:border-[#0969c5] ${selectedIds.includes(v.id) ? "border-[#0969c5] bg-blue-50" : "border-slate-200"}`}
+                  >
+                    {vehiclePhoto(v) ? (
+                      <img
+                        src={vehiclePhoto(v)}
+                        alt={vehicleTitle(v)}
+                        className="h-24 w-32 shrink-0 rounded-md object-cover"
+                      />
+                    ) : (
+                      <div className="flex h-24 w-32 shrink-0 items-center justify-center bg-slate-100">
+                        <Camera className="size-6" />
+                      </div>
+                    )}
+                    <div className="min-w-0 flex-1">
+                      <div className="flex items-start justify-between gap-2">
+                        <span className="text-sm font-bold">{vehicleTitle(v)}</span>
+                        <span
+                          className={`flex size-5 shrink-0 items-center justify-center rounded border ${selectedIds.includes(v.id) ? "border-[#0969c5] bg-[#0969c5] text-white" : "border-slate-300"}`}
+                        >
+                          {selectedIds.includes(v.id) && <Check className="size-4" />}
+                        </span>
+                      </div>
+                      <p className="mt-1 text-sm font-bold text-[#0969c5]">{formatUsd(Number(v.price_cents))}</p>
+                      <p className="mt-1 text-xs text-slate-500">
+                        {formatMiles(v.mileage)} · Stock {v.stock_number}
+                      </p>
+                    </div>
+                  </button>
+                ))}
               </div>
-            </LeadForm>
+            )}
+          </div>
+          <div className="flex items-center justify-between border-t bg-slate-50 p-4">
+            <span className="text-sm text-slate-600">{selectedIds.length} selected</span>
+            <Button type="button" className="rounded-full" onClick={() => setPickerOpen(false)}>
+              Done
+            </Button>
           </div>
         </DialogContent>
       </Dialog>
     </main>
+  );
+}
+function Field({ label, htmlFor, children }: { label: string; htmlFor: string; children: React.ReactNode }) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={htmlFor} className="text-xs font-medium text-slate-700">
+        {label}
+      </Label>
+      {children}
+    </div>
+  );
+}
+function Choice({
+  label,
+  value,
+  onChange,
+  options,
+}: {
+  label: string;
+  value: string;
+  onChange: (v: string) => void;
+  options: string[][];
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label className="text-xs font-medium text-slate-700">{label}</Label>
+      <Select value={value} onValueChange={onChange}>
+        <SelectTrigger>
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {options.map(([val, text]) => (
+            <SelectItem key={val} value={val}>
+              {text}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+    </div>
   );
 }
