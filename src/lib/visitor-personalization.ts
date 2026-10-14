@@ -131,25 +131,24 @@ function writeProfile(p: VisitorProfile) {
   }
 }
 
-/** Count one visit per browser session. Returns the profile as it was BEFORE this visit was counted. */
-export function beginVisit(): VisitorProfile | null {
+/**
+ * Count one visit per browser session (idempotent). Returns how many visits
+ * happened BEFORE the current session (0 = first-time visitor), or null when
+ * storage is unavailable.
+ */
+export function beginVisit(): number | null {
   const s = storage();
   if (!s) return null;
-  const prior = readProfile();
-  let isNewSession = true;
   try {
-    isNewSession = !window.sessionStorage.getItem(SESSION_KEY);
-    window.sessionStorage.setItem(SESSION_KEY, "1");
-  } catch {
-    /* ignore */
-  }
-  const p = prior ?? emptyProfile();
-  if (isNewSession) {
+    const existing = window.sessionStorage.getItem(SESSION_KEY);
+    if (existing !== null) return Number(existing) || 0;
+    const p = readProfile() ?? emptyProfile();
+    window.sessionStorage.setItem(SESSION_KEY, String(p.visits));
     writeProfile({ ...p, visits: p.visits + 1, lastVisitAt: Date.now() });
-  } else if (!prior) {
-    writeProfile({ ...p, visits: 1 });
+    return p.visits;
+  } catch {
+    return null;
   }
-  return prior;
 }
 
 function eventKey(e: Pick<VisitorEvent, "type" | "vehicle" | "filters" | "path">) {
@@ -192,6 +191,7 @@ export function clearProfile() {
   if (!s) return;
   try {
     s.removeItem(STORAGE_KEY);
+    window.sessionStorage.removeItem(SESSION_KEY);
   } catch {
     /* ignore */
   }
