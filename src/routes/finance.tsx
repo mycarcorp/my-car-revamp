@@ -1178,26 +1178,33 @@ function FinancePage() {
               Start My Finance Application
             </button>
           </div>
-          <div className="relative min-h-[310px] overflow-hidden rounded-2xl bg-[linear-gradient(135deg,#07477a,#0b2b4c)] sm:min-h-[370px]">
-            <div className="absolute -right-8 -top-12 h-52 w-52 rounded-full border-[38px] border-blue-500/20" />
+          <div className="relative mx-auto h-[360px] w-full max-w-[460px] sm:h-[420px]">
+            <div className="absolute bottom-0 left-[12%] right-[6%] top-[14%] rounded-2xl bg-[#0b2a4a]" />
             <img
-              src="https://images.unsplash.com/photo-1500648767791-00dcc994a43e?auto=format&fit=crop&w=950&q=85"
-              alt="Person exploring options on a smartphone"
-              className="absolute inset-0 h-full w-full object-cover object-center opacity-80 mix-blend-luminosity"
+              src={financeModel}
+              alt="Smiling customer checking financing on his phone"
+              width={1024}
+              height={1280}
               loading="lazy"
+              className="absolute bottom-0 left-1/2 h-[100%] w-auto -translate-x-1/2 object-contain object-bottom"
             />
-            <div className="absolute bottom-6 left-6 rounded-xl border border-white/30 bg-white/95 px-5 py-3 shadow-xl">
-              <span className="flex items-center gap-2 text-sm font-bold text-[#0a2946]">
-                <CarFront className="h-5 w-5 text-blue-700" /> Find your next car
-              </span>
-              <span className="mt-1 block text-xs text-slate-500">Browse real My Car inventory</span>
+            <div className="animate-in fade-in slide-in-from-left-4 absolute left-0 top-[30%] z-10 flex items-center gap-3 rounded-xl bg-white px-3 py-2.5 shadow-[0_12px_30px_rgba(0,0,0,.18)] duration-700">
+              <div className="h-10 w-14 overflow-hidden rounded-md bg-slate-100">
+                <img src={financeHeroCar} alt="" className="h-full w-full object-contain" />
+              </div>
+              <div>
+                <span className="block text-xs font-bold text-[#0a2946]">Find your next car</span>
+                <a href="/search" className="text-[11px] font-semibold text-blue-700 hover:underline">
+                  Shop Cars
+                </a>
+              </div>
             </div>
-            <a
-              href="/search"
-              className="absolute bottom-6 right-5 rounded-full bg-blue-600 px-4 py-2 text-xs font-semibold text-white hover:bg-blue-700"
-            >
-              Shop Cars
-            </a>
+            <div className="animate-in fade-in slide-in-from-right-4 absolute bottom-8 right-0 z-10 rounded-xl bg-white px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,.18)] delay-200 duration-700">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#00a862]">
+                <ShieldCheck className="h-3.5 w-3.5" /> Pre-qualified
+              </span>
+              <span className="mt-0.5 block text-sm font-extrabold text-[#0a2946]">No impact to credit</span>
+            </div>
           </div>
         </div>
       </section>
