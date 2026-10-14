@@ -839,7 +839,7 @@ function FinancePage() {
                         {photo ? (
                           <img src={photo} alt={vehicleTitle(item)} className="h-full w-full object-cover" />
                         ) : (
-                          <CarFront className="h-16 w-16 text-slate-300" />
+                          <img src={financeHeroCar} alt={vehicleTitle(item)} className="h-full w-full object-contain p-3" />
                         )}
                       </div>
                       <div className="p-3">
