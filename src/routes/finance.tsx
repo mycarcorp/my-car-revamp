@@ -1075,8 +1075,8 @@ function FinancePage() {
               ))}
             </div>
             <p className="mt-3 text-center text-[10px] leading-5 text-slate-500">
-              *Illustrative estimate using current site financing assumptions. Excludes taxes, fees and other charges.
-              Not an offer or approval.
+              *Payments are estimates only. Actual rates and terms may vary based on credit, down payment, and lender
+              approval. Taxes and fees excluded.
             </p>
           </div>
           <div>
