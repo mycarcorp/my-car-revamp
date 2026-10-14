@@ -29,6 +29,7 @@ import { VehicleCard } from "@/components/VehicleCard";
  */
 type Filters = {
   q?: string;
+  newOnly?: boolean;
   make?: string;
   model?: string;
   body?: string;
@@ -63,6 +64,28 @@ const asNum = (v: unknown) => {
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 };
 const asString = (v: unknown) => (typeof v === "string" && v.trim() ? v.trim() : undefined);
+const asBoolean = (v: unknown) => (v === true || v === "true" || v === "1" || v === 1 ? true : undefined);
+
+/** Only trust explicit inventory new/used classification, not model year or mileage. */
+const isBrandNew = (vehicle: VehicleWithPhotos): boolean => {
+  const row = record(vehicle);
+  const explicit = firstField(row, ["is_new", "isNew", "brand_new", "is_brand_new"]);
+  if (explicit === true || explicit === 1 || explicit === "true" || explicit === "1") return true;
+  if (explicit === false || explicit === 0 || explicit === "false" || explicit === "0") return false;
+  const classification = firstField(row, [
+    "condition",
+    "vehicle_condition",
+    "inventory_type",
+    "inventoryType",
+    "new_used",
+    "new_or_used",
+    "sale_condition",
+  ]);
+  return (
+    typeof classification === "string" &&
+    ["new", "brand new", "new vehicle", "new car"].includes(classification.trim().toLowerCase())
+  );
+};
 const money = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 const integer = (n: number) => new Intl.NumberFormat("en-US").format(n);
@@ -187,6 +210,7 @@ const paymentFor = (v: VehicleWithPhotos, settings: Raw | undefined) => {
 export const Route = createFileRoute("/search")({
   validateSearch: (r: Record<string, unknown>): Filters => ({
     q: asString(r.q),
+    newOnly: asBoolean(r.newOnly),
     make: asString(r.make),
     model: asString(r.model),
     body: asString(r.body),
@@ -240,6 +264,7 @@ const SORTS = [
 ] as const;
 const FILTER_KEYS: (keyof Filters)[] = [
   "q",
+  "newOnly",
   "make",
   "model",
   "body",
@@ -264,7 +289,7 @@ const FILTER_KEYS: (keyof Filters)[] = [
 const compact = (f: Filters): Filters => {
   const out: Raw = {};
   for (const [key, val] of Object.entries(f))
-    if (val !== undefined && val !== "" && !(key === "page" && val === 1)) out[key] = val;
+    if (val !== undefined && val !== "" && val !== false && !(key === "page" && val === 1)) out[key] = val;
   return out as Filters;
 };
 const tally = (vehicles: VehicleWithPhotos[], choose: (v: VehicleWithPhotos) => string[]): FacetOption[] => {
@@ -580,11 +605,35 @@ function FilterSidebar({
   const count = FILTER_KEYS.filter((k) => filters[k] !== undefined && filters[k] !== "").length + Number(onlySaved);
   return (
     <div className="space-y-1">
-      <div className="flex items-center justify-between border-b border-slate-200 pb-3">
-        <h2 className="text-sm font-bold">Filter vehicles {count ? `(${count})` : ""}</h2>
+      <div className="border-b border-slate-200 pb-3 pt-1">
+        <div className="flex items-center justify-between gap-3">
+          <label
+            htmlFor="mycar-new-only"
+            className="cursor-pointer text-[11px] font-semibold text-slate-800 sm:text-xs"
+          >
+            Only Brand New Cars
+          </label>
+          <button
+            id="mycar-new-only"
+            type="button"
+            role="switch"
+            aria-label="Only Brand New Cars"
+            aria-checked={Boolean(filters.newOnly)}
+            onClick={() => onChange({ newOnly: filters.newOnly ? undefined : true })}
+            className={`relative inline-flex h-5 w-9 shrink-0 items-center rounded-full transition-colors duration-200 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 ${filters.newOnly ? "bg-blue-600" : "bg-slate-300"}`}
+          >
+            <span
+              className={`pointer-events-none inline-block h-4 w-4 rounded-full bg-white shadow-sm transition-transform duration-200 ${filters.newOnly ? "translate-x-[18px]" : "translate-x-[2px]"}`}
+            />
+          </button>
+        </div>
         {count > 0 && (
-          <button type="button" className="text-[11px] font-semibold text-blue-700 hover:underline" onClick={onClear}>
-            Clear all
+          <button
+            type="button"
+            className="mt-2 text-[11px] font-semibold text-blue-700 hover:underline"
+            onClick={onClear}
+          >
+            Clear all filters ({count})
           </button>
         )}
       </div>
@@ -817,6 +866,7 @@ function SearchPage() {
   const filtered = useMemo(() => {
     const queryTerms = (filters.q ?? "").toLowerCase().split(/\s+/).filter(Boolean);
     const found = vehicles.filter((v) => {
+      if (filters.newOnly && !isBrandNew(v)) return false;
       const searched = [v.year, v.make, v.model, v.trim, v.vin, v.stock_number, v.body_style, v.exterior_color]
         .join(" ")
         .toLowerCase();
@@ -901,35 +951,17 @@ function SearchPage() {
       onClick={() => update({ [key]: undefined })}
       className="inline-flex items-center gap-1 rounded-full border border-blue-100 bg-blue-50 px-2.5 py-1 text-[11px] text-blue-800 hover:bg-blue-100"
     >
-      {key}:{" "}
+      {key === "newOnly" ? "Only Brand New Cars" : `${key}: `}{" "}
       {key === "deal" || ["make", "model", "body", "fuel", "drivetrain", "color", "interior", "features"].includes(key)
         ? splitValues(val).join(", ")
-        : val}{" "}
+        : key === "newOnly"
+          ? ""
+          : val}{" "}
       <X className="h-3 w-3" />
     </button>
   );
   return (
     <div className="mx-auto max-w-[1536px] px-3 pb-16 pt-5 sm:px-5 lg:px-6">
-      <div className="mb-5 flex flex-wrap items-center justify-between gap-3">
-        <div>
-          <h1 className="text-xl font-extrabold tracking-tight sm:text-2xl">
-            Used Cars for Sale in Fredericksburg, VA
-          </h1>
-          <p className="mt-1 text-xs text-muted-foreground">
-            Browse current My Car inventory, compare vehicles and find your next car.
-          </p>
-        </div>
-        <div className="flex items-center gap-2">
-          <Button asChild size="sm" variant="outline">
-            <Link to="/sell">
-              Sell / Trade <ArrowRight className="ml-1 h-3 w-3" />
-            </Link>
-          </Button>
-          <Button asChild size="sm">
-            <Link to="/finance">Financing</Link>
-          </Button>
-        </div>
-      </div>
       <div className="grid items-start gap-4 lg:grid-cols-[235px_minmax(0,1fr)] xl:grid-cols-[250px_minmax(0,1fr)]">
         <aside className="hidden max-h-[calc(100vh-100px)] overflow-y-auto rounded-lg border border-slate-200 bg-white p-4 lg:sticky lg:top-20 lg:block">
           <FilterSidebar {...sidebarProps} />
@@ -1036,7 +1068,9 @@ function SearchPage() {
               <CarFront className="mx-auto mb-3 h-10 w-10 text-slate-400" />
               <h2 className="font-bold">No vehicles match your search</h2>
               <p className="mt-2 text-sm text-slate-500">
-                Try widening your filters or let us help you find a vehicle.
+                {filters.newOnly
+                  ? "No vehicles are explicitly marked as brand new in the current inventory results. Turn off Only Brand New Cars to browse other vehicles."
+                  : "Try widening your filters or let us help you find a vehicle."}
               </p>
               <div className="mt-5 flex justify-center gap-2">
                 <Button variant="outline" onClick={clear}>
