@@ -18,6 +18,7 @@ import {
   Plus,
   Search,
   ShieldCheck,
+  Star,
   UserRound,
   UsersRound,
   Trash2,
@@ -440,15 +441,30 @@ function FinancePage() {
     window.addEventListener("scroll", onScroll, { passive: true });
     return () => window.removeEventListener("scroll", onScroll);
   }, []);
+  // Alternate automatically: featured car -> payment prompt -> next car.
+  // The callout stays inside the carousel, so autoplay is never blocked by a forced modal.
+  const [carouselPhase, setCarouselPhase] = useState<"vehicle" | "estimate">("vehicle");
   useEffect(() => {
-    if (featuredVehicles.length < 2 || typeof window === "undefined") return;
-    const media = window.matchMedia?.("(prefers-reduced-motion: reduce)");
-    if (media?.matches) return;
-    const id = window.setInterval(() => {
-      if (!document.hidden) setFeatureIndex((i) => (i + 1) % featuredVehicles.length);
-    }, 3500);
-    return () => window.clearInterval(id);
-  }, [featuredVehicles.length]);
+    if (featuredVehicles.length < 2 || estimatorModalOpen) return;
+    if (typeof window === "undefined" || window.matchMedia?.("(prefers-reduced-motion: reduce)")?.matches) return;
+    const delay = carouselPhase === "vehicle" ? 3500 : 1800;
+    const timeout = window.setTimeout(() => {
+      if (document.hidden) return;
+      if (carouselPhase === "vehicle") setCarouselPhase("estimate");
+      else {
+        setFeatureIndex((i) => (i + 1) % featuredVehicles.length);
+        setCarouselPhase("vehicle");
+      }
+    }, delay);
+    return () => window.clearTimeout(timeout);
+  }, [featuredVehicles.length, carouselPhase, estimatorModalOpen, featureIndex]);
+  useEffect(() => {
+    const handleVisibility = () => {
+      if (!document.hidden) setCarouselPhase("vehicle");
+    };
+    document.addEventListener("visibilitychange", handleVisibility);
+    return () => document.removeEventListener("visibilitychange", handleVisibility);
+  }, []);
   function displayPhoto(v: (typeof inventory)[number] | undefined) {
     if (!v) return undefined;
     return [...(v.vehicle_photos ?? [])]
@@ -738,150 +754,143 @@ function FinancePage() {
   };
 
   const estimatorFields = (
-              <div className="grid gap-5 sm:grid-cols-2">
-                <div className="sm:col-span-2">
-                  <Label htmlFor="finance-vehicle-picker" className="text-sm font-semibold text-slate-800">
-                    Vehicle
-                  </Label>
+    <div className="grid gap-5 sm:grid-cols-2">
+      <div className="sm:col-span-2">
+        <Label htmlFor="finance-vehicle-picker" className="text-sm font-semibold text-slate-800">
+          Vehicle
+        </Label>
 
-                  {!manualPriceMode ? (
+        {!manualPriceMode ? (
+          <>
+            <div className="relative mt-2">
+              <button
+                id="finance-vehicle-picker"
+                type="button"
+                onClick={() => {
+                  setVehicleSearch("");
+                  setVehiclePickerOpen(true);
+                }}
+                className="flex min-h-12 w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-300 bg-white px-4 py-3 text-left text-sm transition hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
+              >
+                <span className="min-w-0">
+                  {selectedVehicle ? (
                     <>
-                      <div className="relative mt-2">
-                        <button
-                          id="finance-vehicle-picker"
-                          type="button"
-                          onClick={() => {
-                            setVehicleSearch("");
-                            setVehiclePickerOpen(true);
-                          }}
-                          className="flex min-h-12 w-full cursor-pointer items-center justify-between gap-3 rounded-lg border border-slate-300 bg-white px-4 py-3 text-left text-sm transition hover:border-primary/60 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-primary/30"
-                        >
-                          <span className="min-w-0">
-                            {selectedVehicle ? (
-                              <>
-                                <span className="block truncate font-semibold text-slate-950">
-                                  {vehicleTitle(selectedVehicle)}
-                                </span>
-                                <span className="mt-0.5 block truncate text-xs text-slate-500">
-                                  Stock #{selectedVehicle.stock_number} ·{" "}
-                                  {formatUsd(Number(selectedVehicle.price_cents))}
-                                </span>
-                              </>
-                            ) : (
-                              <span className="text-slate-500">Choose a vehicle from current inventory</span>
-                            )}
-                          </span>
-
-                          <Search className="size-4 shrink-0 text-slate-500" />
-                        </button>
-
-                        {selectedVehicle && (
-                          <button
-                            type="button"
-                            aria-label="Clear selected vehicle"
-                            onClick={clearSelectedVehicle}
-                            className="absolute right-10 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-800"
-                          >
-                            <X className="size-4" />
-                          </button>
-                        )}
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={useManualPrice}
-                        className="mt-2 text-xs font-semibold text-primary hover:underline"
-                      >
-                        Enter a different amount instead
-                      </button>
+                      <span className="block truncate font-semibold text-slate-950">
+                        {vehicleTitle(selectedVehicle)}
+                      </span>
+                      <span className="mt-0.5 block truncate text-xs text-slate-500">
+                        Stock #{selectedVehicle.stock_number} · {formatUsd(Number(selectedVehicle.price_cents))}
+                      </span>
                     </>
                   ) : (
-                    <>
-                      <div className="relative mt-2">
-                        <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
-                          $
-                        </span>
-                        <Input
-                          id="finance-vehicle-picker"
-                          type="number"
-                          min="0"
-                          value={price}
-                          onChange={(event) => setPrice(event.target.value)}
-                          placeholder="Enter vehicle price"
-                          className="h-11 pl-7"
-                        />
-                      </div>
-
-                      <button
-                        type="button"
-                        onClick={chooseFromInventory}
-                        className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
-                      >
-                        <CarFront className="size-3.5" />
-                        Choose from inventory instead
-                      </button>
-                    </>
+                    <span className="text-slate-500">Choose a vehicle from current inventory</span>
                   )}
-                </div>
+                </span>
 
-                {selectedVehicle && !manualPriceMode && (
-                  <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
-                    <div className="flex flex-wrap items-center justify-between gap-3">
-                      <div>
-                        <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">
-                          Inventory Price
-                        </p>
-                        <p className="mt-1 font-display text-2xl font-bold text-slate-950">
-                          {formatUsd(Number(selectedVehicle.price_cents))}
-                        </p>
-                      </div>
+                <Search className="size-4 shrink-0 text-slate-500" />
+              </button>
 
-                      <div className="text-right text-xs text-slate-500">
-                        <p>Stock #{selectedVehicle.stock_number}</p>
-                        {selectedVehicle.mileage != null && <p>{formatMiles(selectedVehicle.mileage)}</p>}
-                      </div>
-                    </div>
-                  </div>
-                )}
+              {selectedVehicle && (
+                <button
+                  type="button"
+                  aria-label="Clear selected vehicle"
+                  onClick={clearSelectedVehicle}
+                  className="absolute right-10 top-1/2 flex size-7 -translate-y-1/2 items-center justify-center rounded-full text-slate-400 transition hover:bg-slate-100 hover:text-slate-800"
+                >
+                  <X className="size-4" />
+                </button>
+              )}
+            </div>
 
-                <div>
-                  <label htmlFor="landing-down" className="text-sm font-semibold text-slate-800">
-                    Down Payment
-                  </label>
-                  <div className="relative mt-2">
-                    <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">
-                      $
-                    </span>
-                    <Input
-                      id="landing-down"
-                      type="number"
-                      min="0"
-                      value={down}
-                      onChange={(event) => setDown(event.target.value)}
-                      placeholder="e.g. 2000"
-                      className="h-11 pl-7"
-                    />
-                  </div>
-                </div>
+            <button
+              type="button"
+              onClick={useManualPrice}
+              className="mt-2 text-xs font-semibold text-primary hover:underline"
+            >
+              Enter a different amount instead
+            </button>
+          </>
+        ) : (
+          <>
+            <div className="relative mt-2">
+              <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+              <Input
+                id="finance-vehicle-picker"
+                type="number"
+                min="0"
+                value={price}
+                onChange={(event) => setPrice(event.target.value)}
+                placeholder="Enter vehicle price"
+                className="h-11 pl-7"
+              />
+            </div>
 
-                <div>
-                  <Label htmlFor="landing-term" className="text-sm font-semibold text-slate-800">
-                    Loan Term
-                  </Label>
-                  <Select value={term} onValueChange={setTerm}>
-                    <SelectTrigger id="landing-term" className="mt-2 h-11">
-                      <SelectValue placeholder="Select a loan term" />
-                    </SelectTrigger>
-                    <SelectContent>
-                      {[36, 48, 60, 72, 84].map((months) => (
-                        <SelectItem key={months} value={String(months)}>
-                          {months} months
-                        </SelectItem>
-                      ))}
-                    </SelectContent>
-                  </Select>
-                </div>
-              </div>
+            <button
+              type="button"
+              onClick={chooseFromInventory}
+              className="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-primary hover:underline"
+            >
+              <CarFront className="size-3.5" />
+              Choose from inventory instead
+            </button>
+          </>
+        )}
+      </div>
+
+      {selectedVehicle && !manualPriceMode && (
+        <div className="sm:col-span-2 rounded-xl border border-slate-200 bg-slate-50 p-4">
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-[0.12em] text-slate-500">Inventory Price</p>
+              <p className="mt-1 font-display text-2xl font-bold text-slate-950">
+                {formatUsd(Number(selectedVehicle.price_cents))}
+              </p>
+            </div>
+
+            <div className="text-right text-xs text-slate-500">
+              <p>Stock #{selectedVehicle.stock_number}</p>
+              {selectedVehicle.mileage != null && <p>{formatMiles(selectedVehicle.mileage)}</p>}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div>
+        <label htmlFor="landing-down" className="text-sm font-semibold text-slate-800">
+          Down Payment
+        </label>
+        <div className="relative mt-2">
+          <span className="pointer-events-none absolute left-3 top-1/2 -translate-y-1/2 text-slate-500">$</span>
+          <Input
+            id="landing-down"
+            type="number"
+            min="0"
+            value={down}
+            onChange={(event) => setDown(event.target.value)}
+            placeholder="e.g. 2000"
+            className="h-11 pl-7"
+          />
+        </div>
+      </div>
+
+      <div>
+        <Label htmlFor="landing-term" className="text-sm font-semibold text-slate-800">
+          Loan Term
+        </Label>
+        <Select value={term} onValueChange={setTerm}>
+          <SelectTrigger id="landing-term" className="mt-2 h-11">
+            <SelectValue placeholder="Select a loan term" />
+          </SelectTrigger>
+          <SelectContent>
+            {[36, 48, 60, 72, 84].map((months) => (
+              <SelectItem key={months} value={String(months)}>
+                {months} months
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+      </div>
+    </div>
   );
   const estimatorResult = (
     <div className="flex flex-col justify-center bg-[#0b2a4a] p-6 text-white sm:p-8">
@@ -1034,7 +1043,19 @@ function FinancePage() {
                   <p className="text-sm">Current inventory will appear here.</p>
                 </div>
               )}
-              <div key={featureIndex} className="animate-in fade-in zoom-in-95 absolute left-1/2 top-[40%] z-30 -translate-x-1/2 rounded-lg bg-[#00a862] duration-500 px-4 py-2 text-center text-white shadow-lg">
+              {featuredVehicles.length > 1 && carouselPhase === "estimate" && (
+                <button
+                  type="button"
+                  onClick={() => setEstimatorModalOpen(true)}
+                  className="animate-in fade-in zoom-in-95 absolute bottom-3 left-1/2 z-40 flex -translate-x-1/2 items-center gap-2 whitespace-nowrap rounded-full border border-blue-100 bg-white px-5 py-3 text-sm font-bold text-[#086bc8] shadow-[0_12px_36px_rgba(10,41,70,.22)] transition hover:scale-105 hover:bg-blue-50"
+                >
+                  <Calculator className="h-4 w-4" /> Estimate your payment <ArrowRight className="h-4 w-4" />
+                </button>
+              )}
+              <div
+                key={featureIndex}
+                className="animate-in fade-in zoom-in-95 absolute left-1/2 top-[40%] z-30 -translate-x-1/2 rounded-lg bg-[#00a862] duration-500 px-4 py-2 text-center text-white shadow-lg"
+              >
                 <span className="block text-[10px] font-semibold">
                   {featuredEstimate !== null ? "Real Payment" : "Financing options"}
                 </span>
@@ -1045,36 +1066,17 @@ function FinancePage() {
                 </span>
               </div>
             </div>
-            <div className="mt-5 flex items-center justify-center gap-4">
-              <button
-                type="button"
-                aria-label="Previous featured vehicle"
-                onClick={() =>
-                  setFeatureIndex((n) => (n - 1 + featuredVehicles.length) % (featuredVehicles.length || 1))
-                }
-                className="rounded-full border border-slate-300 bg-white p-2 text-slate-700"
-              >
-                <ArrowLeft className="h-4 w-4" />
-              </button>
-              <div className="flex gap-1.5">
-                {featuredVehicles.slice(0, 5).map((v, index) => (
-                  <button
-                    type="button"
-                    key={v.id}
-                    aria-label={`View featured vehicle ${index + 1}`}
-                    onClick={() => setFeatureIndex(index)}
-                    className={`h-1.5 rounded-full transition-all ${index === featureIndex ? "w-5 bg-blue-600" : "w-1.5 bg-slate-300"}`}
-                  />
-                ))}
-              </div>
-              <button
-                type="button"
-                aria-label="Next featured vehicle"
-                onClick={() => setFeatureIndex((n) => (n + 1) % (featuredVehicles.length || 1))}
-                className="rounded-full border border-slate-300 bg-white p-2 text-slate-700"
-              >
-                <ArrowRight className="h-4 w-4" />
-              </button>
+            <div
+              className="mt-5 flex items-center justify-center gap-2"
+              aria-label="Featured vehicle carousel pagination"
+            >
+              {featuredVehicles.map((v, index) => (
+                <span
+                  key={v.id}
+                  aria-label={`Featured vehicle ${index + 1}${index === featureIndex ? ", active" : ""}`}
+                  className={`h-1.5 rounded-full transition-all duration-500 ${index === featureIndex ? "w-6 bg-blue-600" : "w-1.5 bg-slate-300"}`}
+                />
+              ))}
             </div>
             <p className="mt-3 text-center text-[10px] leading-5 text-slate-500">
               *Illustrative estimate using current site financing assumptions. Excludes taxes, fees and other charges.
@@ -1119,26 +1121,12 @@ function FinancePage() {
         </div>
       </section>
 
-      {/* PAYMENT ESTIMATOR — lightweight tool */}
-      <section id="payment-estimator" className="bg-white px-5 py-14 sm:py-16">
-        <div className="mx-auto max-w-5xl">
-          <div className="text-center">
-            <h2 className="text-3xl font-extrabold tracking-tight text-[#0a2946]">Estimate your payment</h2>
-            <p className="mt-2 text-sm text-slate-500">Pick a car, set your down payment and term.</p>
-          </div>
-          <div className="mt-8 grid overflow-hidden rounded-2xl border border-slate-200 bg-white shadow-[0_18px_50px_rgba(10,41,70,.08)] md:grid-cols-[1.3fr_.7fr]">
-            <div className="p-6 sm:p-8">{estimatorFields}</div>
-            {estimatorResult}
-          </div>
-        </div>
-      </section>
-
       {/* STICKY ESTIMATOR TAB */}
       <button
         type="button"
         onClick={() => setEstimatorModalOpen(true)}
         aria-label="Open payment estimator"
-        className={`fixed bottom-5 right-5 z-40 inline-flex items-center gap-2 rounded-full bg-[#086bc8] px-5 py-3 text-sm font-bold text-white shadow-[0_12px_30px_rgba(8,107,200,.35)] transition-all duration-300 hover:-translate-y-0.5 hover:bg-[#0759a7] ${showEstimatorTab ? "translate-y-0 opacity-100" : "pointer-events-none translate-y-4 opacity-0"}`}
+        className={`fixed top-20 left-1/2 z-40 -translate-x-1/2 inline-flex items-center gap-2 rounded-full bg-[#086bc8] px-5 py-3 text-sm font-bold text-white shadow-[0_12px_30px_rgba(8,107,200,.35)] transition-all duration-300 hover:bg-[#0759a7] ${showEstimatorTab ? "translate-y-0 opacity-100" : "pointer-events-none -translate-y-4 opacity-0"}`}
       >
         <Calculator className="h-4 w-4" /> Estimate payment
       </button>
@@ -1153,26 +1141,55 @@ function FinancePage() {
         </DialogContent>
       </Dialog>
 
-      {/* REVIEW SECTION: do not fabricate My Car testimonials */}
+      {/* CARVANA REFERENCE REVIEWS — attribute accurately, never claim My Car customers */}
       <section className="bg-white px-5 py-16 sm:py-20">
         <div className="mx-auto max-w-5xl">
           <h2 className="text-center text-3xl font-extrabold tracking-tight text-[#0a2946]">
-            Real customers. Real experiences.
+            Real customers. Real Reviews. Real Happy.
           </h2>
-          <p className="mx-auto mt-3 max-w-2xl text-center text-sm leading-6 text-slate-600">
-            Hear from My Car customers about their vehicle-shopping experiences. Verified testimonials can be featured
-            here once approved for publication.
+          <p className="mx-auto mt-3 text-center text-xs text-slate-500">
+            Customer testimonials from Carvana, shown as design references — not My Car customer reviews.
           </p>
-          <div className="mt-8 rounded-xl border border-slate-200 bg-slate-50 p-7 text-center">
-            <p className="text-sm font-medium text-slate-700">
-              We value transparent conversations, clear information and helping customers explore available vehicles.
-            </p>
-            <a
-              href="/contact"
-              className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-blue-700 hover:underline"
-            >
-              Questions? Contact My Car <ArrowRight className="h-4 w-4" />
-            </a>
+          <div className="mt-10 grid gap-5 md:grid-cols-3">
+            {[
+              {
+                quote:
+                  "The whole process was very smooth [from] applying, to selecting the car we wanted. I really liked how clear and accurate the monthly payment would be.",
+                name: "Brian S.",
+                location: "GA",
+                date: "July 2025",
+              },
+              {
+                quote:
+                  "This is my second purchase and this time I had a trade in that had negative equity. The dealerships shamed me for this, but not Carvana! I received the best offer for my trade...Carvana is a game changer and THE best option to purchase a car.",
+                name: "Catrice B.",
+                location: "CA",
+                date: "July 2025",
+              },
+              {
+                quote:
+                  "This entire process was so easy and helpful! They let you determine how much you can afford a month and then present vehicles to you in that range. ZERO hassle. All the numbers are there for you to make the right financial decision for yourself!",
+                name: "Keith K.",
+                location: "TX",
+                date: "January 2024",
+              },
+            ].map((review) => (
+              <figure
+                key={review.name}
+                className="flex h-full flex-col rounded-xl border border-slate-200 bg-white p-6 shadow-sm"
+              >
+                <div className="flex gap-1 text-amber-500" role="img" aria-label="5 out of 5 stars">
+                  {Array.from({ length: 5 }, (_, i) => (
+                    <Star key={i} className="h-4 w-4 fill-current" />
+                  ))}
+                </div>
+                <blockquote className="mt-4 flex-1 text-sm leading-7 text-slate-700">“{review.quote}”</blockquote>
+                <figcaption className="mt-6 border-t border-slate-100 pt-4 text-xs text-slate-600">
+                  <span className="font-bold text-[#0a2946]">{review.name}</span> from {review.location}
+                  <span className="mt-1 block">{review.date} · Carvana customer</span>
+                </figcaption>
+              </figure>
+            ))}
           </div>
         </div>
       </section>
