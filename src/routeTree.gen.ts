@@ -27,6 +27,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminCustomersRouteImport } from './routes/admin.customers'
 import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminTransactionsRouteImport } from './routes/admin.transactions'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
@@ -132,6 +133,11 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminTransactionsRoute = AdminTransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/callback',
   path: '/callback',
@@ -222,6 +228,7 @@ export interface FileRoutesByFullPath {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
@@ -254,6 +261,7 @@ export interface FileRoutesByTo {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
@@ -289,6 +297,7 @@ export interface FileRoutesById {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
@@ -325,6 +334,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/inventory'
     | '/admin/settings'
+    | '/admin/transactions'
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
@@ -357,6 +367,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/inventory'
     | '/admin/settings'
+    | '/admin/transactions'
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
@@ -391,6 +402,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/inventory'
     | '/admin/settings'
+    | '/admin/transactions'
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
@@ -560,6 +572,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/transactions': {
+      id: '/admin/transactions'
+      path: '/transactions'
+      fullPath: '/admin/transactions'
+      preLoaderRoute: typeof AdminTransactionsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/callback'
@@ -665,6 +684,7 @@ interface AdminRouteChildren {
   AdminCustomersRoute: typeof AdminCustomersRoute
   AdminInventoryRoute: typeof AdminInventoryRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminTransactionsRoute: typeof AdminTransactionsRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminBlogNewRoute: typeof AdminBlogNewRoute
   AdminBlogIndexRoute: typeof AdminBlogIndexRoute
@@ -675,6 +695,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCustomersRoute: AdminCustomersRoute,
   AdminInventoryRoute: AdminInventoryRoute,
   AdminSettingsRoute: AdminSettingsRoute,
+  AdminTransactionsRoute: AdminTransactionsRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminBlogNewRoute: AdminBlogNewRoute,
   AdminBlogIndexRoute: AdminBlogIndexRoute,
