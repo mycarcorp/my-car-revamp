@@ -29,7 +29,13 @@ function AuthCallbackPage() {
       if (done) return;
       done = true;
       if (signedIn) void linkLegacyProfile({}).catch(() => undefined);
-      void navigate({ to: signedIn ? "/search" : "/auth" });
+      let pending = false;
+      try {
+        pending = !!sessionStorage.getItem("mycar.pendingPurchase");
+      } catch {
+        pending = false;
+      }
+      void navigate({ to: signedIn ? (pending ? "/my" : "/search") : pending ? "/my" : "/auth" });
     };
 
     const { data: sub } = supabase.auth.onAuthStateChange((_event, session) => {

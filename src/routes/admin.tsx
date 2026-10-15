@@ -1,6 +1,6 @@
 import { createFileRoute, Link, Outlet, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
-import { Car, FileText, Inbox, LogOut, Settings, Users, ExternalLink } from "lucide-react";
+import { Car, FileText, Receipt, Inbox, LogOut, Settings, Users, ExternalLink } from "lucide-react";
 import { useAuth } from "@/hooks/useAuth";
 import { Button } from "@/components/ui/button";
 import { VerifyEmailGate } from "@/components/VerifyEmailGate";
@@ -21,6 +21,7 @@ export const Route = createFileRoute("/admin")({
 const NAV = [
   { to: "/admin", label: "Dashboard", icon: Inbox, exact: true },
   { to: "/admin/customers", label: "Customers", icon: Users, exact: false },
+  { to: "/admin/transactions", label: "Transactions", icon: Receipt, exact: false },
   { to: "/admin/inventory", label: "Inventory", icon: Car, exact: false },
   { to: "/admin/blog", label: "Blog", icon: FileText, exact: false },
   { to: "/admin/settings", label: "Site settings", icon: Settings, exact: false },

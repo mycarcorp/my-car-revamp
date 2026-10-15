@@ -37,6 +37,7 @@ import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } f
 import { Input } from "@/components/ui/input";
 import { LeadForm } from "@/components/LeadForm";
 import { VehicleCard } from "@/components/VehicleCard";
+import { GetStartedButton } from "@/components/GetStartedButton";
 import { useAuth } from "@/hooks/useAuth";
 import { mirrorSavedVehicleToLegacy } from "@/lib/legacy-mirror.functions";
 import { supabase } from "@/integrations/supabase/app-client";
@@ -1110,6 +1111,7 @@ function VehicleDetail() {
               </div>
             )}
             <div className="mt-5 grid gap-2.5">
+              <GetStartedButton vehicle={v} size="lg" className="h-12 rounded-full" />
               <Button asChild size="lg" className="h-12 rounded-full bg-[#0969c5] font-bold hover:bg-[#0758a6]">
                 <a href="#availability">
                   Check availability <ArrowRight className="ml-2 size-4" />

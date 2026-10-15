@@ -38,6 +38,7 @@ import { Route as AdminBlogIndexRouteImport } from './routes/admin.blog.index'
 import { Route as AdminBlogNewRouteImport } from './routes/admin.blog.new'
 import { Route as ApiPublicReceiveArticleRouteImport } from './routes/api/public/receive-article'
 import { Route as MyPurchasesIndexRouteImport } from './routes/my.purchases.index'
+import { Route as MyPurchasesIdRouteImport } from './routes/my.purchases.$id'
 import { Route as AdminBlogIdEditRouteImport } from './routes/admin.blog.$id.edit'
 import { Route as ApiPublicVehiclePhotosSplatRouteImport } from './routes/api/public/vehicle-photos.$'
 
@@ -186,6 +187,11 @@ const MyPurchasesIndexRoute = MyPurchasesIndexRouteImport.update({
   path: '/purchases/',
   getParentRoute: () => MyRoute,
 } as any)
+const MyPurchasesIdRoute = MyPurchasesIdRouteImport.update({
+  id: '/purchases/$id',
+  path: '/purchases/$id',
+  getParentRoute: () => MyRoute,
+} as any)
 const AdminBlogIdEditRoute = AdminBlogIdEditRouteImport.update({
   id: '/blog/$id/edit',
   path: '/blog/$id/edit',
@@ -226,6 +232,7 @@ export interface FileRoutesByFullPath {
   '/my/': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/my/purchases/': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
@@ -257,6 +264,7 @@ export interface FileRoutesByTo {
   '/my': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog': typeof AdminBlogIndexRoute
   '/my/purchases': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
@@ -291,6 +299,7 @@ export interface FileRoutesById {
   '/my/': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/my/purchases/': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
@@ -326,6 +335,7 @@ export interface FileRouteTypes {
     | '/my/'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/my/purchases/$id'
     | '/admin/blog/'
     | '/my/purchases/'
     | '/admin/blog/$id/edit'
@@ -357,6 +367,7 @@ export interface FileRouteTypes {
     | '/my'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/my/purchases/$id'
     | '/admin/blog'
     | '/my/purchases'
     | '/admin/blog/$id/edit'
@@ -390,6 +401,7 @@ export interface FileRouteTypes {
     | '/my/'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/my/purchases/$id'
     | '/admin/blog/'
     | '/my/purchases/'
     | '/admin/blog/$id/edit'
@@ -625,6 +637,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof MyPurchasesIndexRouteImport
       parentRoute: typeof MyRoute
     }
+    '/my/purchases/$id': {
+      id: '/my/purchases/$id'
+      path: '/purchases/$id'
+      fullPath: '/my/purchases/$id'
+      preLoaderRoute: typeof MyPurchasesIdRouteImport
+      parentRoute: typeof MyRoute
+    }
     '/admin/blog/$id/edit': {
       id: '/admin/blog/$id/edit'
       path: '/blog/$id/edit'
@@ -676,11 +695,13 @@ const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
 interface MyRouteChildren {
   MyIndexRoute: typeof MyIndexRoute
+  MyPurchasesIdRoute: typeof MyPurchasesIdRoute
   MyPurchasesIndexRoute: typeof MyPurchasesIndexRoute
 }
 
 const MyRouteChildren: MyRouteChildren = {
   MyIndexRoute: MyIndexRoute,
+  MyPurchasesIdRoute: MyPurchasesIdRoute,
   MyPurchasesIndexRoute: MyPurchasesIndexRoute,
 }
 
