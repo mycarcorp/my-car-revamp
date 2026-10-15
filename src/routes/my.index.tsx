@@ -5,7 +5,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { listMyPurchases, startPurchase } from "@/lib/purchases.functions";
 import { clearPendingPurchase, readPendingPurchase } from "@/components/GetStartedButton";
-import { PurchaseList } from "./my.purchases.index";
+import { PurchaseList } from "@/components/purchase/PurchaseList";
 import { isSetupPending, SetupPending } from "@/components/purchase/PurchaseBits";
 import { isOpenStatus } from "@/lib/purchase-flow";
 
