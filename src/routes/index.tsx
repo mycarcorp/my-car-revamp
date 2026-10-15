@@ -317,7 +317,7 @@ function Home() {
       {styles.length > 0 && (
         <HomeRail
           title="Popular vehicle styles"
-          subtitle="Counts reflect vehicles in our live inventory."
+
           itemClassName="basis-[62%] sm:basis-1/3 lg:basis-1/5"
           action={
             <button
