@@ -1,4 +1,4 @@
-import { describe, expect, it } from "bun:test";
+import { describe, expect, it } from "vitest";
 import { addEvent, emptyProfile, prune, summarize, type VisitorEvent } from "./visitor-personalization";
 
 const now = Date.now();
