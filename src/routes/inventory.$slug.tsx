@@ -1,4 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { descriptionToPlainText, descriptionToSafeHtml, extractDescriptionFaqs } from "@/lib/vehicle-description";
 import { trackEvent } from "@/lib/visitor-personalization";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -117,7 +118,7 @@ function getVehicleDescription(vehicle: VehicleWithPhotos) {
   const customDescription = typeof vehicle.description === "string" ? vehicle.description.trim() : "";
 
   if (customDescription) {
-    return customDescription;
+    return descriptionToPlainText(customDescription);
   }
 
   const mileage = vehicle.mileage != null ? formatMiles(vehicle.mileage) : null;
@@ -274,6 +275,8 @@ function VehicleDetail() {
   const canonicalUrl = getVehicleUrl(slug);
 
   const schemaDescription = getVehicleDescription(v);
+  const descriptionHtml = descriptionToSafeHtml(v.description);
+  const descriptionFaqs = extractDescriptionFaqs(descriptionHtml);
 
   const priceCurrency = getPriceCurrency(v);
 
@@ -512,6 +515,22 @@ function VehicleDetail() {
   return (
     <div className="min-h-screen bg-white text-[#142d46]">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      {descriptionFaqs.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              mainEntity: descriptionFaqs.map((f) => ({
+                "@type": "Question",
+                name: f.question,
+                acceptedAnswer: { "@type": "Answer", text: f.answer },
+              })),
+            }).replace(/</g, "\\u003c"),
+          }}
+        />
+      )}
       <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 lg:px-10">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-5 text-xs">
           <nav aria-label="Breadcrumb" className="min-w-0 text-slate-500">
@@ -747,7 +766,14 @@ function VehicleDetail() {
                   <h3 className="text-lg font-extrabold">
                     About this {v.make} {v.model}
                   </h3>
-                  <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">{schemaDescription}</p>
+                  {descriptionHtml ? (
+                    <div
+                      className="vehicle-description mt-3 text-sm text-slate-600"
+                      dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+                    />
+                  ) : (
+                    <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">{schemaDescription}</p>
+                  )}
                   <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {[
 
@@ -840,7 +866,10 @@ function VehicleDetail() {
                      {v.description && (
                   <div className="mt-7">
                     <h3 className="font-extrabold">About this vehicle</h3>
-                    <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">{v.description}</p>
+                    <div
+                      className="vehicle-description mt-3 text-sm text-slate-600"
+                      dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+                    />
                   </div>
                 )}
               </section>

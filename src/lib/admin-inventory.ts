@@ -48,7 +48,7 @@ export async function removeStorageObjectForUrl(url: string): Promise<void> {
 
 export type PhotoDraft =
   | { kind: "existing"; id: string; url: string; alt: string | null }
-  | { kind: "new"; file: File; previewUrl: string };
+  | { kind: "new"; file: File; previewUrl: string; alt?: string | null };
 
 /** Replaces the photo set for a vehicle with `drafts`, in the given order. */
 export async function syncVehiclePhotos(

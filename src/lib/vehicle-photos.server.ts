@@ -15,10 +15,10 @@ import { videoExtension } from "./vehicle-media";
  * nothing large ever passes through the server function body.
  */
 
-export type IncomingPhoto = { dataUrl: string; contentType?: string };
+export type IncomingPhoto = { dataUrl: string; contentType?: string; alt?: string };
 export type PhotoOrderItem =
-  | { kind: "keep"; url: string; media?: "photo" | "video" }
-  | { kind: "new"; index: number; media?: "photo" | "video"; uploadedKey?: string };
+  | { kind: "keep"; url: string; media?: "photo" | "video"; alt?: string | null }
+  | { kind: "new"; index: number; media?: "photo" | "video"; uploadedKey?: string; alt?: string | null };
 
 type Creds = { url: string; key: string };
 
@@ -166,7 +166,7 @@ export async function createMediaUpload(input: {
   return { uploadUrl: `${c.url}/storage/v1${signed.url}`, key };
 }
 
-type Source = { isVideo: boolean; ext: string; storageKey?: string; bytes?: Uint8Array; contentType?: string };
+type Source = { isVideo: boolean; ext: string; storageKey?: string; bytes?: Uint8Array; contentType?: string; alt?: string };
 
 /**
  * Stores the ordered media set for a vehicle: moves newly uploaded files into
@@ -202,6 +202,9 @@ export async function saveVehiclePhotos(input: {
   // Describe every slot's source without moving bytes yet.
   const sources: Source[] = [];
   for (const item of input.order) {
+    const customAlt = typeof item.alt === "string" ? item.alt.trim().slice(0, 250) : "";
+    const before = sources.length;
+    try {
     if (item.kind === "new") {
       if (item.uploadedKey) {
         const ext = item.uploadedKey.split(".").pop()?.toLowerCase() ?? "mp4";
@@ -229,12 +232,15 @@ export async function saveVehiclePhotos(input: {
         storageKey: sourceKey,
       });
     }
+    } finally {
+      if (sources.length > before && customAlt) sources[sources.length - 1]!.alt = customAlt;
+    }
   }
 
   // Stage everything first: final slot names are reused, so writing straight to
   // them would clobber a file that another slot still needs to read.
   const stagePrefix = `${vin}/staging/${crypto.randomUUID()}`;
-  const staged: Array<{ key: string; isVideo: boolean; ext: string }> = [];
+  const staged: Array<{ key: string; isVideo: boolean; ext: string; alt: string | null }> = [];
   for (let i = 0; i < sources.length; i++) {
     const s = sources[i]!;
     const stageKey = `${stagePrefix}-${i}.${s.ext}`;
@@ -246,7 +252,7 @@ export async function saveVehiclePhotos(input: {
     } else {
       continue;
     }
-    staged.push({ key: stageKey, isVideo: s.isVideo, ext: s.ext });
+    staged.push({ key: stageKey, isVideo: s.isVideo, ext: s.ext, alt: s.alt ?? null });
   }
 
   // Free the slot names, then place each staged file in its final slot.
@@ -258,6 +264,7 @@ export async function saveVehiclePhotos(input: {
   await removeObjects([...new Set(previousKeys)]);
 
   const finalKeys: string[] = [];
+  const finalAlts: Array<string | null> = [];
   let photoSlot = 0;
   let videoSlot = 0;
   for (const item of staged) {
@@ -267,6 +274,7 @@ export async function saveVehiclePhotos(input: {
     const ok = await copyObject(item.key, key);
     if (!ok) continue;
     finalKeys.push(key);
+    finalAlts.push(item.alt);
   }
   await removeObjects([...staged.map((s) => s.key), ...uploadedKeys]);
 
@@ -299,9 +307,9 @@ export async function saveVehiclePhotos(input: {
           vehicle_id: publicId,
           url,
           position: i + 1,
-          alt: /video-\d+\./i.test(url)
+          alt: finalAlts[i] || (/video-\d+\./i.test(url)
             ? `${input.altBase} — video`
-            : `${input.altBase} — photo ${i + 1}`,
+            : `${input.altBase} — photo ${i + 1}`),
         })),
       });
     }

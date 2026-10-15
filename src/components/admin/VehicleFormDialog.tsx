@@ -1,5 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { GripVertical, ImagePlus, Loader2, Plus, Trash2, Upload } from "lucide-react";
+import { GripVertical, ImagePlus, Loader2, Plus, Star, Trash2, Upload } from "lucide-react";
+import { VehicleDescriptionEditor } from "@/components/admin/VehicleDescriptionEditor";
+
+/** Auto-generated alt text ("… — photo 3") is not treated as a custom value. */
+const customAlt = (alt: string | null | undefined) =>
+  alt && !/— (photo \d+|video)$/.test(alt.trim()) ? alt : "";
 import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import {
@@ -319,7 +324,7 @@ export function VehicleFormDialog({
     void (async () => {
       const { data } = await supabase.from("vehicle_photos").select("*").eq("vehicle_id", vehicle.id).order("position");
       setExisting(data ?? []);
-      setPhotos((data ?? []).map((p) => ({ kind: "existing" as const, id: p.id, url: p.url, alt: p.alt })));
+      setPhotos((data ?? []).map((p) => ({ kind: "existing" as const, id: p.id, url: p.url, alt: customAlt(p.alt) })));
     })();
   }, [open, vehicle]);
 
@@ -504,7 +509,11 @@ export function VehicleFormDialog({
       const mediaChanged =
         hasNewMedia ||
         originalMedia.length !== currentExistingMedia.length ||
-        originalMedia.some((url, index) => url !== currentExistingMedia[index]);
+        originalMedia.some((url, index) => url !== currentExistingMedia[index]) ||
+        photos.some((item) =>
+          item.kind === "existing" &&
+          (item.alt ?? "") !== customAlt(existing.find((row) => row.id === item.id)?.alt),
+        );
 
       const pendingUploads = photos
         .map((item, mediaIndex) => ({ item, mediaIndex }))
@@ -566,13 +575,14 @@ export function VehicleFormDialog({
         const order: PhotoOrderInput[] = photos.map((item, mediaIndex) => {
           const media = isVideoDraft(item) ? ("video" as const) : ("photo" as const);
           if (item.kind === "existing") {
-            return { kind: "keep", url: item.url, media };
+            return { kind: "keep", url: item.url, media, alt: item.alt || null };
           }
           return {
             kind: "new",
             index: -1,
             media,
             uploadedKey: uploadedByIndex.get(mediaIndex)!.key,
+            alt: item.alt || null,
           };
         });
 
@@ -673,7 +683,10 @@ export function VehicleFormDialog({
         </div>
 
         <Field label="Description">
-          <Textarea rows={4} value={form.description} onChange={(e) => set("description", e.target.value)} />
+          <VehicleDescriptionEditor value={form.description} onChange={(html) => set("description", html)} />
+          <p className="text-xs text-muted-foreground">
+            Paste formatted text or use the toolbar. Only publish claims (title, inspection, equipment, delivery) management has verified.
+          </p>
         </Field>
         <Field label="Equipment (one per line)">
           <Textarea rows={3} value={form.features} onChange={(e) => set("features", e.target.value)} />
@@ -814,7 +827,7 @@ export function VehicleFormDialog({
                   ) : (
                     <img
                       src={p.kind === "existing" ? p.url : p.previewUrl}
-                      alt={`Photo ${i + 1}`}
+                      alt={p.alt || `Photo ${i + 1}`}
                       className="h-24 w-full object-cover"
                     />
                   )}
@@ -822,9 +835,18 @@ export function VehicleFormDialog({
                   <div className="flex items-center justify-between gap-1 p-1">
                     <span className="flex items-center gap-1 pl-1 text-xs text-muted-foreground">
                       <GripVertical className="size-3" />#{i + 1}
-                      {i === 0 ? " · Main" : ""}
+                      {i === 0 && (
+                        <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
+                          Primary
+                        </span>
+                      )}
                     </span>
                     <div className="flex">
+                      {i !== 0 && !isVideoDraft(p) && (
+                        <Button size="icon" variant="ghost" onClick={() => moveTo(i, 0)} aria-label="Make primary photo" title="Make primary photo">
+                          <Star className="size-3" />
+                        </Button>
+                      )}
                       <Button size="icon" variant="ghost" onClick={() => move(i, -1)} aria-label="Move earlier">
                         <GripVertical className="size-3 rotate-180" />
                       </Button>
@@ -836,6 +858,21 @@ export function VehicleFormDialog({
                       </Button>
                     </div>
                   </div>
+                  {!isVideoDraft(p) && (
+                    <div className="px-1 pb-1">
+                      <Input
+                        value={p.alt ?? ""}
+                        maxLength={250}
+                        placeholder="Alt text (optional)"
+                        aria-label={`Alt text for photo ${i + 1}`}
+                        className="h-7 text-xs"
+                        onChange={(e) => {
+                          const alt = e.target.value;
+                          setPhotos((cur) => cur.map((item, idx) => (idx === i ? { ...item, alt } : item)));
+                        }}
+                      />
+                    </div>
+                  )}
                 </li>
               ))}
             </ul>
