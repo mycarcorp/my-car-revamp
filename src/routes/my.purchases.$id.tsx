@@ -32,9 +32,6 @@ const STEPS = [
 ] as const;
 type PageStep = (typeof STEPS)[number]["key"];
 
-function PendingIntegration({ text }: { text: string }) {
-  return <p className="rounded-lg border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">{text}</p>;
-}
 
 function PurchaseWorkspace() {
   const { id } = Route.useParams();
