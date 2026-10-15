@@ -2,7 +2,19 @@ import { useEffect, useMemo, useState } from "react";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
-import { Camera, Check, Play, Plus, Search, SlidersHorizontal, Trash2, Upload, X } from "lucide-react";
+import {
+  Camera,
+  Check,
+  ChevronLeft,
+  ChevronRight,
+  Play,
+  Plus,
+  Search,
+  SlidersHorizontal,
+  Trash2,
+  Upload,
+  X,
+} from "lucide-react";
 import { isVideoUrl } from "@/lib/vehicle-media";
 
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -401,6 +413,7 @@ function AdminInventory() {
                     setBody(value);
                     setPage(1);
                   }}
+
                   options={BODY_STYLES}
                 />
               </div>
@@ -497,86 +510,9 @@ function AdminInventory() {
               </div>
             ) : (
               <div className="mt-4 grid gap-4 sm:grid-cols-2 xl:grid-cols-3">
-                {visible.map((v) => {
-                  const sortedMedia = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
-                  const photo = sortedMedia.find((m) => !isVideoUrl(m.url)) ?? sortedMedia[0];
-
-                  const title = vehicleTitle(v);
-
-                  const statusClasses = {
-                    available: "bg-emerald-100 text-emerald-700",
-                    sold: "bg-slate-200 text-slate-700",
-                    pending: "bg-amber-100 text-amber-700",
-                    reserved: "bg-blue-100 text-blue-700",
-                  } as const;
-
-                  return (
-                    <article
-                      key={v.id}
-                      role="button"
-                      tabIndex={0}
-                      aria-label={`View details for ${title}`}
-                      onClick={() => openVehicleDetails(v)}
-                      onKeyDown={(event) => {
-                        if (event.key === "Enter" || event.key === " ") {
-                          event.preventDefault();
-                          openVehicleDetails(v);
-                        }
-                      }}
-                      className="group cursor-pointer overflow-hidden rounded-xl border border-border bg-background shadow-sm transition duration-200 hover:-translate-y-0.5 hover:border-[#F7941D]/60 hover:shadow-md focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] focus-visible:ring-offset-2"
-                    >
-                      <div className="relative aspect-[16/10] overflow-hidden bg-muted">
-                        {photo ? (
-                          <img
-                            src={photo.url}
-                            alt={title}
-                            className="h-full w-full object-cover transition duration-300 group-hover:scale-[1.02]"
-                            loading="lazy"
-                          />
-                        ) : (
-                          <div className="flex h-full items-center justify-center text-xs text-muted-foreground">
-                            No photo available
-                          </div>
-                        )}
-
-                        <span
-                          className={`absolute left-3 top-3 inline-flex rounded-full px-2.5 py-1 text-xs font-semibold capitalize ${
-                            statusClasses[v.status as keyof typeof statusClasses] ?? "bg-muted text-muted-foreground"
-                          }`}
-                        >
-                          {v.status}
-                        </span>
-                      </div>
-
-                      <div className="space-y-4 p-4">
-                        <div>
-                          <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
-                            {v.year} {v.make}
-                          </p>
-
-                          <h3 className="mt-1 line-clamp-2 font-display text-lg font-bold text-foreground">
-                            {v.model}
-                            {v.trim ? ` ${v.trim}` : ""}
-                          </h3>
-
-                          <p className="mt-1 text-sm text-muted-foreground">
-                            {v.body_style} · {formatMiles(v.mileage)}
-                          </p>
-                        </div>
-
-                        <div className="border-t border-border pt-3">
-                          <div>
-                            <p className="text-xs text-muted-foreground">Price</p>
-
-                            <p className="font-display text-xl font-bold text-foreground">
-                              {formatUsd(Number(v.price_cents))}
-                            </p>
-                          </div>
-                        </div>
-                      </div>
-                    </article>
-                  );
-                })}
+                {visible.map((v) => (
+                  <AdminInventoryCard key={v.id} vehicle={v} onOpen={() => openVehicleDetails(v)} />
+                ))}
               </div>
             )}
 
@@ -604,6 +540,7 @@ function AdminInventory() {
               onPhotoError={(url) =>
                 setFailedPhotoUrls((current) => (current.includes(url) ? current : [...current, url]))
               }
+
               onEdit={(vehicle) => {
                 setViewing(null);
                 setActivePhoto(0);
@@ -665,6 +602,196 @@ function AdminInventory() {
         </div>
       </div>
     </div>
+  );
+}
+
+/**
+ * Admin card shares the public inventory's image-forward layout.
+ * Image carousel controls never open the vehicle details dialog.
+ * The carousel animates horizontally and wraps seamlessly via a cloned
+ * first/last slide. It uses actual vehicle media, not sample photos.
+ */
+function AdminInventoryCard({ vehicle, onOpen }: { vehicle: Row; onOpen: () => void }) {
+  const photos = useMemo(
+    () =>
+      [...(vehicle.vehicle_photos ?? [])]
+        .sort((a, b) => a.position - b.position)
+        .filter((media) => Boolean(media.url) && !isVideoUrl(media.url)),
+    [vehicle.vehicle_photos],
+  );
+  const count = photos.length;
+  const hasCarousel = count > 1;
+  const [slideIndex, setSlideIndex] = useState(1);
+  const [animating, setAnimating] = useState(false);
+  const [transitionEnabled, setTransitionEnabled] = useState(true);
+  const [failed, setFailed] = useState<string[]>([]);
+
+  // Clone the edge slides so wraparound also slides in the expected direction.
+  const slides = useMemo(() => {
+    if (count <= 1) return photos;
+    return [photos[count - 1]!, ...photos, photos[0]!];
+  }, [photos, count]);
+  const slidePosition = count <= 1 ? 0 : slideIndex;
+  const activePhotoIndex = count <= 1 ? 0 : (slideIndex - 1 + count) % count;
+
+  function movePhoto(direction: -1 | 1) {
+    if (!hasCarousel || animating) return;
+    setTransitionEnabled(true);
+    setAnimating(true);
+    setSlideIndex((position) => position + direction);
+  }
+
+  function finishSlide() {
+    if (!animating || !hasCarousel) return;
+    if (slideIndex === 0) {
+      setTransitionEnabled(false);
+      setSlideIndex(count);
+    } else if (slideIndex === count + 1) {
+      setTransitionEnabled(false);
+      setSlideIndex(1);
+    }
+    setAnimating(false);
+  }
+
+  // After a clone-to-real snap, enable animation without animating the snap itself.
+  useEffect(() => {
+    if (transitionEnabled) return;
+    const frame = requestAnimationFrame(() => {
+      requestAnimationFrame(() => setTransitionEnabled(true));
+    });
+    return () => cancelAnimationFrame(frame);
+  }, [transitionEnabled]);
+
+  const statusClasses: Record<string, string> = {
+    available: "bg-emerald-100 text-emerald-700",
+    sold: "bg-slate-200 text-slate-700",
+    pending: "bg-amber-100 text-amber-700",
+    reserved: "bg-blue-100 text-blue-700",
+    draft: "bg-violet-100 text-violet-700",
+  };
+  const title = vehicleTitle(vehicle);
+
+  return (
+    <article
+      role="button"
+      tabIndex={0}
+      aria-label={`View admin details for ${title}`}
+      onClick={onOpen}
+      onKeyDown={(event) => {
+        if (event.target !== event.currentTarget) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onOpen();
+        }
+      }}
+      className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[#9ac1e6] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] focus-visible:ring-offset-2"
+    >
+      <div className="relative aspect-[16/9] w-full overflow-hidden bg-[#f2f5f8]">
+        {count > 0 ? (
+          <div
+            className="flex h-full w-full"
+            style={{
+              transform: `translate3d(-${slidePosition * 100}%, 0, 0)`,
+              transition: transitionEnabled ? "transform 560ms cubic-bezier(0.22, 1, 0.36, 1)" : "none",
+              willChange: "transform",
+            }}
+            onTransitionEnd={(event) => {
+              if (event.target === event.currentTarget && event.propertyName === "transform") finishSlide();
+            }}
+          >
+            {slides.map((photo, index) => (
+              <div key={`${photo.url}-${index}`} className="flex h-full w-full shrink-0 items-center justify-center">
+                {failed.includes(photo.url) ? (
+                  <Camera className="size-12 text-slate-300" />
+                ) : (
+                  <img
+                    src={photo.url}
+                    alt={`${title} photo ${((index - (hasCarousel ? 1 : 0) + count) % count) + 1}`}
+                    loading="lazy"
+                    draggable={false}
+                    onError={() => setFailed((old) => (old.includes(photo.url) ? old : [...old, photo.url]))}
+                    className="h-full w-full select-none object-contain"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="flex h-full items-center justify-center gap-2 text-xs text-slate-400">
+            <Camera className="size-6" /> No photo available
+          </div>
+        )}
+
+        <span
+          className={`absolute left-3 top-3 z-10 rounded-full px-2.5 py-1 text-xs font-semibold capitalize shadow-sm ${statusClasses[vehicle.status] ?? "bg-slate-100 text-slate-700"}`}
+        >
+          {vehicle.status}
+        </span>
+
+        {hasCarousel && (
+          <>
+            <button
+              type="button"
+              aria-label={`Previous photo of ${title}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                movePhoto(-1);
+              }}
+              onKeyDown={(event) => event.stopPropagation()}
+              disabled={animating}
+              className="absolute left-2 top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-md transition hover:scale-105 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] disabled:opacity-60"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+            <button
+              type="button"
+              aria-label={`Next photo of ${title}`}
+              onClick={(event) => {
+                event.stopPropagation();
+                movePhoto(1);
+              }}
+              onKeyDown={(event) => event.stopPropagation()}
+              disabled={animating}
+              className="absolute right-2 top-1/2 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-slate-800 shadow-md transition hover:scale-105 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] disabled:opacity-60"
+            >
+              <ChevronRight className="size-5" />
+            </button>
+            <div
+              aria-hidden="true"
+              className="absolute bottom-2 left-1/2 z-10 flex max-w-[85%] -translate-x-1/2 items-center gap-1.5 rounded-full bg-black/40 px-2.5 py-1.5"
+            >
+              {Array.from({ length: Math.min(count, 7) }, (_, index) => (
+                <span
+                  key={index}
+                  className={`size-1.5 rounded-full transition-colors ${activePhotoIndex === index ? "bg-[#F7941D]" : "bg-white/80"}`}
+                />
+              ))}
+              {count > 7 && (
+                <span className="text-[10px] text-white">
+                  {activePhotoIndex + 1}/{count}
+                </span>
+              )}
+            </div>
+          </>
+        )}
+      </div>
+
+      <div className="flex flex-1 flex-col p-4">
+        <h3 className="line-clamp-2 text-sm font-bold text-[#173954] sm:text-[15px]">{title}</h3>
+        <p className="mt-1 text-xs text-slate-500">
+          {vehicle.body_style} · {formatMiles(vehicle.mileage)}
+        </p>
+        <p className="mt-3 text-xl font-extrabold tracking-tight text-[#173954]">
+          {formatUsd(Number(vehicle.price_cents))}
+        </p>
+        <div className="mt-auto pt-6">
+          <div className="flex items-center justify-between border-t border-slate-200 pt-3 text-xs">
+            <span className="font-semibold capitalize text-slate-500">{vehicle.status}</span>
+            <span className="font-semibold text-[#0969c5]">View / Edit details →</span>
+          </div>
+        </div>
+      </div>
+    </article>
   );
 }
 
