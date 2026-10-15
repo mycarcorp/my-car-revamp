@@ -1,3 +1,66 @@
+import { createFileRoute, Link } from "@tanstack/react-router";
+import { useEffect, useRef, useState, type ReactNode } from "react";
+import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { toast } from "sonner";
+import { ArrowLeft, Check, ChevronLeft, ChevronRight, FileCheck2, Loader2, LockKeyhole, MapPin, Truck } from "lucide-react";
+import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
+import { useAuth } from "@/hooks/useAuth";
+import { getMyPurchase, saveMyPurchase, submitMyPurchase } from "@/lib/purchases.functions";
+import { canSubmit, paymentLabel, type Purchase, type PurchaseStep } from "@/lib/purchase-flow";
+import { formatDate, formatMiles, formatUsd } from "@/lib/format";
+import { getAttributionDetails } from "@/lib/attribution";
+import { isSetupPending, SetupPending, StatusBadge } from "@/components/purchase/PurchaseBits";
+
+export const Route = createFileRoute("/my/purchases/$id")({
+  component: PurchaseWorkspace,
+});
+
+type Draft = Partial<Purchase>;
+type Fulfillment = "pickup" | "delivery" | null;
+const STEPS = [
+  { key: "vehicle", label: "Vehicle" },
+  { key: "personal", label: "Personal details" },
+  { key: "payment", label: "Payment" },
+  { key: "trade", label: "Trade-in" },
+  { key: "fulfillment", label: "Pickup or delivery" },
+  { key: "license", label: "Driver's license" },
+  { key: "review", label: "Review & submit" },
+  { key: "schedule", label: "Appointment" },
+  { key: "tracking", label: "Status" },
+] as const;
+type PageStep = (typeof STEPS)[number]["key"];
+
+function PendingIntegration({ text }: { text: string }) {
+  return <p className="rounded-lg border border-dashed bg-muted/30 p-3 text-xs text-muted-foreground">{text}</p>;
+}
+
+function PurchaseWorkspace() {
+  const { id } = Route.useParams();
+  const { session } = useAuth();
+  const token = session?.access_token ?? "";
+  const qc = useQueryClient();
+  const query = useQuery({
+    queryKey: ["my-purchase", id],
+    enabled: !!token,
+    retry: false,
+    queryFn: () => getMyPurchase({ data: { accessToken: token, id: Number(id) } }),
+  });
+  const [draft, setDraft] = useState<Draft | null>(null);
+  const [step, setStep] = useState<PageStep>("vehicle");
+  const [saving, setSaving] = useState<"idle" | "saving" | "saved">("idle");
+  const [submitting, setSubmitting] = useState(false);
+  const [fulfillment, setFulfillment] = useState<Fulfillment>(null);
+  const [preferredDate, setPreferredDate] = useState("");
+  const [preferredTime, setPreferredTime] = useState("");
+  const dirty = useRef<Record<string, unknown>>({});
+  const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const savingPromise = useRef<Promise<boolean> | null>(null);
+
+  useEffect(() => {
+    if (query.data?.purchase && !draft) {
+      setDraft(query.data.purchase);
       const initial = query.data.purchase.status === "draft" ? query.data.purchase.current_step : "tracking";
       setStep(initial === "vehicle" || initial === "personal" || initial === "payment" || initial === "trade" || initial === "review" ? initial : "vehicle");
       if (query.data.purchase.status !== "draft") setStep("tracking");
