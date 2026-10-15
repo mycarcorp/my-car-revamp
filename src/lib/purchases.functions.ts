@@ -1,3 +1,132 @@
+import { createServerFn } from "@tanstack/react-start";
+import {
+  CUSTOMER_EDITABLE_FIELDS,
+  PURCHASE_STEPS,
+  canSubmit,
+  type Purchase,
+  type PurchaseEvent,
+  type PurchaseStep,
+} from "./purchase-flow";
+
+const token = (input: unknown) => {
+  const t = String((input as { accessToken?: string })?.accessToken ?? "");
+  if (!t) throw new Error("Please sign in.");
+  return t;
+};
+
+const clip = (v: unknown, max: number) => {
+  const s = String(v ?? "").trim();
+  return s ? s.slice(0, max) : null;
+};
+const numOrNull = (v: unknown) => {
+  if (v === null || v === undefined || String(v).trim() === "") return null;
+  const n = Number(String(v).replace(/[^0-9.\-]/g, ""));
+  return Number.isFinite(n) ? n : null;
+};
+
+const validId = (v: unknown) => {
+  const n = Number(v);
+  if (!Number.isInteger(n) || n <= 0) throw new Error("Invalid purchase.");
+  return n;
+};
+const isoDate = (v: unknown) => {
+  const s = String(v ?? "").trim();
+  return /^\d{4}-\d{2}-\d{2}$/.test(s) ? s : null;
+};
+
+export type VehicleSnapshot = {
+  id: string;
+  slug?: string | null;
+  vin?: string | null;
+  title: string;
+  price_cents?: number | null;
+  mileage?: number | null;
+  photo?: string | null;
+};
+
+export const listMyPurchases = createServerFn({ method: "POST" })
+  .inputValidator((input: { accessToken: string }) => ({ accessToken: token(input) }))
+  .handler(async ({ data }): Promise<Purchase[]> => {
+    const { requireUser, rest } = await import("./purchases.server");
+    const user = await requireUser(data.accessToken);
+    return rest<Purchase[]>(`mc_purchases?select=*&user_id=eq.${user.id}&order=updated_at.desc`);
+  });
+
+export const getMyPurchase = createServerFn({ method: "POST" })
+  .inputValidator((input: { accessToken: string; id: number }) => ({
+    accessToken: token(input),
+    id: Number(input?.id),
+  }))
+  .handler(async ({ data }): Promise<{ purchase: Purchase; events: PurchaseEvent[] } | null> => {
+    const { requireUser, getPurchaseRow, listEvents } = await import("./purchases.server");
+    const user = await requireUser(data.accessToken);
+    const purchase = await getPurchaseRow(data.id);
+    if (!purchase || purchase.user_id !== user.id) return null;
+    return { purchase, events: await listEvents(purchase.id, true) };
+  });
+
+/** Starts a purchase for a vehicle, or resumes the open one for the same vehicle. */
+export const startPurchase = createServerFn({ method: "POST" })
+  .inputValidator((input: { accessToken: string; vehicle: VehicleSnapshot }) => {
+    const v = input?.vehicle;
+    if (!v?.id || !v?.title) throw new Error("Missing vehicle.");
+    return {
+      accessToken: token(input),
+      vehicle: {
+        id: String(v.id).slice(0, 80),
+        slug: clip(v.slug, 200),
+        vin: clip(v.vin, 40),
+        title: String(v.title).slice(0, 255),
+        price_cents: numOrNull(v.price_cents),
+        mileage: numOrNull(v.mileage),
+        photo: clip(v.photo, 1000),
+      },
+    };
+  })
+  .handler(async ({ data }): Promise<{ id: number; resumed: boolean }> => {
+    const { requireUser, rest, addEvent } = await import("./purchases.server");
+    const user = await requireUser(data.accessToken);
+    const existing = await rest<Array<{ id: number }>>(
+      `mc_purchases?select=id&user_id=eq.${user.id}&vehicle_id=eq.${encodeURIComponent(data.vehicle.id)}` +
+        `&status=not.in.(completed,cancelled)&limit=1`,
+    );
+    if (existing?.[0]) return { id: existing[0].id, resumed: true };
+
+    const profile = await rest<Array<{ full_name: string | null; phone: string | null }>>(
+      `profiles?select=full_name,phone&id=eq.${user.id}&limit=1`,
+      { profile: "public" },
+    ).catch(() => []);
+
+    const created = await rest<Array<{ id: number }>>("mc_purchases", {
+      method: "POST",
+      prefer: "return=representation",
+      body: {
+        user_id: user.id,
+        status: "draft",
+        current_step: "personal",
+        email: user.email,
+        full_name: profile?.[0]?.full_name ?? null,
+        phone: profile?.[0]?.phone ?? null,
+        vehicle_id: data.vehicle.id,
+        vehicle_slug: data.vehicle.slug,
+        vehicle_vin: data.vehicle.vin,
+        vehicle_title: data.vehicle.title,
+        vehicle_price_cents: data.vehicle.price_cents,
+        vehicle_mileage: data.vehicle.mileage,
+        vehicle_photo: data.vehicle.photo,
+      },
+    });
+    const id = created[0]!.id;
+    await addEvent({
+      purchase_id: id,
+      event_type: "created",
+      message: `Purchase started for ${data.vehicle.title}.`,
+      visible_to_customer: true,
+      author: null,
+    });
+    return { id, resumed: false };
+  });
+
 
 export const saveMyPurchase = createServerFn({ method: 'POST' })
   .inputValidator((input: { accessToken: string; id: number; patch: Record<string, unknown>; step?: string }) => {
@@ -126,3 +255,14 @@ export const requestPurchaseAppointment = createServerFn({ method: 'POST' })
       body: {
         preferred_appointment_date: data.date, preferred_appointment_time: data.time,
         appointment_notes: data.notes, appointment_status: 'pending_confirmation',
+      },
+    });
+    await addEvent({
+      purchase_id: p.id,
+      event_type: "appointment_requested",
+      message: `Customer requested ${p.fulfillment_method} on ${data.date} at ${data.time}. Awaiting dealership confirmation.`,
+      visible_to_customer: true,
+      author: user.email,
+    });
+    return rows[0]!;
+  });
