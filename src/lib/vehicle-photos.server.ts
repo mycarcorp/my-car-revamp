@@ -17,8 +17,8 @@ import { videoExtension } from "./vehicle-media";
 
 export type IncomingPhoto = { dataUrl: string; contentType?: string; alt?: string };
 export type PhotoOrderItem =
-  | { kind: "keep"; url: string; media?: "photo" | "video" }
-  | { kind: "new"; index: number; media?: "photo" | "video"; uploadedKey?: string };
+  | { kind: "keep"; url: string; media?: "photo" | "video"; alt?: string | null }
+  | { kind: "new"; index: number; media?: "photo" | "video"; uploadedKey?: string; alt?: string | null };
 
 type Creds = { url: string; key: string };
 
@@ -166,7 +166,7 @@ export async function createMediaUpload(input: {
   return { uploadUrl: `${c.url}/storage/v1${signed.url}`, key };
 }
 
-type Source = { isVideo: boolean; ext: string; storageKey?: string; bytes?: Uint8Array; contentType?: string };
+type Source = { isVideo: boolean; ext: string; storageKey?: string; bytes?: Uint8Array; contentType?: string; alt?: string };
 
 /**
  * Stores the ordered media set for a vehicle: moves newly uploaded files into
