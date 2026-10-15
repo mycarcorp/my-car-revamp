@@ -1232,16 +1232,16 @@ function VehicleDetail() {
             <div className="flex max-h-24 flex-none gap-2 overflow-x-auto border-t border-white/10 p-3">
               {(displayedIndexes.length ? displayedIndexes : photoIndexes).map((index) => (
                 <button
-                  key={photos[index].id}
+                  key={photos[index]!.id}
                   onClick={() => setActive(index)}
                   className={`h-16 w-24 shrink-0 overflow-hidden rounded border-2 ${index === active ? "border-[#55abff]" : "border-white/10"}`}
                 >
-                  {isVideoUrl(photos[index].url) ? (
+                  {isVideoUrl(photos[index]!.url) ? (
                     <span className="flex size-full items-center justify-center bg-slate-700">
                       <Play />
                     </span>
                   ) : (
-                    <img src={photos[index].url} alt={`Photo ${index + 1}`} className="size-full object-cover" />
+                    <img src={photos[index]!.url} alt={`Photo ${index + 1}`} className="size-full object-cover" />
                   )}
                 </button>
               ))}
