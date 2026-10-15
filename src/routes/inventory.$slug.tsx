@@ -18,7 +18,7 @@ import {
   ShieldCheck,
   ExternalLink,
 } from "lucide-react";
-import { isVideoUrl } from "@/lib/vehicle-media";
+import { isVideoUrl, parseVideoAlt, videoPublicLabel } from "@/lib/vehicle-media";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -296,7 +296,27 @@ function VehicleDetail() {
     });
   }, [v.id]);
 
-    const [selectedSection, setSelectedSection] = useState("overview");
+  const [selectedSection, setSelectedSection] = useState("overview");
+  const [walkaroundId, setWalkaroundId] = useState<string | null>(null);
+  const sectionKey = (photos ?? []).some((p) => isVideoUrl(p.url)) ? "w" : "n";
+  useEffect(() => {
+    const ids = ["walkaround", "overview", "features", "details", "pricing", "reviews", "inspection", "more"];
+    const els = ids.map((id) => document.getElementById(id)).filter((e): e is HTMLElement => Boolean(e));
+    if (!els.length) return;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        const visible = entries.filter((e) => e.isIntersecting).sort((a, b) => a.boundingClientRect.top - b.boundingClientRect.top);
+        if (visible[0]) setSelectedSection(visible[0].target.id);
+      },
+      { rootMargin: "-150px 0px -55% 0px" },
+    );
+    els.forEach((e) => obs.observe(e));
+    const hash = window.location.hash.slice(1);
+    if (hash && ids.includes(hash)) {
+      requestAnimationFrame(() => document.getElementById(hash)?.scrollIntoView({ block: "start" }));
+    }
+    return () => obs.disconnect();
+  }, [sectionKey]);
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryFilter, setGalleryFilter] = useState<"all" | "exterior" | "interior">("all");
   const [downPayment, setDownPayment] = useState(0);
@@ -473,7 +493,18 @@ function VehicleDetail() {
     },
   };
 
+  const walkaroundVideos = photos
+    .filter((p) => isVideoUrl(p.url) && !failedPhotoIds.includes(p.id))
+    .map((p) => {
+      const meta = parseVideoAlt(p.alt);
+      const label = videoPublicLabel(meta.type);
+      // Auto-generated alt text ("… — video") is not a real title.
+      const title = meta.title && !/—\s*video$/i.test(meta.title) ? meta.title : label;
+      return { id: p.id, url: p.url, label, title };
+    });
+  const activeVideo = walkaroundVideos.find((w) => w.id === walkaroundId) ?? walkaroundVideos[0];
   const navSections = [
+    ...(walkaroundVideos.length ? [{ id: "walkaround", label: "Walkaround" }] : []),
     { id: "overview", label: "Overview" },
     { id: "features", label: "Features" },
     { id: "details", label: "Vehicle Details" },
@@ -503,7 +534,14 @@ function VehicleDetail() {
         : principal / financeMonths
       : 0;
 
-   const chooseTab = (id: string) => setSelectedSection(id);
+  const chooseTab = (id: string) => {
+    const el = document.getElementById(id);
+    if (!el) return;
+    const reduce = window.matchMedia("(prefers-reduced-motion: reduce)").matches;
+    el.scrollIntoView({ behavior: reduce ? "auto" : "smooth", block: "start" });
+    history.replaceState(null, "", `#${id}`);
+    setSelectedSection(id);
+  };
   const movePhoto = (amount: number) =>
     setActive((index) => (index + amount + photos.length) % Math.max(photos.length, 1));
   const pricingDisclosure =
@@ -650,6 +688,19 @@ function VehicleDetail() {
               </>
             )}
           </div>
+          {activeVideo && (
+            <button
+              type="button"
+              onClick={() => chooseTab("walkaround")}
+              className="mt-3 inline-flex items-center gap-2 rounded-full bg-[#0f2b4b] px-4 py-2.5 text-xs font-bold text-white shadow hover:bg-[#173d66]"
+            >
+              <span className="flex size-6 items-center justify-center rounded-full bg-white text-[#0f2b4b]">
+                <Play className="size-3.5 fill-current" />
+              </span>
+              360° Walkaround
+              {walkaroundVideos.length > 1 && <span className="opacity-70">· {walkaroundVideos.length} videos</span>}
+            </button>
+          )}
           {photos.length > 1 && (
             <div className="mt-3 flex gap-2 overflow-x-auto pb-2 [scrollbar-width:thin]">
               {photos.map((photo, index) => (
@@ -677,34 +728,65 @@ function VehicleDetail() {
               ))}
             </div>
           )}
-          {/* REAL TABS: these replace their content instead of scrolling the page. */}
-          <div className="mt-5 border-b border-slate-200" role="tablist" aria-label="Vehicle information tabs">
+          {/* Sticky section navigation: every section stays on the page; links scroll to it. */}
+          <nav
+            aria-label="Vehicle sections"
+            className="sticky top-16 z-30 -mx-4 mt-5 border-b border-slate-200 bg-white/95 px-4 backdrop-blur sm:mx-0 sm:px-0"
+          >
             <div className="flex gap-1 overflow-x-auto [scrollbar-width:none]">
               {navSections.map(({ id, label }) => (
-                <button
+                <a
                   key={id}
-                  type="button"
-                  role="tab"
-                  id={`tab-${id}`}
-                  aria-selected={selectedSection === id}
-                  aria-controls="vehicle-tab-content"
-                  onClick={() => chooseTab(id)}
-                  className={`shrink-0 border-b-[3px] px-3 py-4 text-xs font-bold transition-colors sm:px-4 ${selectedSection === id ? "border-[#1478cc] text-[#0969c5]" : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-[#0969c5]"}`}
+                  href={`#${id}`}
+                  aria-current={selectedSection === id ? "true" : undefined}
+                  onClick={(event) => {
+                    event.preventDefault();
+                    chooseTab(id);
+                  }}
+                  className={`flex shrink-0 items-center gap-1.5 border-b-[3px] px-3 py-4 text-xs font-bold transition-colors sm:px-4 ${selectedSection === id ? "border-[#1478cc] text-[#0969c5]" : "border-transparent text-slate-500 hover:bg-slate-50 hover:text-[#0969c5]"}`}
                 >
+                  {id === "walkaround" && <Play className="size-3.5" />}
                   {label}
-                </button>
+                </a>
               ))}
             </div>
-          </div>
-          <div
-            id="vehicle-tab-content"
-            role="tabpanel"
-            aria-labelledby={`tab-${selectedSection}`}
-            key={`${v.id}-${selectedSection}`}
-            className="min-h-[460px] animate-in fade-in duration-300"
-          >
-            {selectedSection === "overview" && (
-              <section className="pb-10 pt-7">
+          </nav>
+          <div id="vehicle-sections">
+            {activeVideo && (
+              <section id="walkaround" className="scroll-mt-[140px] pt-8">
+                <h2 className="text-2xl font-extrabold">360° Walkaround</h2>
+                <p className="mt-1 text-sm text-slate-500">Filmed video of this exact vehicle.</p>
+                <div className="mt-5 overflow-hidden rounded-2xl bg-black">
+                  <video
+                    key={activeVideo.url}
+                    src={activeVideo.url}
+                    controls
+                    playsInline
+                    preload="metadata"
+                    onError={() => markFailed(activeVideo.id)}
+                    className="aspect-video w-full bg-black object-contain"
+                  />
+                </div>
+                <p className="mt-3 text-sm font-bold">{activeVideo.title}</p>
+                {walkaroundVideos.length > 1 && (
+                  <div className="mt-3 flex gap-2 overflow-x-auto pb-1">
+                    {walkaroundVideos.map((w) => (
+                      <button
+                        key={w.id}
+                        type="button"
+                        onClick={() => setWalkaroundId(w.id)}
+                        aria-pressed={w.id === activeVideo.id}
+                        className={`flex shrink-0 items-center gap-2 rounded-full border px-4 py-2 text-xs font-bold ${w.id === activeVideo.id ? "border-[#1478cc] bg-[#e8f4ff] text-[#0969c5]" : "border-slate-200 text-slate-600 hover:border-slate-300"}`}
+                      >
+                        <Play className="size-3.5" /> {w.title}
+                      </button>
+                    ))}
+                  </div>
+                )}
+              </section>
+            )}
+            {(
+              <section id="overview" className="scroll-mt-[140px] pb-10 pt-7">
                 <div className="overflow-hidden rounded-2xl bg-[#f4f6f9]">
                   <div className="px-5 pt-8 text-center sm:px-9">
                     <h2 className="mt-2 text-2xl font-extrabold tracking-tight text-[#123a5b] sm:text-3xl">
@@ -798,8 +880,8 @@ function VehicleDetail() {
                 </div>
               </section>
             )}
-            {selectedSection === "features" && (
-              <section className="py-8">
+            {(
+              <section id="features" className="scroll-mt-[140px] py-8">
                 <div className="rounded-2xl bg-[#f5f7fa] px-5 py-8 sm:px-8">
                   <h2 className="mt-2 text-center text-2xl font-extrabold">Features & Highlights</h2>
                   <div className="mt-6 grid gap-4 sm:grid-cols-2">
@@ -848,8 +930,8 @@ function VehicleDetail() {
                 </div>
               </section>
             )}
-            {selectedSection === "details" && (
-              <section className="py-8">
+            {(
+              <section id="details" className="scroll-mt-[140px] py-8">
                 <h2 className="text-2xl font-extrabold">Vehicle Details</h2>
                 <dl className="mt-5 grid gap-x-8 sm:grid-cols-2">
                   {specs.map(([name, value]) => (
@@ -874,8 +956,8 @@ function VehicleDetail() {
                 )}
               </section>
             )}
-            {selectedSection === "pricing" && (
-              <section className="py-8">
+            {(
+              <section id="pricing" className="scroll-mt-[140px] py-8">
                 <h2 className="text-center text-2xl font-extrabold">Price Details</h2>
                 <p className="mt-2 text-center text-sm text-slate-500">
                   Explore estimated monthly payments for this vehicle.
@@ -945,8 +1027,8 @@ function VehicleDetail() {
                 </div>
               </section>
             )}
-            {selectedSection === "reviews" && (
-              <section className="py-8">
+            {(
+              <section id="reviews" className="scroll-mt-[140px] py-8">
                 <h2 className="text-2xl font-extrabold">Customer Reviews</h2>
                 <p className="mt-3 text-sm leading-7 text-slate-600">
                   We don't currently have a verified review specific to this vehicle. Contact My Car to learn about our
@@ -957,8 +1039,8 @@ function VehicleDetail() {
                 </Button>
               </section>
             )}
-            {selectedSection === "inspection" && (
-              <section className="py-8">
+            {(
+              <section id="inspection" className="scroll-mt-[140px] py-8">
                 <h2 className="text-2xl font-extrabold">Inspection & Vehicle History</h2>
                 <div className="mt-5 rounded-xl border border-slate-200 p-6">
                   <ShieldCheck className="size-8 text-[#1174c5]" />
@@ -984,8 +1066,8 @@ function VehicleDetail() {
                 </div>
               </section>
             )}
-            {selectedSection === "more" && (
-              <section className="py-8">
+            {(
+              <section id="more" className="scroll-mt-[140px] py-8">
                 <div className="flex items-center justify-between gap-3">
                   <h2 className="text-2xl font-extrabold">More Cars You Might Like</h2>
                   <Link to="/search" className="text-sm font-bold text-[#0969c5]">
