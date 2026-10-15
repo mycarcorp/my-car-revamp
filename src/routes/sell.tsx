@@ -1,3 +1,4 @@
+import valueSuv from "@/assets/value-suv.png";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { trackEvent } from "@/lib/visitor-personalization";
@@ -219,7 +220,7 @@ function SellPage() {
   const options = useMemo(
     () => ({
       names: [...new Set(inventory.map((v) => `${v.make} ${v.model}`))].sort(),
-      bodies: [...new Set(inventory.map((v) => v.body_style).filter((v): v is string => Boolean(v)))].sort(),
+      bodies: [...new Set(inventory.map((v) => v.body_style).filter(Boolean) as string[])].sort(),
     }),
     [inventory],
   );
@@ -1071,7 +1072,7 @@ function Choice({
         </SelectTrigger>
         <SelectContent>
           {options.map(([val, text]) => (
-            <SelectItem key={val} value={val}>
+            <SelectItem key={val} value={val ?? ""}>
               {text}
             </SelectItem>
           ))}
