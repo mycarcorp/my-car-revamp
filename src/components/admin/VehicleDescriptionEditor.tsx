@@ -44,15 +44,13 @@ export function VehicleDescriptionEditor({ value, onChange }: Props) {
     onUpdate: ({ editor: e }) => onChange(e.isEmpty ? "" : e.getHTML()),
   });
 
-  // Load a different vehicle's description when the dialog reopens.
+  // Sync external changes (dialog reopened, VIN decode) without fighting the typist.
   useEffect(() => {
-    if (!editor) return;
+    if (!editor || editor.isFocused) return;
     const next = descriptionToSafeHtml(value);
-    if (next !== editor.getHTML() && !(editor.isEmpty && !next)) {
-      editor.commands.setContent(next, { emitUpdate: false });
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [editor, value === "" ? "" : null]);
+    const current = editor.isEmpty ? "" : editor.getHTML();
+    if (next !== current) editor.commands.setContent(next, { emitUpdate: false });
+  }, [editor, value]);
 
   return (
     <div className="overflow-hidden rounded-md border border-input bg-background">
