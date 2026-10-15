@@ -1,7 +1,17 @@
 import type React from "react";
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { ArrowRight, Banknote, Car, CarFront, Handshake, MapPin, Search, ShieldCheck, TrendingDown } from "lucide-react";
+import {
+  ArrowRight,
+  Banknote,
+  Car,
+  CarFront,
+  Handshake,
+  MapPin,
+  Search,
+  ShieldCheck,
+  TrendingDown,
+} from "lucide-react";
 import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
@@ -97,7 +107,8 @@ const EMPTY_CAR_FINDER_FORM: CarFinderForm = {
 };
 
 const priceOf = (v: VehicleWithPhotos) => Number(v.price_cents ?? 0) / 100;
-const isDrop = (v: VehicleWithPhotos) => Number(v.prior_price_cents ?? 0) > Number(v.price_cents ?? 0) && priceOf(v) > 0;
+const isDrop = (v: VehicleWithPhotos) =>
+  Number(v.prior_price_cents ?? 0) > Number(v.price_cents ?? 0) && priceOf(v) > 0;
 const coverOf = (v: VehicleWithPhotos) => vehicleMedia(v).find((m) => !m.video)?.url ?? "";
 const firstCover = (list: VehicleWithPhotos[]) => {
   for (const v of list) {
@@ -131,7 +142,10 @@ function Home() {
     setCarFinder((current) => ({ ...current, [field]: value }));
   };
 
-  const live = useMemo(() => (all ?? []).filter((v) => v.status === "available" || v.status === "pending" || !v.status), [all]);
+  const live = useMemo(
+    () => (all ?? []).filter((v) => v.status === "available" || v.status === "pending" || !v.status),
+    [all],
+  );
 
   const styles = useMemo(
     () =>
@@ -202,7 +216,10 @@ function Home() {
       if (!entry.image) entry.image = coverOf(v);
       map.set(key, entry);
     }
-    return [...map.values()].filter((m) => m.image).sort((a, b) => b.count - a.count).slice(0, 14);
+    return [...map.values()]
+      .filter((m) => m.image)
+      .sort((a, b) => b.count - a.count)
+      .slice(0, 14);
   }, [live]);
 
   const dropCount = useMemo(() => live.filter(isDrop).length, [live]);
@@ -233,10 +250,6 @@ function Home() {
             <p className="mt-4 font-display text-[3.2rem] font-black leading-[0.92] tracking-[-0.05em] text-primary-foreground sm:text-7xl lg:text-[5.6rem]">
               Right car.
               <span className="block text-accent">Right price.</span>
-            </p>
-            <p className="mt-5 max-w-md text-base leading-7 text-primary-foreground/85 md:text-lg">
-              {displayName ? `Welcome back, ${displayName}. ` : ""}Find your next car in Fredericksburg, VA. Explore real
-              inventory, compare prices, and start your purchase online.
             </p>
 
             <form
@@ -478,8 +491,8 @@ function Home() {
               Real people. Real cars. A better buying experience.
             </h2>
             <p className="mt-5 max-w-lg text-base leading-7 text-muted-foreground">
-              My Car is a local Fredericksburg dealership. Browse our real inventory online, ask questions, and start your
-              purchase when you&apos;re ready — our team is here to help along the way.
+              My Car is a local Fredericksburg dealership. Browse our real inventory online, ask questions, and start
+              your purchase when you&apos;re ready — our team is here to help along the way.
             </p>
             <ol className="mt-8 space-y-4">
               {[
@@ -797,7 +810,9 @@ function HeroCard({
       to={to}
       className="group flex items-center gap-4 rounded-2xl border border-primary-foreground/20 bg-primary-foreground/10 p-5 text-primary-foreground backdrop-blur-md transition hover:bg-primary-foreground/15 md:p-6"
     >
-      <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">{icon}</span>
+      <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">
+        {icon}
+      </span>
       <div className="min-w-0 flex-1">
         <div className="font-display text-lg font-bold">{title}</div>
         <div className="text-sm text-primary-foreground/80">{body}</div>
