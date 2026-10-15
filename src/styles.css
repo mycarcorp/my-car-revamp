@@ -174,3 +174,21 @@
     transform: translateY(-2px);
   }
 }
+
+/* Formatted vehicle descriptions (admin editor + public detail page) */
+.vehicle-description { line-height: 1.75; color: inherit; overflow-wrap: anywhere; }
+.vehicle-description > :first-child { margin-top: 0; }
+.vehicle-description h2 { margin: 1.75rem 0 0.6rem; font-size: 1.2rem; font-weight: 800; line-height: 1.3; }
+.vehicle-description h3 { margin: 1.25rem 0 0.4rem; font-size: 1rem; font-weight: 700; line-height: 1.4; }
+.vehicle-description p { margin: 0 0 0.85rem; }
+.vehicle-description ul, .vehicle-description ol { margin: 0 0 1rem; padding-left: 1.4rem; }
+.vehicle-description ul { list-style: disc; }
+.vehicle-description ol { list-style: decimal; }
+.vehicle-description li { margin: 0.25rem 0; }
+.vehicle-description li > p { margin: 0; }
+.vehicle-description a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
+.vehicle-description table { display: block; width: 100%; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 0 0 1.25rem; font-size: 0.875rem; }
+.vehicle-description th, .vehicle-description td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; min-width: 8rem; }
+.vehicle-description th { background: var(--muted); font-weight: 700; }
+.vehicle-description td > p, .vehicle-description th > p { margin: 0; }
+.vehicle-description .selectedCell { background: color-mix(in oklab, var(--primary) 12%, transparent); }
