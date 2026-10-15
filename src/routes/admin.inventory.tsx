@@ -620,6 +620,7 @@ function AdminInventoryCard({ vehicle, onOpen }: { vehicle: Row; onOpen: () => v
     [vehicle.vehicle_photos],
   );
   const count = photos.length;
+  const videoCount = (vehicle.vehicle_photos ?? []).filter((m) => isVideoUrl(m.url)).length;
   const hasCarousel = count > 1;
   const [slideIndex, setSlideIndex] = useState(1);
   const [animating, setAnimating] = useState(false);
@@ -687,6 +688,11 @@ function AdminInventoryCard({ vehicle, onOpen }: { vehicle: Row; onOpen: () => v
       className="group flex h-full cursor-pointer flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition-all duration-300 hover:-translate-y-0.5 hover:border-[#9ac1e6] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#F7941D] focus-visible:ring-offset-2"
     >
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-[#f2f5f8]">
+        {videoCount > 0 && (
+          <span className="pointer-events-none absolute left-2 top-2 z-10 inline-flex items-center gap-1 rounded-full bg-black/75 px-2 py-0.5 text-[10px] font-bold text-white">
+            <Play className="size-3" /> {videoCount} video{videoCount === 1 ? "" : "s"}
+          </span>
+        )}
         {count > 0 ? (
           <div
             className="flex h-full w-full"
