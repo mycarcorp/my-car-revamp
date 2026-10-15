@@ -130,7 +130,7 @@ function getVehicleDescription(vehicle: VehicleWithPhotos) {
 
   return parts.join(" ");
 }
-**
+/**
  * Ensure Google always receives a valid ISO currency code.
  * MyCar inventory is priced in USD, so USD is the fallback.
  */
