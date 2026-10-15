@@ -1,46 +1,30 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { trackEvent } from "@/lib/visitor-personalization";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
   Camera,
   CarFront,
   Check,
-  Heart,
-  Phone,
   Play,
   ChevronLeft,
   ChevronRight,
   Maximize2,
   X,
-  Images,
   Gauge,
-  Fuel,
   ShieldCheck,
-  Calculator,
-  Copy,
-  Info,
-  Clock,
   ExternalLink,
-  CalendarDays,
-  MapPin,
-  CheckCircle2,
 } from "lucide-react";
 import { isVideoUrl } from "@/lib/vehicle-media";
 
-import { toast } from "sonner";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { LeadForm } from "@/components/LeadForm";
 import { VehicleCard } from "@/components/VehicleCard";
 import { GetStartedButton } from "@/components/GetStartedButton";
-import { useAuth } from "@/hooks/useAuth";
-import { mirrorSavedVehicleToLegacy } from "@/lib/legacy-mirror.functions";
-import { supabase } from "@/integrations/supabase/app-client";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 import {
   allVehiclesQuery,
@@ -68,6 +52,8 @@ function getVehicleUrl(slug: string) {
  * https://mycarcorp.com/api/public/vehicle-photos/example/photo-1.jpg
  *
  * Existing absolute URLs remain unchanged.
+
+
  */
 function toAbsoluteUrl(url: string) {
   const cleanUrl = url.trim();
@@ -144,8 +130,7 @@ function getVehicleDescription(vehicle: VehicleWithPhotos) {
 
   return parts.join(" ");
 }
-
-/**
+**
  * Ensure Google always receives a valid ISO currency code.
  * MyCar inventory is priced in USD, so USD is the fallback.
  */
@@ -278,8 +263,6 @@ function VehicleDetail() {
 
   const { data: similar } = useQuery(similarVehiclesQuery(v.body_style, v.id));
 
-  const { user } = useAuth();
-
   const photos = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
 
   /*
@@ -310,7 +293,7 @@ function VehicleDetail() {
     });
   }, [v.id]);
 
-  const [selectedSection, setSelectedSection] = useState("overview");
+    const [selectedSection, setSelectedSection] = useState("overview");
   const [galleryOpen, setGalleryOpen] = useState(false);
   const [galleryFilter, setGalleryFilter] = useState<"all" | "exterior" | "interior">("all");
   const [downPayment, setDownPayment] = useState(0);
@@ -321,10 +304,6 @@ function VehicleDetail() {
   const [failedPhotoIds, setFailedPhotoIds] = useState<string[]>([]);
 
   const markFailed = (id: string) => setFailedPhotoIds((prev) => (prev.includes(id) ? prev : [...prev, id]));
-
-  const [saved, setSaved] = useState(false);
-
-  const [savingBusy, setSavingBusy] = useState(false);
 
   const currentVehicleIndex = allVehicles?.findIndex((vehicle) => vehicle.id === v.id) ?? -1;
 
@@ -377,99 +356,6 @@ function VehicleDetail() {
     setFailedPhotoIds([]);
   }, [v.id]);
 
-  useEffect(() => {
-    let active = true;
-
-    if (!user) {
-      setSaved(false);
-      return;
-    }
-
-    void (async () => {
-      const { data } = await supabase
-        .from("saved_vehicles")
-        .select("id")
-        .eq("user_id", user.id)
-        .eq("vehicle_id", v.id)
-        .maybeSingle();
-
-      if (active) {
-        setSaved(!!data);
-      }
-    })();
-
-    return () => {
-      active = false;
-    };
-  }, [user, v.id]);
-
-  async function mirrorSave(action: "save" | "unsave") {
-    const { data: session } = await supabase.auth.getSession();
-
-    const accessToken = session.session?.access_token;
-
-    if (!accessToken) {
-      return;
-    }
-
-    await mirrorSavedVehicleToLegacy({
-      data: {
-        accessToken,
-        vehicleId: v.id,
-        action,
-      },
-    }).catch(() => undefined);
-  }
-
-  async function toggleSave() {
-    if (!user) {
-      toast.info("Sign in to save this vehicle to your account.");
-
-      return;
-    }
-
-    setSavingBusy(true);
-
-    if (saved) {
-      const { error } = await supabase.from("saved_vehicles").delete().eq("user_id", user.id).eq("vehicle_id", v.id);
-
-      setSavingBusy(false);
-
-      if (error) {
-        toast.error("Could not remove this vehicle.");
-
-        return;
-      }
-
-      setSaved(false);
-
-      void mirrorSave("unsave");
-
-      toast.success("Removed from your saved vehicles.");
-
-      return;
-    }
-
-    const { error } = await supabase.from("saved_vehicles").insert({
-      user_id: user.id,
-      vehicle_id: v.id,
-    });
-
-    setSavingBusy(false);
-
-    if (error && !error.message.includes("duplicate")) {
-      toast.error("Could not save this vehicle.");
-
-      return;
-    }
-
-    setSaved(true);
-
-    void mirrorSave("save");
-
-    toast.success("Saved to your account.");
-  }
-
   const specs: [string, string][] = [
     ["VIN", v.vin],
     ["Stock number", v.stock_number],
@@ -484,7 +370,7 @@ function VehicleDetail() {
     ["Combined MPG", v.mpg_combined ? String(v.mpg_combined) : "—"],
   ];
 
-  /*
+   /*
    * Vehicle + Product structured data.
    *
    * Important:
@@ -543,7 +429,7 @@ function VehicleDetail() {
         }
       : {}),
 
-    ...(v.fuel_type
+     ...(v.fuel_type
       ? {
           fuelType: v.fuel_type,
         }
@@ -613,7 +499,8 @@ function VehicleDetail() {
         ? (principal * monthlyRate) / (1 - Math.pow(1 + monthlyRate, -financeMonths))
         : principal / financeMonths
       : 0;
-  const chooseTab = (id: string) => setSelectedSection(id);
+
+   const chooseTab = (id: string) => setSelectedSection(id);
   const movePhoto = (amount: number) =>
     setActive((index) => (index + amount + photos.length) % Math.max(photos.length, 1));
   const pricingDisclosure =
@@ -682,7 +569,7 @@ function VehicleDetail() {
         </div>
       </div>
 
-      <div className="mx-auto grid max-w-7xl gap-7 px-4 py-7 sm:px-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(330px,0.8fr)] lg:px-10">
+        <div className="mx-auto grid max-w-7xl gap-7 px-4 py-7 sm:px-6 lg:grid-cols-[minmax(0,1.45fr)_minmax(330px,0.8fr)] lg:px-10">
         <main className="min-w-0">
           <div className="relative overflow-hidden rounded-2xl border border-slate-200 bg-[#f2f5f8]">
             <button
@@ -725,7 +612,7 @@ function VehicleDetail() {
             </button>
             {photos.length > 1 && (
               <>
-                <button
+                      <button
                   type="button"
                   aria-label="Previous vehicle photo"
                   onClick={() => movePhoto(-1)}
@@ -809,7 +696,9 @@ function VehicleDetail() {
                       My Car listing.
                     </p>
                   </div>
-                  <div className="mt-7 grid gap-3 px-4 sm:grid-cols-3 sm:px-7">
+
+
+                       <div className="mt-7 grid gap-3 px-4 sm:grid-cols-3 sm:px-7">
                     {[
                       {
                         title: "Made for your everyday",
@@ -861,7 +750,8 @@ function VehicleDetail() {
                   <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">{schemaDescription}</p>
                   <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {[
-                      ["Mileage", formatMiles(v.mileage)],
+
+                   ["Mileage", formatMiles(v.mileage)],
                       ["Body Style", v.body_style || "—"],
                       ["Engine", v.engine || "—"],
                       ["Fuel", v.fuel_type || "—"],
@@ -946,7 +836,8 @@ function VehicleDetail() {
                     </div>
                   ))}
                 </dl>
-                {v.description && (
+
+                     {v.description && (
                   <div className="mt-7">
                     <h3 className="font-extrabold">About this vehicle</h3>
                     <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">{v.description}</p>
@@ -1015,7 +906,8 @@ function VehicleDetail() {
                       />
                     </label>
                   </div>
-                  <p className="mt-4 text-xs leading-5 text-slate-500">{pricingDisclosure}</p>
+
+                     <p className="mt-4 text-xs leading-5 text-slate-500">{pricingDisclosure}</p>
                   <Button asChild className="mt-5 rounded-full bg-[#0969c5] hover:bg-[#0758a6]">
                     <Link to="/finance">
                       Explore financing <ArrowRight className="ml-2 size-4" />
@@ -1098,7 +990,8 @@ function VehicleDetail() {
                 Availability to be confirmed
               </Badge>
             )}
-            <div className="hidden lg:block">
+
+               <div className="hidden lg:block">
               <p className="mt-5 text-3xl font-extrabold">{formatUsd(Number(v.price_cents))}</p>
             </div>
             {payment != null && settings && (
@@ -1110,62 +1003,8 @@ function VehicleDetail() {
                 </p>
               </div>
             )}
-            <div className="mt-5 grid gap-2.5">
-              <GetStartedButton vehicle={v} size="lg" className="h-12 rounded-full" />
-              <Button asChild size="lg" className="h-12 rounded-full bg-[#0969c5] font-bold hover:bg-[#0758a6]">
-                <a href="#availability">
-                  Check availability <ArrowRight className="ml-2 size-4" />
-                </a>
-              </Button>
-              <Button asChild variant="outline" className="h-11 rounded-full">
-                <Link to="/finance">Get pre-qualified</Link>
-              </Button>
-              <Button asChild variant="outline" className="h-11 rounded-full">
-                <Link to="/schedule" search={{ type: "test_drive", vehicle: v.id }}>
-                  Schedule a test drive
-                </Link>
-              </Button>
-              <Button asChild variant="outline" className="h-11 rounded-full">
-                <Link to="/sell">Value my trade</Link>
-              </Button>
-              <Button variant="ghost" onClick={toggleSave} disabled={savingBusy} className="h-10">
-                <Heart className={`mr-2 size-4 ${saved ? "fill-rose-500 text-rose-500" : ""}`} />
-                {saved ? "Saved — remove" : "Save this vehicle"}
-              </Button>
-              {settings?.phone && (
-                <a
-                  href={`tel:${settings.phone.replace(/\D/g, "")}`}
-                  className="flex items-center justify-center gap-2 py-2 text-sm font-bold text-[#10385d]"
-                >
-                  <Phone className="size-4 text-[#f28c22]" /> {settings.phone}
-                </a>
-              )}
-            </div>
-          </div>
-          <div id="availability" className="scroll-mt-28 rounded-2xl border border-slate-200 bg-white p-5 sm:p-6">
-            <h2 className="text-lg font-extrabold">Check availability</h2>
-            <p className="mt-1 text-sm leading-6 text-slate-500">
-              We'll confirm this vehicle is still on the lot and answer your questions.
-            </p>
-            <div className="mt-4">
-              <LeadForm
-                leadType="availability"
-                vehicleId={v.id}
-                vehicle={{
-                  id: v.id,
-                  vin: v.vin,
-                  stock_number: v.stock_number,
-                  year: v.year,
-                  make: v.make,
-                  model: v.model,
-                  trim: v.trim,
-                  price: v.price_cents != null ? (Number(v.price_cents) / 100).toFixed(2) : null,
-                }}
-                submitLabel="Check availability"
-                messageLabel="Questions about this vehicle"
-                successTitle="We're on it"
-                successBody="We'll confirm availability and get back to you shortly."
-              />
+            <div className="mt-5">
+              <GetStartedButton vehicle={v} size="lg" className="h-12 w-full rounded-full" />
             </div>
           </div>
         </aside>
@@ -1226,7 +1065,8 @@ function VehicleDetail() {
                     onClick={() => movePhoto(1)}
                     className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-900"
                   >
-                    <ChevronRight />
+
+                       <ChevronRight />
                   </button>
                 </>
               )}
@@ -1257,9 +1097,7 @@ function VehicleDetail() {
           <span className="text-[10px] text-slate-500">Vehicle price</span>
           <span className="truncate text-lg font-extrabold">{formatUsd(Number(v.price_cents))}</span>
         </div>
-        <Button asChild className="h-11 rounded-full bg-[#0969c5] px-5 font-bold hover:bg-[#0758a6]">
-          <a href="#availability">Check availability</a>
-        </Button>
+        <GetStartedButton vehicle={v} size="lg" className="h-11 shrink-0 rounded-full px-5" />
       </div>
       <div className="h-20 lg:hidden" />
     </div>
