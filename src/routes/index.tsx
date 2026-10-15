@@ -272,13 +272,6 @@ function Home() {
                 Search
               </Button>
             </form>
-            <Link
-              to="/search"
-              className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary-foreground/90 hover:text-accent"
-            >
-              {facets?.total ? `Browse all ${facets.total.toLocaleString()} vehicles` : "Browse all vehicles"}
-              <ArrowRight className="size-4" />
-            </Link>
           </div>
 
           <div className="mt-12 grid gap-4 md:mt-20 md:grid-cols-2">
