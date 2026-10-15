@@ -1,18 +1,8 @@
-import { createFileRoute, Link } from "@tanstack/react-router";
+import type React from "react";
+import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import {
-  ArrowRight,
-  BadgeCheck,
-  Banknote,
-  Car,
-  Handshake,
-  Linkedin,
-  MapPin,
-  Search,
-  ShieldCheck,
-  Youtube,
-} from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { ArrowRight, Banknote, Car, CarFront, Handshake, MapPin, Search, ShieldCheck, TrendingDown } from "lucide-react";
+import { useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -20,61 +10,61 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Textarea } from "@/components/ui/textarea";
 import { LeadForm } from "@/components/LeadForm";
-import { VehicleCard } from "@/components/VehicleCard";
+import { vehicleMedia } from "@/components/VehicleCard";
+import { HomeRail } from "@/components/home/HomeRail";
+import { HomeVehicleCard } from "@/components/home/HomeVehicleCard";
+import { BrandStory } from "@/components/home/BrandStory";
 import { ReturningHero, ReturningSections, useVisitorState } from "@/components/ReturningVisitor";
 import { useAuth } from "@/hooks/useAuth";
 import { ctaButtonClass } from "@/lib/ui";
 import {
-  collectionsQuery,
+  allVehiclesQuery,
   facetsQuery,
   featuredVehiclesQuery,
   serviceAreasQuery,
   siteSettingsQuery,
+  type VehicleWithPhotos,
 } from "@/lib/queries";
+import heroImage from "@/assets/home-hero.jpg";
+import trustImage from "@/assets/home-trust.jpg";
 
 export const Route = createFileRoute("/")({
   head: () => ({
     meta: [
       { name: "google-site-verification", content: "Treiv8fZAqKhNjSJYJtOYmyeg951BzF57RSn7uXJoWs" },
-      {
-        title: "Used Car Dealership in Fredericksburg, VA | My Car",
-      },
+      { title: "Used Car Dealership in Fredericksburg, VA | My Car" },
       {
         name: "description",
         content:
           "Shop quality used cars, trucks and SUVs in Fredericksburg, VA. Explore financing options, trade in your vehicle, sell your car, or schedule a test drive with My Car.",
       },
-      {
-        property: "og:title",
-        content: "Used Car Dealership in Fredericksburg, VA | My Car",
-      },
+      { property: "og:title", content: "Used Car Dealership in Fredericksburg, VA | My Car" },
       {
         property: "og:description",
         content:
           "Shop quality used cars, trucks and SUVs in Fredericksburg, VA. Explore financing options, trade in your vehicle, sell your car, or schedule a test drive with My Car.",
       },
-      {
-        property: "og:url",
-        content: "https://mycarcorp.com/",
-      },
-      {
-        property: "og:type",
-        content: "website",
-      },
+      { property: "og:url", content: "https://mycarcorp.com/" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
-
-    links: [
-      {
-        rel: "canonical",
-        href: "https://mycarcorp.com/",
-      },
-    ],
+    links: [{ rel: "canonical", href: "https://mycarcorp.com/" }],
   }),
-
   component: Home,
 });
 
-const BODY_STYLES = ["SUV", "Sedan", "Truck", "Coupe", "Hatchback", "Convertible", "Minivan", "Wagon"];
+const BODY_STYLES = ["SUV", "Sedan", "Truck", "Coupe", "Hatchback", "Convertible", "Minivan", "Wagon", "Van"];
+const BODY_LABELS: Record<string, string> = {
+  SUV: "SUVs",
+  Sedan: "Sedans",
+  Truck: "Trucks",
+  Coupe: "Coupes",
+  Hatchback: "Hatchbacks",
+  Convertible: "Convertibles",
+  Minivan: "Minivans",
+  Wagon: "Wagons",
+  Van: "Vans",
+};
 
 type CarFinderForm = {
   fullName: string;
@@ -106,205 +96,193 @@ const EMPTY_CAR_FINDER_FORM: CarFinderForm = {
   message: "",
 };
 
-const makeVehicleImages: Record<string, string> = {
-  tesla: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
-  chevrolet:
-    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/chevrolet-equinox.png?format=auto&quality=90",
-  toyota: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/toyota-camry.png?format=auto&quality=90",
-  honda: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/honda-accord.png?format=auto&quality=90",
-  ford: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/ford-f150.png?format=auto&quality=90",
-  jeep: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/jeep-grand-cherokee.png?format=auto&quality=90",
-  nissan:
-    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
-  hyundai:
-    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/toyota-camry.png?format=auto&quality=90",
-  kia: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/chevrolet-equinox.png?format=auto&quality=90",
-  subaru: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/honda-accord.png?format=auto&quality=90",
-  bmw: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/ford-f150.png?format=auto&quality=90",
-  mercedes:
-    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/jeep-grand-cherokee.png?format=auto&quality=90",
-  lexus: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/toyota-camry.png?format=auto&quality=90",
-  acura: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/honda-accord.png?format=auto&quality=90",
-  mazda:
-    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/chevrolet-equinox.png?format=auto&quality=90",
-  volkswagen:
-    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
-  chrysler:
-    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/jeep-grand-cherokee.png?format=auto&quality=90",
-  gmc: "https://assets.fastly.carvana.io/merchui/images/home/popular-models/ford-f150.png?format=auto&quality=90",
-  buick:
-    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/chevrolet-equinox.png?format=auto&quality=90",
-  cadillac:
-    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90",
-  dodge:
-    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/jeep-grand-cherokee.png?format=auto&quality=90",
+const priceOf = (v: VehicleWithPhotos) => Number(v.price_cents ?? 0) / 100;
+const isDrop = (v: VehicleWithPhotos) => Number(v.prior_price_cents ?? 0) > Number(v.price_cents ?? 0) && priceOf(v) > 0;
+const coverOf = (v: VehicleWithPhotos) => vehicleMedia(v).find((m) => !m.video)?.url ?? "";
+const firstCover = (list: VehicleWithPhotos[]) => {
+  for (const v of list) {
+    const url = coverOf(v);
+    if (url) return url;
+  }
+  return "";
 };
-
-function getMakeVehicleImage(make: string) {
-  const key = make.trim().toLowerCase();
-  return (
-    makeVehicleImages[key] ??
-    "https://assets.fastly.carvana.io/merchui/images/home/popular-models/tesla-model-3.png?format=auto&quality=90"
-  );
-}
 
 function Home() {
   const { user } = useAuth();
+  const navigate = useNavigate();
   const { data: settings } = useQuery(siteSettingsQuery());
   const { data: featured, isLoading: featuredLoading } = useQuery(featuredVehiclesQuery());
-  const { data: facets, isLoading: facetsLoading } = useQuery(facetsQuery());
+  const { data: facets } = useQuery(facetsQuery());
+  const { data: all } = useQuery(allVehiclesQuery());
   const { data: areas } = useQuery(serviceAreasQuery());
   const visitor = useVisitorState();
   const [term, setTerm] = useState("");
   const [carFinderOpen, setCarFinderOpen] = useState(false);
   const [carFinder, setCarFinder] = useState<CarFinderForm>(EMPTY_CAR_FINDER_FORM);
-  const [marqueePaused, setMarqueePaused] = useState(false);
-  const [reduceMotion, setReduceMotion] = useState(false);
   const badges = (settings?.trust_badges ?? []) as { label: string; enabled: boolean }[];
   const displayName =
     String(user?.user_metadata?.["full_name"] ?? user?.user_metadata?.["name"] ?? "")
       .trim()
       .split(/\s+/)[0] ||
     user?.email?.split("@")[0] ||
-    "there";
+    "";
 
   const updateCarFinder = (field: keyof CarFinderForm, value: string) => {
     setCarFinder((current) => ({ ...current, [field]: value }));
   };
 
-  useEffect(() => {
-    const media = window.matchMedia("(prefers-reduced-motion: reduce)");
-    const updateReducedMotion = () => setReduceMotion(media.matches);
+  const live = useMemo(() => (all ?? []).filter((v) => v.status === "available" || v.status === "pending" || !v.status), [all]);
 
-    updateReducedMotion();
-    media.addEventListener("change", updateReducedMotion);
+  const styles = useMemo(
+    () =>
+      BODY_STYLES.map((style) => {
+        const list = live.filter((v) => v.body_style === style);
+        const count = facets?.bodies.find((b) => b.value === style)?.count ?? list.length;
+        return { style, count, image: firstCover(list) };
+      }).filter((s) => s.count > 0),
+    [live, facets],
+  );
 
-    return () => media.removeEventListener("change", updateReducedMotion);
-  }, []);
+  const discovery = useMemo(() => {
+    const under = live.filter((v) => priceOf(v) > 0 && priceOf(v) < 20000);
+    const recent = [...live].sort((a, b) => Date.parse(b.date_received ?? "") - Date.parse(a.date_received ?? ""));
+    const drops = live.filter(isDrop);
+    const family = live.filter((v) => v.body_style === "SUV" || v.body_style === "Minivan");
+    return [
+      {
+        key: "under",
+        title: "Cars under $20K",
+        body: "Quality picks that keep your budget in check.",
+        cta: "Explore Budget Options",
+        count: under.length,
+        image: firstCover(under),
+        search: { priceMax: 20000 },
+        tone: "bg-secondary",
+      },
+      {
+        key: "recent",
+        title: "Recently added",
+        body: "The newest arrivals on our lot.",
+        cta: "Shop New Arrivals",
+        count: recent.length,
+        image: firstCover(recent),
+        search: { sort: "newest" },
+        tone: "bg-accent/20",
+      },
+      {
+        key: "deals",
+        title: "Discover great deals",
+        body: "Vehicles with recently reduced prices.",
+        cta: "Find Your Deal",
+        count: drops.length,
+        image: firstCover(drops),
+        search: { deal: "price-drop" },
+        tone: "bg-success/15",
+      },
+      {
+        key: "family",
+        title: "Family-friendly",
+        body: "SUVs and minivans with room for everyone.",
+        cta: "Shop Family Cars",
+        count: family.length,
+        image: firstCover(family),
+        search: { body: "SUV|Minivan" },
+        tone: "bg-primary/10",
+      },
+    ].filter((c) => c.count > 0);
+  }, [live]);
+
+  const models = useMemo(() => {
+    const map = new Map<string, { make: string; model: string; count: number; image: string }>();
+    for (const v of live) {
+      if (!v.make || !v.model) continue;
+      const key = `${v.make}|${v.model}`;
+      const entry = map.get(key) ?? { make: v.make, model: v.model, count: 0, image: "" };
+      entry.count += 1;
+      if (!entry.image) entry.image = coverOf(v);
+      map.set(key, entry);
+    }
+    return [...map.values()].filter((m) => m.image).sort((a, b) => b.count - a.count).slice(0, 14);
+  }, [live]);
+
+  const dropCount = useMemo(() => live.filter(isDrop).length, [live]);
+  const dropImage = useMemo(() => firstCover(live.filter(isDrop)), [live]);
 
   return (
     <>
-      <style>{`
-        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap');
-
-        @keyframes marquee {
-          from { transform: translate3d(0, 0, 0); }
-          to { transform: translate3d(calc(-50% - 0.5rem), 0, 0); }
-        }
-
-        .popular-models-marquee {
-          display: flex;
-          width: max-content;
-          min-width: max-content;
-          animation: marquee 38s linear infinite;
-          animation-play-state: running;
-          will-change: transform;
-        }
-
-        .popular-models-marquee:hover,
-        .popular-models-marquee:focus-within,
-        .popular-models-marquee:active {
-          animation-play-state: paused;
-        }
-
-        @media (pointer: coarse) {
-          .popular-models-marquee {
-            animation-play-state: paused;
-          }
-        }
-
-        @media (prefers-reduced-motion: reduce) {
-          .popular-models-marquee {
-            animation: none !important;
-            transform: none !important;
-          }
-        }
-      `}</style>
-
       {visitor.returning && visitor.summary && <ReturningHero summary={visitor.summary} />}
 
       {/* HERO */}
-      <section className={visitor.returning ? "hidden" : "relative isolate overflow-hidden bg-[#07111b]"}>
+      <section className={visitor.returning ? "hidden" : "relative isolate overflow-hidden bg-primary"}>
         <img
-          src="https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=80"
-          alt="Modern premium car highlighted on the MyCar dealership lot"
-          width={1800}
-          height={1100}
-          className="absolute inset-0 z-0 h-full w-full object-cover object-center opacity-95"
-          style={{ filter: "brightness(1.08) contrast(1.06) saturate(1.1)" }}
+          src={heroImage}
+          alt="Smiling shopper beside an SUV on a dealership lot at golden hour"
+          width={1920}
+          height={1088}
+          fetchPriority="high"
+          className="absolute inset-0 -z-10 h-full w-full object-cover object-[70%_center]"
         />
-        <div
-          className="absolute inset-0 z-10"
-          style={{
-            background:
-              "linear-gradient(90deg, rgba(4,9,15,0.94) 0%, rgba(7,17,27,0.85) 20%, rgba(7,17,27,0.68) 38%, rgba(7,17,27,0.3) 58%, rgba(7,17,27,0.06) 76%, rgba(7,17,27,0) 100%)",
-          }}
-        />
-        <div className="absolute inset-y-0 right-0 z-10 hidden w-[28%] bg-[radial-gradient(circle_at_center,_rgba(255,255,255,0.18),_transparent_60%)] md:block" />
-        <div className="relative z-20 mx-auto max-w-7xl px-4 py-20 md:py-28 lg:py-32">
-          <div className="max-w-xl lg:max-w-[540px]">
-            <div className="inline-flex items-center rounded-full border border-white/15 bg-white/5 px-3 py-1 text-[10px] font-semibold uppercase tracking-[0.2em] text-slate-200/80 backdrop-blur-sm">
-              Trusted local dealership
-            </div>
-            <h1
-              className="mt-5 text-base font-semibold tracking-wide text-white sm:text-lg"
-              style={{ fontFamily: '"Inter", "Segoe UI", sans-serif' }}
-            >
-              Used Cars, Trucks & SUVs in Fredericksburg, VA
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary via-primary/80 to-primary/0 md:via-primary/55" />
+        <div className="absolute inset-x-0 bottom-0 -z-10 h-1/2 bg-gradient-to-t from-primary/90 to-transparent" />
+
+        <div className="mx-auto max-w-7xl px-4 pb-10 pt-16 md:pb-14 md:pt-24 lg:pt-28">
+          <div className="max-w-xl">
+            <h1 className="text-xs font-bold uppercase tracking-[0.22em] text-primary-foreground/80">
+              Used cars, trucks &amp; SUVs in Fredericksburg, VA
             </h1>
-
-            <p
-              className="mt-3 max-w-[520px] text-[3.4rem] font-black leading-[0.95] tracking-[-0.055em] text-white sm:text-[4.5rem] md:text-[5rem] lg:text-[5.4rem]"
-              style={{ fontFamily: '"Inter", "Segoe UI", sans-serif' }}
-            >
+            <p className="mt-4 font-display text-[3.2rem] font-black leading-[0.92] tracking-[-0.05em] text-primary-foreground sm:text-7xl lg:text-[5.6rem]">
               Right car.
-              <span className="block">Right price.</span>
+              <span className="block text-accent">Right price.</span>
             </p>
-
-            <p className="mt-5 max-w-lg text-base leading-7 text-slate-200/90 md:text-lg">
-              {user
-                ? `Welcome back, ${displayName}! Pick up where you left off and find the right next step for your car journey.`
-                : facets?.total
-                  ? `Search ${facets.total.toLocaleString()} used vehicles with real monthly payment estimates.`
-                  : "Browse inspected used cars, trucks and SUVs in Fredericksburg, VA with real monthly payment estimates on every listing."}
+            <p className="mt-5 max-w-md text-base leading-7 text-primary-foreground/85 md:text-lg">
+              {displayName ? `Welcome back, ${displayName}. ` : ""}Find your next car in Fredericksburg, VA. Explore real
+              inventory, compare prices, and start your purchase online.
             </p>
 
             <form
-              className="mt-8 flex max-w-xl flex-col gap-3 sm:flex-row"
+              role="search"
+              className="mt-8 flex items-center gap-2 rounded-full bg-card p-1.5 pl-5 shadow-[var(--shadow-lift)]"
               onSubmit={(e) => {
                 e.preventDefault();
-                window.location.href = `/search?q=${encodeURIComponent(term)}`;
+                void navigate({ to: "/search", search: term.trim() ? { q: term.trim() } : {} });
               }}
             >
+              <Search className="size-5 shrink-0 text-muted-foreground" />
               <Input
                 value={term}
                 onChange={(e) => setTerm(e.target.value)}
-                placeholder="Search by make, model or trim"
-                className="h-12 border-white/10 bg-white/10 text-white placeholder:text-slate-300/80 focus-visible:ring-[#F7941D]"
+                placeholder="Search make, model, or keyword"
                 aria-label="Search inventory"
+                className="h-11 border-0 bg-transparent px-1 text-base text-card-foreground shadow-none focus-visible:ring-0"
               />
-              <Button
-                type="submit"
-                size="lg"
-                className="h-12 bg-[#F7941D] px-6 text-base font-semibold text-slate-950 shadow-[0_10px_24px_rgba(247,148,29,0.35)] transition hover:bg-[#ea8718]"
-              >
-                <Search className="size-4" /> Search
+              <Button type="submit" className={`${ctaButtonClass} rounded-full`}>
+                Search
               </Button>
             </form>
+            <Link
+              to="/search"
+              className="mt-4 inline-flex items-center gap-1.5 text-sm font-semibold text-primary-foreground/90 hover:text-accent"
+            >
+              {facets?.total ? `Browse all ${facets.total.toLocaleString()} vehicles` : "Browse all vehicles"}
+              <ArrowRight className="size-4" />
+            </Link>
+          </div>
 
-            <div className="mt-6 flex flex-wrap gap-3">
-              <Button asChild size="lg" className={ctaButtonClass}>
-                <Link to="/search">Browse all vehicles</Link>
-              </Button>
-              <Button
-                asChild
-                size="lg"
-                variant="outline"
-                className="border-white/20 bg-white/5 px-6 text-base font-semibold text-white hover:bg-white/10"
-              >
-                <Link to="/finance">Get pre-qualified</Link>
-              </Button>
-            </div>
+          <div className="mt-12 grid gap-4 md:mt-20 md:grid-cols-2">
+            <HeroCard
+              icon={<Banknote className="size-6" />}
+              title="Financing made simple"
+              body="Explore financing options for your next vehicle."
+              cta="Explore Financing"
+              to="/finance"
+            />
+            <HeroCard
+              icon={<Handshake className="size-6" />}
+              title="Sell or trade your car"
+              body="Ready for something new? Tell us about your current vehicle."
+              cta="Get Your Offer"
+              to="/sell"
+            />
           </div>
         </div>
       </section>
@@ -316,7 +294,7 @@ function Home() {
       {/* TRUST BAR */}
       {badges.some((b) => b.enabled) && (
         <section className="border-b border-border bg-surface">
-          <div className="mx-auto grid max-w-7xl gap-4 px-4 py-6 sm:grid-cols-2 lg:grid-cols-4">
+          <div className="mx-auto grid max-w-7xl gap-4 px-4 py-5 sm:grid-cols-2 lg:grid-cols-4">
             {badges
               .filter((b) => b.enabled)
               .map((b) => (
@@ -330,123 +308,91 @@ function Home() {
       )}
 
       {/* BODY STYLES */}
-      <section className="mx-auto max-w-7xl px-4 pb-14 mt-6">
-        <div className="flex flex-wrap items-end justify-between gap-3">
-          <div>
-            <h2 className="font-display text-2xl font-bold">Popular vehicle styles</h2>
-            <p className="mt-1 text-sm text-muted-foreground">
-              Counts reflect vehicles currently available in our live inventory.
-            </p>
-          </div>
-          <Link to="/search" className="text-sm font-semibold text-primary hover:underline">
-            View all inventory
-          </Link>
-        </div>
-        <div className="mt-6 grid grid-cols-2 gap-3 sm:grid-cols-4 lg:grid-cols-8">
-          {BODY_STYLES.map((style) => {
-            const count = facets?.bodies.find((b) => b.value === style)?.count ?? 0;
+      {styles.length > 0 && (
+        <HomeRail
+          title="Popular vehicle styles"
+          subtitle="Counts reflect vehicles in our live inventory."
+          itemClassName="basis-[62%] sm:basis-1/3 lg:basis-1/5"
+          action={
+            <button
+              type="button"
+              onClick={() => setCarFinderOpen(true)}
+              className="hidden text-sm font-semibold text-primary hover:underline sm:inline"
+            >
+              Can&apos;t find it? Use Car Finder
+            </button>
+          }
+        >
+          {styles.map((s) => (
+            <Link
+              key={s.style}
+              to="/search"
+              search={{ body: s.style }}
+              className="group block overflow-hidden rounded-2xl bg-surface transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]"
+            >
+              <div className="aspect-[4/3] overflow-hidden bg-muted">
+                {s.image ? (
+                  <img
+                    src={s.image}
+                    alt={`${s.style} in stock`}
+                    loading="lazy"
+                    className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                  />
+                ) : (
+                  <div className="flex h-full items-center justify-center text-muted-foreground">
+                    <Car className="size-10" />
+                  </div>
+                )}
+              </div>
+              <div className="flex items-center justify-between p-4">
+                <span className="font-display text-lg font-bold">{BODY_LABELS[s.style] ?? s.style}</span>
+                <span className="text-xs font-semibold text-muted-foreground">{s.count.toLocaleString()}</span>
+              </div>
+            </Link>
+          ))}
+        </HomeRail>
+      )}
 
-            if (facetsLoading || !facets) {
-              return (
-                <div
-                  key={style}
-                  className="flex min-h-[126px] animate-pulse flex-col items-center justify-center gap-2 rounded-xl border border-border bg-card p-4 text-center"
-                  aria-label={`Checking ${style} inventory`}
-                >
-                  <div className="size-6 rounded bg-muted" />
-                  <span className="text-sm font-semibold">{style}</span>
-                  <span className="text-xs text-muted-foreground">Checking stock…</span>
-                </div>
-              );
-            }
-
-            if (count === 0) {
-              return (
-                <div
-                  key={style}
-                  className="flex min-h-[126px] flex-col items-center justify-center gap-2 rounded-xl border border-dashed border-border bg-muted/30 p-4 text-center"
-                >
-                  <Car className="size-6 text-muted-foreground" />
-                  <span className="text-sm font-semibold">{style}</span>
-                  <span className="text-xs leading-4 text-muted-foreground">None currently</span>
-                </div>
-              );
-            }
-
-            return (
+      {/* EXPLORE CARS YOU'LL LOVE */}
+      {discovery.length > 0 && (
+        <div className="bg-surface">
+          <HomeRail title="Explore cars you'll love" itemClassName="basis-[85%] sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
+            {discovery.map((c) => (
               <Link
-                key={style}
+                key={c.key}
                 to="/search"
-                search={{ body: style }}
-                className="card-lift flex flex-col items-center gap-2 rounded-xl border border-border bg-card p-4 text-center"
+                search={c.search}
+                className={`group flex h-full flex-col overflow-hidden rounded-3xl ${c.tone} p-6 transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]`}
               >
-                <Car className="size-6 text-primary" />
-                <span className="text-sm font-semibold">{style}</span>
-                <span className="text-xs text-muted-foreground">
-                  {count.toLocaleString()} {count === 1 ? "vehicle" : "vehicles"}
+                <h3 className="font-display text-2xl font-black tracking-tight">{c.title}</h3>
+                <p className="mt-2 text-sm leading-6 text-muted-foreground">{c.body}</p>
+                <div className="mt-5 aspect-[16/10] overflow-hidden rounded-2xl bg-card">
+                  {c.image ? (
+                    <img
+                      src={c.image}
+                      alt={c.title}
+                      loading="lazy"
+                      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
+                    />
+                  ) : (
+                    <div className="flex h-full items-center justify-center text-muted-foreground">
+                      <CarFront className="size-10" />
+                    </div>
+                  )}
+                </div>
+                <span className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-primary">
+                  {c.cta} <ArrowRight className="size-4 transition group-hover:translate-x-1" />
                 </span>
               </Link>
-            );
-          })}
+            ))}
+          </HomeRail>
         </div>
+      )}
 
-        {!facetsLoading &&
-          facets &&
-          BODY_STYLES.some((style) => (facets.bodies.find((body) => body.value === style)?.count ?? 0) === 0) && (
-            <div className="mt-5 flex flex-col gap-4 rounded-xl border border-border bg-surface p-5 sm:flex-row sm:items-center sm:justify-between">
-              <div>
-                <h3 className="font-display text-base font-bold">Don&apos;t see the vehicle style you need?</h3>
-                <p className="mt-1 max-w-2xl text-sm leading-6 text-muted-foreground">
-                  Inventory changes often. Browse everything currently available or tell us what you&apos;re looking for
-                  and our team will help you find it.
-                </p>
-              </div>
-              <div className="flex shrink-0 flex-col gap-2 sm:flex-row">
-                <Button asChild variant="outline">
-                  <Link to="/search">View all inventory</Link>
-                </Button>
-                <Button type="button" className={ctaButtonClass} onClick={() => setCarFinderOpen(true)}>
-                  Use Car Finder
-                </Button>
-              </div>
-            </div>
-          )}
-      </section>
-
-      {/* DUAL CTA */}
-      <section className="mx-auto grid max-w-7xl gap-6 px-4 py-14 md:grid-cols-2">
-        <div className="card-lift rounded-xl border border-border bg-card p-8">
-          <Banknote className="size-8 text-accent" />
-          <h2 className="mt-4 font-display text-2xl font-bold">Financing made simple</h2>
-          <p className="mt-2 text-muted-foreground">
-            Tell us what works for your budget and our finance team lines up lenders for your situation. Submitting the
-            form is a request, not a credit application — no bureau pull.
-          </p>
-          <Button asChild className={`${ctaButtonClass} mt-5`}>
-            <Link to="/finance">
-              Start a finance request <ArrowRight className="size-4" />
-            </Link>
-          </Button>
-        </div>
-        <div className="card-lift rounded-xl border border-border bg-card p-8">
-          <Handshake className="size-8 text-accent" />
-          <h2 className="mt-4 font-display text-2xl font-bold">Sell or trade your car</h2>
-          <p className="mt-2 text-muted-foreground">
-            Send us the VIN or plate plus mileage and condition. We review every vehicle by hand and respond with a real
-            number, usually the same business day.
-          </p>
-          <Button asChild className={`${ctaButtonClass} mt-5`}>
-            <Link to="/sell">
-              Get your offer <ArrowRight className="size-4" />
-            </Link>
-          </Button>
-        </div>
-      </section>
-
-      {/* INVENTORY */}
-      <section className="mx-auto max-w-7xl px-4 pb-14">
+      {/* FRESH ON THE LOT */}
+      <section className="mx-auto max-w-7xl px-4 py-12 md:py-16">
         <div className="flex items-end justify-between">
-          <h2 className="font-display text-2xl font-bold">Fresh on the lot</h2>
+          <h2 className="font-display text-2xl font-black tracking-tight md:text-3xl">Fresh on the lot</h2>
           <Link to="/search" className="text-sm font-semibold text-primary hover:underline">
             View all inventory
           </Link>
@@ -454,17 +400,17 @@ function Home() {
         {featuredLoading ? (
           <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4" aria-label="Loading inventory">
             {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="h-[340px] animate-pulse rounded-xl bg-muted" />
+              <div key={index} className="h-[320px] animate-pulse rounded-2xl bg-muted" />
             ))}
           </div>
         ) : featured && featured.length > 0 ? (
           <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
             {featured.map((v) => (
-              <VehicleCard key={v.id} vehicle={v} settings={settings} />
+              <HomeVehicleCard key={v.id} vehicle={v} />
             ))}
           </div>
         ) : (
-          <div className="mt-6 rounded-xl border border-dashed border-border bg-surface/40 px-6 py-10 text-center">
+          <div className="mt-6 rounded-2xl border border-dashed border-border bg-surface/40 px-6 py-10 text-center">
             <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
               <Car className="size-6 text-muted-foreground" />
             </div>
@@ -472,8 +418,7 @@ function Home() {
               {facets?.total === 0 ? "No vehicles currently available" : "Fresh arrivals are being updated"}
             </h3>
             <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              Inventory changes frequently. Browse the complete inventory or use Car Finder to tell us exactly what
-              you&apos;re looking for, and our team will help with the next step.
+              Inventory changes often. Browse everything or tell us what you&apos;re looking for.
             </p>
             <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
               <Button asChild variant="outline">
@@ -487,177 +432,127 @@ function Home() {
         )}
       </section>
 
-      {/* COLLECTIONS */}
-      <section className="bg-surface py-14">
-        <div className="mx-auto max-w-7xl px-4">
-          <h2 className="font-display text-2xl font-bold">Explore cars you'll love</h2>
-          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            <a
-              href="https://mycarcorp.com/search"
-              className="card-lift flex flex-col overflow-hidden rounded-xl border border-border bg-[#f5f5f5] p-4 text-left"
+      {/* POPULAR MODELS */}
+      {models.length > 0 && (
+        <HomeRail title="Shop popular models" itemClassName="basis-[55%] sm:basis-1/3 lg:basis-1/5">
+          {models.map((m) => (
+            <Link
+              key={`${m.make}-${m.model}`}
+              to="/search"
+              search={{ make: m.make, model: m.model }}
+              className="group block rounded-2xl border border-border bg-card p-3 transition duration-300 hover:-translate-y-1 hover:border-accent hover:shadow-[var(--shadow-lift)]"
             >
-              <div className="flex min-h-[220px] items-center justify-center rounded-lg bg-white px-3 py-4">
+              <div className="aspect-[4/3] overflow-hidden rounded-xl bg-muted">
                 <img
-                  src="https://assets.fastly.carvana.io/home-assets/nba/sedan.png?width=200"
-                  alt="Sedan"
-                  className="h-28 w-auto object-contain"
+                  src={m.image}
+                  alt={`${m.make} ${m.model}`}
+                  loading="lazy"
+                  className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
                 />
               </div>
-              <div className="mt-4 flex-1">
-                <h3 className="font-display text-xl font-bold text-foreground">Cars under $20K</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Great rides with quality you can count on — at a price you'll love.
-                </p>
+              <div className="px-1 pb-1 pt-3">
+                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{m.make}</div>
+                <div className="font-display text-base font-bold">{m.model}</div>
               </div>
-              <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                Explore budget options <ArrowRight className="size-4" />
-              </span>
-            </a>
+            </Link>
+          ))}
+        </HomeRail>
+      )}
 
-            <a
-              href="https://mycarcorp.com/search"
-              className="card-lift flex flex-col overflow-hidden rounded-xl border border-border bg-[#f5f5f5] p-4 text-left"
-            >
-              <div className="flex min-h-[220px] items-center justify-center rounded-lg bg-white px-3 py-4">
-                <img
-                  src="https://assets.fastly.carvana.io/home-assets/nba/suv.png?width=200"
-                  alt="SUV"
-                  className="h-28 w-auto object-contain"
-                />
-              </div>
-              <div className="mt-4 flex-1">
-                <h3 className="font-display text-xl font-bold text-foreground">Discover great deals</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Cars priced $1,500+ below Kelley Blue Book® typical listing price.
-                </p>
-              </div>
-              <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                Find your deal <ArrowRight className="size-4" />
-              </span>
-            </a>
+      {/* BRAND STORY */}
+      <BrandStory />
 
-            <a
-              href="https://mycarcorp.com/search"
-              className="card-lift flex flex-col overflow-hidden rounded-xl border border-border bg-[#f5f5f5] p-4 text-left"
-            >
-              <div className="flex min-h-[220px] items-center justify-center rounded-lg bg-white px-3 py-4">
-                <img
-                  src="https://assets.fastly.carvana.io/home-assets/nba/suv.png?width=200"
-                  alt="SUV availability"
-                  className="h-28 w-auto object-contain"
-                />
-              </div>
-              <div className="mt-4 flex-1">
-                <h3 className="font-display text-xl font-bold text-foreground">Need it fast?</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">
-                  Based on your location, we've got availability as soon as today!
-                </p>
-              </div>
-              <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                Shop by delivery date <ArrowRight className="size-4" />
-              </span>
-            </a>
-
-            <a
-              href="https://mycarcorp.com/search"
-              className="card-lift flex flex-col overflow-hidden rounded-xl border border-border bg-[#f5f5f5] p-4 text-left"
-            >
-              <div className="flex min-h-[220px] items-center justify-center rounded-lg bg-white px-3 py-4">
-                <img
-                  src="https://assets.fastly.carvana.io/home-assets/nba/hybrid.png?width=200"
-                  alt="Hybrid car"
-                  className="h-28 w-auto object-contain"
-                />
-              </div>
-              <div className="mt-4 flex-1">
-                <h3 className="font-display text-xl font-bold text-foreground">Go the distance</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">Vehicles with 40 MPG/MPGe or greater.</p>
-              </div>
-              <span className="mt-4 inline-flex items-center gap-2 text-sm font-semibold text-primary">
-                Shop fuel efficient <ArrowRight className="size-4" />
-              </span>
-            </a>
+      {/* TRUST */}
+      <section className="bg-surface">
+        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 md:grid-cols-2 md:py-24">
+          <img
+            src={trustImage}
+            alt="A dealership representative reviewing vehicle details with a shopper"
+            width={1280}
+            height={1024}
+            loading="lazy"
+            className="aspect-[5/4] w-full rounded-3xl object-cover shadow-[var(--shadow-card)]"
+          />
+          <div>
+            <h2 className="font-display text-3xl font-black leading-tight tracking-tight md:text-5xl">
+              Real people. Real cars. A better buying experience.
+            </h2>
+            <p className="mt-5 max-w-lg text-base leading-7 text-muted-foreground">
+              My Car is a local Fredericksburg dealership. Browse our real inventory online, ask questions, and start your
+              purchase when you&apos;re ready — our team is here to help along the way.
+            </p>
+            <ol className="mt-8 space-y-4">
+              {[
+                ["Find your car", "Search live inventory with real photos and prices."],
+                ["Choose how to pay", "Cash, My Car financing, or your own lender."],
+                ["Finish with our team", "We confirm details and help you take it home."],
+              ].map(([t, d], i) => (
+                <li key={t} className="flex gap-4">
+                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary font-display text-sm font-black text-primary-foreground">
+                    {i + 1}
+                  </span>
+                  <div>
+                    <div className="font-semibold">{t}</div>
+                    <div className="text-sm text-muted-foreground">{d}</div>
+                  </div>
+                </li>
+              ))}
+            </ol>
+            <Button asChild size="lg" className={`${ctaButtonClass} mt-8`}>
+              <Link to="/search">
+                Explore vehicles <ArrowRight className="size-4" />
+              </Link>
+            </Button>
           </div>
         </div>
       </section>
 
-      {/* MAKES */}
-      {facets && facets.makes.length > 0 && (
-        <section className="mx-auto max-w-7xl px-4 py-14">
-          <h2 className="font-display text-2xl font-bold">Shop popular models</h2>
-
-          <div
-            className="mt-6 overflow-hidden"
-            onMouseEnter={() => setMarqueePaused(true)}
-            onMouseLeave={() => setMarqueePaused(false)}
-            onTouchStart={() => setMarqueePaused(true)}
-            onTouchEnd={() => setMarqueePaused(false)}
-          >
-            <div className="relative">
-              <div
-                className="popular-models-marquee gap-4"
-                style={{
-                  animationPlayState: marqueePaused || reduceMotion ? "paused" : "running",
-                }}
-              >
-                {[...facets.makes, ...facets.makes].map((m, index) => {
-                  const model =
-                    m.value === "Ford"
-                      ? "F-150"
-                      : m.value === "Chevrolet"
-                        ? "Equinox"
-                        : m.value === "Toyota"
-                          ? "Camry"
-                          : m.value === "Honda"
-                            ? "Accord"
-                            : m.value === "Tesla"
-                              ? "Model 3"
-                              : m.value === "Jeep"
-                                ? "Grand Cherokee"
-                                : m.value;
-
-                  return (
-                    <Link
-                      key={`${m.value}-${index}`}
-                      to="/search"
-                      search={{ make: m.value }}
-                      className="group block w-[200px] shrink-0 rounded-[20px] border border-border bg-white p-3 text-center shadow-sm transition hover:-translate-y-0.5 hover:border-[#F7941D] hover:shadow-md sm:w-[220px]"
-                    >
-                      <div className="text-left">
-                        <div className="text-base font-semibold text-foreground">{m.value}</div>
-                        <div className="mt-1 text-sm text-muted-foreground">{model}</div>
-                      </div>
-                      <div className="mt-3 flex aspect-square items-center justify-center overflow-hidden rounded-[16px] bg-white p-2">
-                        <img
-                          src={getMakeVehicleImage(m.value)}
-                          alt={`${m.value} ${model}`}
-                          className="h-full w-full object-contain"
-                        />
-                      </div>
-                    </Link>
-                  );
-                })}
-              </div>
+      {/* PRICE DROPS */}
+      {dropCount > 0 && (
+        <section className="mx-auto max-w-7xl px-4 py-12 md:py-16">
+          <div className="relative isolate overflow-hidden rounded-3xl bg-primary px-6 py-10 text-primary-foreground md:px-12 md:py-14">
+            {dropImage && (
+              <img
+                src={dropImage}
+                alt=""
+                loading="lazy"
+                className="absolute inset-y-0 right-0 -z-10 hidden h-full w-1/2 object-cover opacity-60 md:block"
+              />
+            )}
+            <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary via-primary/90 to-primary/20" />
+            <div className="max-w-lg">
+              <span className="inline-flex items-center gap-1.5 rounded-full bg-success px-3 py-1 text-xs font-bold text-success-foreground">
+                <TrendingDown className="size-3.5" /> {dropCount} price {dropCount === 1 ? "drop" : "drops"}
+              </span>
+              <h2 className="mt-4 font-display text-3xl font-black tracking-tight md:text-5xl">
+                Fresh prices. More possibilities.
+              </h2>
+              <p className="mt-3 text-primary-foreground/80">Explore vehicles with recently reduced prices.</p>
+              <Button asChild size="lg" className={`${ctaButtonClass} mt-6`}>
+                <Link to="/search" search={{ deal: "price-drop" }}>
+                  Shop Price Drops
+                </Link>
+              </Button>
             </div>
           </div>
         </section>
       )}
 
       {/* SERVICE AREAS */}
-      <section className="mx-auto max-w-7xl px-4 pb-20">
-        <h2 className="font-display text-2xl font-bold">Serving the Fredericksburg region</h2>
-        <div className="mt-6 grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+      <section className="mx-auto max-w-7xl px-4 pb-20 pt-8">
+        <h2 className="font-display text-2xl font-black tracking-tight">Serving the Fredericksburg region</h2>
+        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
           {(areas ?? []).map((a) => (
             <Link
               key={a.id}
               to="/locations/$slug"
               params={{ slug: a.slug }}
-              className="card-lift rounded-xl border border-border bg-card p-5"
+              className="group rounded-2xl border border-border bg-card p-5 transition hover:border-accent"
             >
               <div className="flex items-center gap-2 font-semibold">
                 <MapPin className="size-4 text-accent" /> Used cars in {a.name}, {a.state}
               </div>
-              <p className="mt-2 text-sm text-muted-foreground">{a.intro}</p>
+              <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{a.intro}</p>
             </Link>
           ))}
         </div>
@@ -881,5 +776,35 @@ function Home() {
 
       {/* FOOTER */}
     </>
+  );
+}
+
+function HeroCard({
+  icon,
+  title,
+  body,
+  cta,
+  to,
+}: {
+  icon: React.ReactNode;
+  title: string;
+  body: string;
+  cta: string;
+  to: "/finance" | "/sell";
+}) {
+  return (
+    <Link
+      to={to}
+      className="group flex items-center gap-4 rounded-2xl border border-primary-foreground/20 bg-primary-foreground/10 p-5 text-primary-foreground backdrop-blur-md transition hover:bg-primary-foreground/15 md:p-6"
+    >
+      <span className="flex size-12 shrink-0 items-center justify-center rounded-xl bg-accent text-accent-foreground">{icon}</span>
+      <div className="min-w-0 flex-1">
+        <div className="font-display text-lg font-bold">{title}</div>
+        <div className="text-sm text-primary-foreground/80">{body}</div>
+      </div>
+      <span className="hidden shrink-0 items-center gap-1 rounded-full bg-card px-4 py-2 text-sm font-bold text-card-foreground transition group-hover:bg-accent group-hover:text-accent-foreground sm:inline-flex">
+        {cta} <ArrowRight className="size-4" />
+      </span>
+    </Link>
   );
 }
