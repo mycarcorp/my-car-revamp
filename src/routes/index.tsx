@@ -37,6 +37,23 @@ import {
 } from "@/lib/queries";
 import heroImage from "@/assets/home-hero.jpg";
 import trustImage from "@/assets/home-trust.jpg";
+import bodySuv from "@/assets/body-suv.png";
+import bodySedan from "@/assets/body-sedan.png";
+import bodyTruck from "@/assets/body-truck.png";
+import bodyCoupe from "@/assets/body-coupe.png";
+import bodyHatch from "@/assets/body-hatchback.png";
+import bodyConv from "@/assets/body-convertible.png";
+import bodyMinivan from "@/assets/body-minivan.png";
+import bodyWagon from "@/assets/body-wagon.png";
+import bodyVan from "@/assets/body-van.png";
+import exploreBudget from "@/assets/explore-budget.png";
+import exploreRecent from "@/assets/explore-recent.jpg";
+import exploreDeals from "@/assets/explore-deals.png";
+
+const BODY_ART: Record<string, string> = {
+  SUV: bodySuv, Sedan: bodySedan, Truck: bodyTruck, Coupe: bodyCoupe, Hatchback: bodyHatch,
+  Convertible: bodyConv, Minivan: bodyMinivan, Wagon: bodyWagon, Van: bodyVan,
+};
 
 export const Route = createFileRoute("/")({
   head: () => ({
@@ -166,42 +183,42 @@ function Home() {
       {
         key: "under",
         title: "Cars under $20K",
-        body: "Quality picks that keep your budget in check.",
+        body: "Great rides with quality you can count on — at a price you'll love.",
         cta: "Explore Budget Options",
         count: under.length,
         image: firstCover(under),
         search: { priceMax: 20000 },
-        tone: "bg-secondary",
+        tone: "light", art: exploreBudget, artClass: "absolute bottom-0 right-0 h-[78%] w-auto object-contain",
       },
       {
         key: "recent",
-        title: "Recently added",
+        title: "Fresh arrivals",
         body: "The newest arrivals on our lot.",
         cta: "Shop New Arrivals",
         count: recent.length,
         image: firstCover(recent),
         search: { sort: "newest" },
-        tone: "bg-accent/20",
+        tone: "navy", art: exploreRecent, artClass: "absolute inset-x-0 bottom-0 h-[70%] w-full object-cover opacity-90",
       },
       {
         key: "deals",
-        title: "Discover great deals",
+        title: "Discover Great Deals!",
         body: "Vehicles with recently reduced prices.",
         cta: "Find Your Deal",
         count: drops.length,
         image: firstCover(drops),
         search: { deal: "price-drop" },
-        tone: "bg-success/15",
+        tone: "muted", art: exploreDeals, artClass: "absolute bottom-0 left-1/2 h-[68%] w-auto -translate-x-1/2 object-contain",
       },
       {
         key: "family",
-        title: "Family-friendly",
+        title: "Room for everyone",
         body: "SUVs and minivans with room for everyone.",
         cta: "Shop Family Cars",
         count: family.length,
         image: firstCover(family),
         search: { body: "SUV|Minivan" },
-        tone: "bg-primary/10",
+        tone: "dark", art: bodyMinivan, artClass: "",
       },
     ].filter((c) => c.count > 0);
   }, [live]);
@@ -233,11 +250,11 @@ function Home() {
       <section className={visitor.returning ? "hidden" : "relative isolate overflow-hidden bg-primary"}>
         <img
           src={heroImage}
-          alt="Smiling shopper beside an SUV on a dealership lot at golden hour"
+          alt="Smiling man holding a phone in front of a city skyline and car tower at dusk"
           width={1920}
           height={1088}
           fetchPriority="high"
-          className="absolute inset-0 -z-10 h-full w-full object-cover object-[70%_center]"
+          className="absolute inset-0 -z-10 h-full w-full object-cover object-[75%_center]"
         />
         <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary via-primary/80 to-primary/0 md:via-primary/55" />
         <div className="absolute inset-x-0 bottom-0 -z-10 h-1/2 bg-gradient-to-t from-primary/90 to-transparent" />
@@ -318,7 +335,7 @@ function Home() {
         <HomeRail
           title="Popular vehicle styles"
 
-          itemClassName="basis-[62%] sm:basis-1/3 lg:basis-1/5"
+          itemClassName="basis-1/3 sm:basis-1/5 lg:basis-[14.28%]"
           action={
             <button
               type="button"
@@ -334,26 +351,19 @@ function Home() {
               key={s.style}
               to="/search"
               search={{ body: s.style }}
-              className="group block overflow-hidden rounded-2xl bg-surface transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]"
+              className="group flex flex-col items-center gap-2 py-2 text-center"
             >
-              <div className="aspect-[4/3] overflow-hidden bg-muted">
-                {s.image ? (
-                  <img
-                    src={s.image}
-                    alt={`${s.style} in stock`}
-                    loading="lazy"
-                    className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                  />
-                ) : (
-                  <div className="flex h-full items-center justify-center text-muted-foreground">
-                    <Car className="size-10" />
-                  </div>
-                )}
-              </div>
-              <div className="flex items-center justify-between p-4">
-                <span className="font-display text-lg font-bold">{BODY_LABELS[s.style] ?? s.style}</span>
-                <span className="text-xs font-semibold text-muted-foreground">{s.count.toLocaleString()}</span>
-              </div>
+              <span className="text-sm font-medium text-foreground transition group-hover:text-primary group-hover:font-bold">
+                {BODY_LABELS[s.style] ?? s.style}
+              </span>
+              <img
+                src={BODY_ART[s.style]}
+                alt={`${s.style} in stock`}
+                loading="lazy"
+                width={992}
+                height={672}
+                className="h-20 w-auto object-contain drop-shadow-[0_8px_6px_rgba(0,0,0,0.12)] transition duration-500 ease-out group-hover:-translate-y-1 group-hover:translate-x-2 group-hover:scale-110"
+              />
             </Link>
           ))}
         </HomeRail>
@@ -363,34 +373,39 @@ function Home() {
       {discovery.length > 0 && (
         <div className="bg-surface">
           <HomeRail title="Explore cars you'll love" itemClassName="basis-[85%] sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
-            {discovery.map((c) => (
-              <Link
-                key={c.key}
-                to="/search"
-                search={c.search}
-                className={`group flex h-full flex-col overflow-hidden rounded-3xl ${c.tone} p-6 transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]`}
-              >
-                <h3 className="font-display text-2xl font-black tracking-tight">{c.title}</h3>
-                <p className="mt-2 text-sm leading-6 text-muted-foreground">{c.body}</p>
-                <div className="mt-5 aspect-[16/10] overflow-hidden rounded-2xl bg-card">
-                  {c.image ? (
-                    <img
-                      src={c.image}
-                      alt={c.title}
-                      loading="lazy"
-                      className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                    />
-                  ) : (
-                    <div className="flex h-full items-center justify-center text-muted-foreground">
-                      <CarFront className="size-10" />
+            {discovery.map((c) => {
+              const dark = c.tone === "navy" || c.tone === "dark";
+              const bg = { light: "bg-[oklch(0.86_0.08_235)]", navy: "bg-primary", muted: "bg-secondary", dark: "bg-foreground" }[c.tone];
+              return (
+                <Link
+                  key={c.key}
+                  to="/search"
+                  search={c.search}
+                  className={`group relative flex h-[22rem] flex-col overflow-hidden rounded-2xl ${bg} p-6 transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]`}
+                >
+                  <h3 className={`relative z-10 font-display text-2xl font-black tracking-tight ${dark ? "text-background" : "text-foreground"}`}>{c.title}</h3>
+                  <p className={`relative z-10 mt-2 max-w-[17rem] text-sm leading-6 ${dark ? "text-background/85" : "text-muted-foreground"}`}>{c.body}</p>
+                  {c.tone === "dark" ? (
+                    <div className="relative z-10 mt-auto mb-20 flex items-center gap-2 rounded-lg bg-card p-3 shadow">
+                      <div className="min-w-0 flex-1 text-xs text-card-foreground">
+                        <p className="font-bold">SUVs &amp; minivans</p>
+                        <p className="text-muted-foreground">{c.count} in stock</p>
+                      </div>
+                      <img src={c.art} alt="" loading="lazy" className="h-14 w-auto object-contain transition duration-500 group-hover:translate-x-1" />
                     </div>
+                  ) : (
+                    <img src={c.art} alt="" loading="lazy" className={`${c.artClass} transition duration-500 group-hover:scale-105`} />
                   )}
-                </div>
-                <span className="mt-5 inline-flex items-center gap-2 text-sm font-bold text-primary">
-                  {c.cta} <ArrowRight className="size-4 transition group-hover:translate-x-1" />
-                </span>
-              </Link>
-            ))}
+                  <span
+                    className={`absolute inset-x-6 bottom-6 z-10 flex h-12 items-center justify-center rounded-full text-sm font-bold shadow transition ${
+                      c.tone === "light" || c.tone === "muted" ? "bg-primary text-primary-foreground" : "bg-card text-primary"
+                    }`}
+                  >
+                    {c.cta}
+                  </span>
+                </Link>
+              );
+            })}
           </HomeRail>
         </div>
       )}
