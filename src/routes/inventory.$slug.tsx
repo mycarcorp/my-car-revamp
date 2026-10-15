@@ -515,6 +515,22 @@ function VehicleDetail() {
   return (
     <div className="min-h-screen bg-white text-[#142d46]">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      {descriptionFaqs.length > 0 && (
+        <script
+          type="application/ld+json"
+          dangerouslySetInnerHTML={{
+            __html: JSON.stringify({
+              "@context": "https://schema.org",
+              "@type": "FAQPage",
+              mainEntity: descriptionFaqs.map((f) => ({
+                "@type": "Question",
+                name: f.question,
+                acceptedAnswer: { "@type": "Answer", text: f.answer },
+              })),
+            }).replace(/</g, "\\u003c"),
+          }}
+        />
+      )}
       <div className="mx-auto max-w-7xl px-4 pt-5 sm:px-6 lg:px-10">
         <div className="flex flex-wrap items-center justify-between gap-3 pb-5 text-xs">
           <nav aria-label="Breadcrumb" className="min-w-0 text-slate-500">
