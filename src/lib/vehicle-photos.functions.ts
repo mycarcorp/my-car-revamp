@@ -1,8 +1,8 @@
 import { createServerFn } from "@tanstack/react-start";
 
 export type PhotoOrderInput =
-  | { kind: "keep"; url: string; media?: "photo" | "video" }
-  | { kind: "new"; index: number; media?: "photo" | "video"; uploadedKey?: string };
+  | { kind: "keep"; url: string; media?: "photo" | "video"; alt?: string | null }
+  | { kind: "new"; index: number; media?: "photo" | "video"; uploadedKey?: string; alt?: string | null };
 
 export const saveVehiclePhotosFn = createServerFn({ method: "POST" })
   .inputValidator(
