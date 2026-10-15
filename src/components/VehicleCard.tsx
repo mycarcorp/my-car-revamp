@@ -5,6 +5,7 @@ import { isVideoUrl } from "@/lib/vehicle-media";
 import { Badge } from "@/components/ui/badge";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 import type { VehicleWithPhotos, SiteSettings } from "@/lib/queries";
+import { GetStartedButton } from "@/components/GetStartedButton";
 
 type Media = { url: string; alt?: string; video: boolean };
 type LooseObject = Record<string, unknown>;
@@ -330,7 +331,8 @@ export function VehicleCard({
             )}
           </div>
 
-          <div className="mt-auto pt-4">
+          <div className="mt-auto space-y-2 pt-4">
+            <GetStartedButton vehicle={vehicle} />
             <Link
               to="/inventory/$slug"
               params={{ slug: vehicle.slug }}

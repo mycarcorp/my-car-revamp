@@ -442,6 +442,13 @@ export function SiteHeader() {
                   )}
 
                   <DropdownMenuItem asChild>
+                    <Link to="/my">
+                      <LayoutDashboard className="size-4" />
+                      My dashboard
+                    </Link>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem asChild>
                     <Link to="/account">
                       <User2 className="size-4" />
                       Account settings

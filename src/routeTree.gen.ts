@@ -15,6 +15,7 @@ import { Route as AdminRouteImport } from './routes/admin'
 import { Route as AuthRouteImport } from './routes/auth'
 import { Route as ContactRouteImport } from './routes/contact'
 import { Route as FinanceRouteImport } from './routes/finance'
+import { Route as MyRouteImport } from './routes/my'
 import { Route as PrivacyRouteImport } from './routes/privacy'
 import { Route as ResetPasswordRouteImport } from './routes/reset-password'
 import { Route as ScheduleRouteImport } from './routes/schedule'
@@ -26,15 +27,19 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminCustomersRouteImport } from './routes/admin.customers'
 import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
+import { Route as AdminTransactionsRouteImport } from './routes/admin.transactions'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as InventorySlugRouteImport } from './routes/inventory.$slug'
 import { Route as LocationsIndexRouteImport } from './routes/locations.index'
 import { Route as LocationsSlugRouteImport } from './routes/locations.$slug'
+import { Route as MyIndexRouteImport } from './routes/my.index'
 import { Route as AdminBlogIndexRouteImport } from './routes/admin.blog.index'
 import { Route as AdminBlogNewRouteImport } from './routes/admin.blog.new'
 import { Route as ApiPublicReceiveArticleRouteImport } from './routes/api/public/receive-article'
+import { Route as MyPurchasesIndexRouteImport } from './routes/my.purchases.index'
+import { Route as MyPurchasesIdRouteImport } from './routes/my.purchases.$id'
 import { Route as AdminBlogIdEditRouteImport } from './routes/admin.blog.$id.edit'
 import { Route as ApiPublicVehiclePhotosSplatRouteImport } from './routes/api/public/vehicle-photos.$'
 
@@ -66,6 +71,11 @@ const ContactRoute = ContactRouteImport.update({
 const FinanceRoute = FinanceRouteImport.update({
   id: '/finance',
   path: '/finance',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const MyRoute = MyRouteImport.update({
+  id: '/my',
+  path: '/my',
   getParentRoute: () => rootRouteImport,
 } as any)
 const PrivacyRoute = PrivacyRouteImport.update({
@@ -123,6 +133,11 @@ const AdminSettingsRoute = AdminSettingsRouteImport.update({
   path: '/settings',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminTransactionsRoute = AdminTransactionsRouteImport.update({
+  id: '/transactions',
+  path: '/transactions',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/callback',
   path: '/callback',
@@ -153,6 +168,11 @@ const LocationsSlugRoute = LocationsSlugRouteImport.update({
   path: '/locations/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const MyIndexRoute = MyIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => MyRoute,
+} as any)
 const AdminBlogIndexRoute = AdminBlogIndexRouteImport.update({
   id: '/blog/',
   path: '/blog/',
@@ -167,6 +187,16 @@ const ApiPublicReceiveArticleRoute = ApiPublicReceiveArticleRouteImport.update({
   id: '/api/public/receive-article',
   path: '/api/public/receive-article',
   getParentRoute: () => rootRouteImport,
+} as any)
+const MyPurchasesIndexRoute = MyPurchasesIndexRouteImport.update({
+  id: '/purchases/',
+  path: '/purchases/',
+  getParentRoute: () => MyRoute,
+} as any)
+const MyPurchasesIdRoute = MyPurchasesIdRouteImport.update({
+  id: '/purchases/$id',
+  path: '/purchases/$id',
+  getParentRoute: () => MyRoute,
 } as any)
 const AdminBlogIdEditRoute = AdminBlogIdEditRouteImport.update({
   id: '/blog/$id/edit',
@@ -187,6 +217,7 @@ export interface FileRoutesByFullPath {
   '/auth': typeof AuthRouteWithChildren
   '/contact': typeof ContactRoute
   '/finance': typeof FinanceRoute
+  '/my': typeof MyRouteWithChildren
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schedule': typeof ScheduleRoute
@@ -197,6 +228,7 @@ export interface FileRoutesByFullPath {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
@@ -204,9 +236,12 @@ export interface FileRoutesByFullPath {
   '/admin/': typeof AdminIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/locations/': typeof LocationsIndexRoute
+  '/my/': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
+  '/my/purchases/': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
@@ -226,6 +261,7 @@ export interface FileRoutesByTo {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
@@ -233,9 +269,12 @@ export interface FileRoutesByTo {
   '/admin': typeof AdminIndexRoute
   '/blog': typeof BlogIndexRoute
   '/locations': typeof LocationsIndexRoute
+  '/my': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog': typeof AdminBlogIndexRoute
+  '/my/purchases': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
@@ -247,6 +286,7 @@ export interface FileRoutesById {
   '/auth': typeof AuthRouteWithChildren
   '/contact': typeof ContactRoute
   '/finance': typeof FinanceRoute
+  '/my': typeof MyRouteWithChildren
   '/privacy': typeof PrivacyRoute
   '/reset-password': typeof ResetPasswordRoute
   '/schedule': typeof ScheduleRoute
@@ -257,6 +297,7 @@ export interface FileRoutesById {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/inventory': typeof AdminInventoryRoute
   '/admin/settings': typeof AdminSettingsRoute
+  '/admin/transactions': typeof AdminTransactionsRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
@@ -264,9 +305,12 @@ export interface FileRoutesById {
   '/admin/': typeof AdminIndexRoute
   '/blog/': typeof BlogIndexRoute
   '/locations/': typeof LocationsIndexRoute
+  '/my/': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
+  '/my/purchases/': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
@@ -279,6 +323,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/contact'
     | '/finance'
+    | '/my'
     | '/privacy'
     | '/reset-password'
     | '/schedule'
@@ -289,6 +334,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/inventory'
     | '/admin/settings'
+    | '/admin/transactions'
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
@@ -296,9 +342,12 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/blog/'
     | '/locations/'
+    | '/my/'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/my/purchases/$id'
     | '/admin/blog/'
+    | '/my/purchases/'
     | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
   fileRoutesByTo: FileRoutesByTo
@@ -318,6 +367,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/inventory'
     | '/admin/settings'
+    | '/admin/transactions'
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
@@ -325,9 +375,12 @@ export interface FileRouteTypes {
     | '/admin'
     | '/blog'
     | '/locations'
+    | '/my'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/my/purchases/$id'
     | '/admin/blog'
+    | '/my/purchases'
     | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
   id:
@@ -338,6 +391,7 @@ export interface FileRouteTypes {
     | '/auth'
     | '/contact'
     | '/finance'
+    | '/my'
     | '/privacy'
     | '/reset-password'
     | '/schedule'
@@ -348,6 +402,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/inventory'
     | '/admin/settings'
+    | '/admin/transactions'
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
@@ -355,9 +410,12 @@ export interface FileRouteTypes {
     | '/admin/'
     | '/blog/'
     | '/locations/'
+    | '/my/'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/my/purchases/$id'
     | '/admin/blog/'
+    | '/my/purchases/'
     | '/admin/blog/$id/edit'
     | '/api/public/vehicle-photos/$'
   fileRoutesById: FileRoutesById
@@ -369,6 +427,7 @@ export interface RootRouteChildren {
   AuthRoute: typeof AuthRouteWithChildren
   ContactRoute: typeof ContactRoute
   FinanceRoute: typeof FinanceRoute
+  MyRoute: typeof MyRouteWithChildren
   PrivacyRoute: typeof PrivacyRoute
   ResetPasswordRoute: typeof ResetPasswordRoute
   ScheduleRoute: typeof ScheduleRoute
@@ -427,6 +486,13 @@ declare module '@tanstack/react-router' {
       path: '/finance'
       fullPath: '/finance'
       preLoaderRoute: typeof FinanceRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/my': {
+      id: '/my'
+      path: '/my'
+      fullPath: '/my'
+      preLoaderRoute: typeof MyRouteImport
       parentRoute: typeof rootRouteImport
     }
     '/privacy': {
@@ -506,6 +572,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminSettingsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/transactions': {
+      id: '/admin/transactions'
+      path: '/transactions'
+      fullPath: '/admin/transactions'
+      preLoaderRoute: typeof AdminTransactionsRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/callback'
@@ -548,6 +621,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof LocationsSlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/my/': {
+      id: '/my/'
+      path: '/'
+      fullPath: '/my/'
+      preLoaderRoute: typeof MyIndexRouteImport
+      parentRoute: typeof MyRoute
+    }
     '/admin/blog/': {
       id: '/admin/blog/'
       path: '/blog'
@@ -568,6 +648,20 @@ declare module '@tanstack/react-router' {
       fullPath: '/api/public/receive-article'
       preLoaderRoute: typeof ApiPublicReceiveArticleRouteImport
       parentRoute: typeof rootRouteImport
+    }
+    '/my/purchases/': {
+      id: '/my/purchases/'
+      path: '/purchases'
+      fullPath: '/my/purchases/'
+      preLoaderRoute: typeof MyPurchasesIndexRouteImport
+      parentRoute: typeof MyRoute
+    }
+    '/my/purchases/$id': {
+      id: '/my/purchases/$id'
+      path: '/purchases/$id'
+      fullPath: '/my/purchases/$id'
+      preLoaderRoute: typeof MyPurchasesIdRouteImport
+      parentRoute: typeof MyRoute
     }
     '/admin/blog/$id/edit': {
       id: '/admin/blog/$id/edit'
@@ -590,6 +684,7 @@ interface AdminRouteChildren {
   AdminCustomersRoute: typeof AdminCustomersRoute
   AdminInventoryRoute: typeof AdminInventoryRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
+  AdminTransactionsRoute: typeof AdminTransactionsRoute
   AdminIndexRoute: typeof AdminIndexRoute
   AdminBlogNewRoute: typeof AdminBlogNewRoute
   AdminBlogIndexRoute: typeof AdminBlogIndexRoute
@@ -600,6 +695,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCustomersRoute: AdminCustomersRoute,
   AdminInventoryRoute: AdminInventoryRoute,
   AdminSettingsRoute: AdminSettingsRoute,
+  AdminTransactionsRoute: AdminTransactionsRoute,
   AdminIndexRoute: AdminIndexRoute,
   AdminBlogNewRoute: AdminBlogNewRoute,
   AdminBlogIndexRoute: AdminBlogIndexRoute,
@@ -618,6 +714,20 @@ const AuthRouteChildren: AuthRouteChildren = {
 
 const AuthRouteWithChildren = AuthRoute._addFileChildren(AuthRouteChildren)
 
+interface MyRouteChildren {
+  MyIndexRoute: typeof MyIndexRoute
+  MyPurchasesIdRoute: typeof MyPurchasesIdRoute
+  MyPurchasesIndexRoute: typeof MyPurchasesIndexRoute
+}
+
+const MyRouteChildren: MyRouteChildren = {
+  MyIndexRoute: MyIndexRoute,
+  MyPurchasesIdRoute: MyPurchasesIdRoute,
+  MyPurchasesIndexRoute: MyPurchasesIndexRoute,
+}
+
+const MyRouteWithChildren = MyRoute._addFileChildren(MyRouteChildren)
+
 const rootRouteChildren: RootRouteChildren = {
   IndexRoute: IndexRoute,
   AccountRoute: AccountRoute,
@@ -625,6 +735,7 @@ const rootRouteChildren: RootRouteChildren = {
   AuthRoute: AuthRouteWithChildren,
   ContactRoute: ContactRoute,
   FinanceRoute: FinanceRoute,
+  MyRoute: MyRouteWithChildren,
   PrivacyRoute: PrivacyRoute,
   ResetPasswordRoute: ResetPasswordRoute,
   ScheduleRoute: ScheduleRoute,
