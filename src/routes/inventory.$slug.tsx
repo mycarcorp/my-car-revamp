@@ -1,4 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
+import { descriptionToPlainText, descriptionToSafeHtml, extractDescriptionFaqs } from "@/lib/vehicle-description";
 import { trackEvent } from "@/lib/visitor-personalization";
 import { useQuery } from "@tanstack/react-query";
 import { useEffect, useState } from "react";
@@ -117,7 +118,7 @@ function getVehicleDescription(vehicle: VehicleWithPhotos) {
   const customDescription = typeof vehicle.description === "string" ? vehicle.description.trim() : "";
 
   if (customDescription) {
-    return customDescription;
+    return descriptionToPlainText(customDescription);
   }
 
   const mileage = vehicle.mileage != null ? formatMiles(vehicle.mileage) : null;
@@ -274,6 +275,8 @@ function VehicleDetail() {
   const canonicalUrl = getVehicleUrl(slug);
 
   const schemaDescription = getVehicleDescription(v);
+  const descriptionHtml = descriptionToSafeHtml(v.description);
+  const descriptionFaqs = extractDescriptionFaqs(descriptionHtml);
 
   const priceCurrency = getPriceCurrency(v);
 
@@ -747,7 +750,14 @@ function VehicleDetail() {
                   <h3 className="text-lg font-extrabold">
                     About this {v.make} {v.model}
                   </h3>
-                  <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">{schemaDescription}</p>
+                  {descriptionHtml ? (
+                    <div
+                      className="vehicle-description mt-3 text-sm text-slate-600"
+                      dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+                    />
+                  ) : (
+                    <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">{schemaDescription}</p>
+                  )}
                   <div className="mt-5 grid grid-cols-2 gap-3 sm:grid-cols-4">
                     {[
 
@@ -840,7 +850,10 @@ function VehicleDetail() {
                      {v.description && (
                   <div className="mt-7">
                     <h3 className="font-extrabold">About this vehicle</h3>
-                    <p className="mt-3 whitespace-pre-line text-sm leading-7 text-slate-600">{v.description}</p>
+                    <div
+                      className="vehicle-description mt-3 text-sm text-slate-600"
+                      dangerouslySetInnerHTML={{ __html: descriptionHtml }}
+                    />
                   </div>
                 )}
               </section>
