@@ -120,6 +120,7 @@ const decodeURIComponentSafe = (value: string) => {
     return value;
   }
 };
+
 const encodedValues = (v: string[]) => (v.length ? v.map((x) => encodeURIComponent(x)).join("|") : undefined);
 const hasSelected = (filter: string | undefined, value: string) =>
   splitValues(filter).some((x) => x.toLowerCase() === value.toLowerCase());
@@ -203,60 +204,105 @@ const bodyIcon = (value: string) => {
  * The purchase flow remains on the vehicle detail page only.
  * Shipping offers are shown only when explicitly flagged in vehicle data.
  */
+
 function InventoryListingCard({ vehicle }: { vehicle: VehicleWithPhotos }) {
   const photos = [...(vehicle.vehicle_photos ?? [])]
     .sort((a, b) => a.position - b.position)
     .filter((photo) => Boolean(photo.url) && !isVideoUrl(photo.url));
-  const image = photos[0];
+
+  const [activePhoto, setActivePhoto] = useState(0);
   const title = vehicleTitle(vehicle);
   const slug = String(vehicle.slug ?? "").trim();
+  const hasMultiplePhotos = photos.length > 1;
 
-  // Never navigate using an invented slug.
-  if (!slug) {
-    return (
-      <article className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
-        <div className="flex aspect-[16/9] items-center justify-center bg-slate-100 text-slate-400">
-          <CarFront className="size-12" />
-        </div>
-        <div className="space-y-2 p-4">
-          <h3 className="text-sm font-bold text-[#173954]">{title}</h3>
-          <p className="text-sm text-slate-500">Vehicle details unavailable</p>
-        </div>
-      </article>
-    );
+  // Reset the carousel when this card receives a different vehicle.
+  useEffect(() => {
+    setActivePhoto(0);
+  }, [vehicle.id]);
+
+  function changePhoto(direction: -1 | 1) {
+    setActivePhoto((previous) => (previous + direction + photos.length) % photos.length);
   }
 
   return (
-    <Link
-      to="/inventory/$slug"
-      params={{ slug }}
-      aria-label={`View details for ${title}`}
-      className="group flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#9ac1e6] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1478cc]"
-    >
+    <article className="group relative flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition-[border-color,box-shadow,transform] duration-300 hover:-translate-y-0.5 hover:border-[#9ac1e6] hover:shadow-lg focus-within:ring-2 focus-within:ring-[#1478cc]">
+      {/* The overlay is the full-card link; photo controls sit above it. */}
+      {slug && (
+        <Link
+          to="/inventory/$slug"
+          params={{ slug }}
+          aria-label={`View vehicle details for ${title}`}
+          className="absolute inset-0 z-10 rounded-xl focus-visible:outline-none"
+        />
+      )}
+
       <div className="relative aspect-[16/9] w-full overflow-hidden bg-[#f2f5f8]">
-        {image ? (
-          <img
-            src={image.url}
-            alt={image.alt || `${title} exterior or interior photo`}
-            loading="lazy"
-            className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.025]"
-          />
+        {photos.length ? (
+          <div
+            className="flex h-full w-full motion-reduce:transition-none"
+            style={{
+              transform: `translate3d(-${activePhoto * 100}%, 0, 0)`,
+              transition: "transform 560ms cubic-bezier(0.22, 1, 0.36, 1)",
+              willChange: "transform",
+            }}
+          >
+            {photos.map((photo, index) => (
+              <div key={photo.id || `${vehicle.id}-${index}`} className="h-full w-full shrink-0 grow-0 basis-full">
+                <img
+                  src={photo.url}
+                  alt={photo.alt || `${title} — photo ${index + 1}`}
+                  loading="lazy"
+                  draggable={false}
+                  className="h-full w-full select-none object-contain"
+                />
+              </div>
+            ))}
+          </div>
         ) : (
           <div className="flex h-full w-full items-center justify-center text-slate-400">
             <CarFront className="size-12" />
           </div>
         )}
-        {photos.length > 1 && (
-          <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/35 px-2 py-1">
-            {photos.slice(0, 5).map((photo, index) => (
-              <span
-                key={photo.id}
-                className={`size-1.5 rounded-full ${index === 0 ? "bg-[#1595e9]" : "bg-white/90"}`}
-              />
-            ))}
-          </div>
+
+        {hasMultiplePhotos && (
+          <>
+            <button
+              type="button"
+              aria-label={`Previous image of ${title}`}
+              onClick={() => changePhoto(-1)}
+              className="absolute left-2 top-1/2 z-20 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-[#173954] shadow-md transition-all hover:scale-110 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <ChevronLeft className="size-5" />
+            </button>
+            <button
+              type="button"
+              aria-label={`Next image of ${title}`}
+              onClick={() => changePhoto(1)}
+              className="absolute right-2 top-1/2 z-20 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-[#173954] shadow-md transition-all hover:scale-110 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+            >
+              <ChevronRight className="size-5" />
+            </button>
+            <div
+              className="pointer-events-none absolute bottom-2 left-1/2 z-20 flex max-w-[85%] -translate-x-1/2 items-center gap-1 rounded-full bg-black/35 px-2.5 py-1.5"
+              aria-hidden="true"
+            >
+              {photos.length <= 9 ? (
+                photos.map((photo, index) => (
+                  <span
+                    key={photo.id || index}
+                    className={`size-1.5 shrink-0 rounded-full transition-colors duration-300 ${index === activePhoto ? "bg-[#1595e9]" : "bg-white/85"}`}
+                  />
+                ))
+              ) : (
+                <span className="text-[10px] font-semibold text-white">
+                  {activePhoto + 1} / {photos.length}
+                </span>
+              )}
+            </div>
+          </>
         )}
       </div>
+
       <div className="flex flex-1 flex-col p-4">
         <h3 className="line-clamp-2 text-sm font-bold text-[#173954] sm:text-[15px]">{title}</h3>
         <p className="mt-1 text-xs text-slate-500">
@@ -271,12 +317,12 @@ function InventoryListingCard({ vehicle }: { vehicle: VehicleWithPhotos }) {
             {freeShipping(vehicle) ? (
               <span className="text-emerald-600">Free shipping</span>
             ) : (
-              <span className="text-slate-500">View pickup & delivery details</span>
+              <span className="text-slate-500">Pickup &amp; delivery details available</span>
             )}
           </div>
         </div>
       </div>
-    </Link>
+    </article>
   );
 }
 
@@ -979,6 +1025,7 @@ function SearchPage() {
     onSaved: setOnlySaved,
     savedCount: savedIds.length,
   };
+
   const chip = (key: keyof Filters, val: string) => (
     <button
       key={key}
@@ -1048,6 +1095,7 @@ function SearchPage() {
               </label>
             </div>
           </div>
+
           {priceDrops > 0 && (
             <button
               type="button"
