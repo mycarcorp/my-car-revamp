@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from "react";
-import { GripVertical, ImagePlus, Loader2, Plus, Star, Trash2, Upload } from "lucide-react";
+import { GripVertical, ImagePlus, Loader2, Play, Plus, RefreshCw, Star, Trash2, Upload } from "lucide-react";
 import { VehicleDescriptionEditor } from "@/components/admin/VehicleDescriptionEditor";
 
 /** Auto-generated alt text ("… — photo 3") is not treated as a custom value. */
