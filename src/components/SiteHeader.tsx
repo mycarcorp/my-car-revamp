@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { useEffect, useState } from "react";
-import { Heart, LayoutDashboard, LogOut, Menu, User2, X } from "lucide-react";
+import { Car, ClipboardList, Heart, LayoutDashboard, LogOut, Menu, Settings, User2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -8,6 +8,8 @@ import { useAuth } from "@/hooks/useAuth";
 import { BrandLogo } from "@/components/BrandLogo";
 import { SignInSheet } from "@/components/SignInSheet";
 import { supabase } from "@/integrations/supabase/app-client";
+import { readPendingPurchase } from "@/components/GetStartedButton";
+import { useQueryClient } from "@tanstack/react-query";
 
 import {
   DropdownMenu,
@@ -28,6 +30,7 @@ const NAV = [
 export function SiteHeader() {
   const { user, isStaff } = useAuth();
   const navigate = useNavigate();
+  const queryClient = useQueryClient();
 
   const pathname = useRouterState({
     select: (state) => state.location.pathname,
@@ -63,6 +66,8 @@ export function SiteHeader() {
   }
 
   async function logout() {
+    await queryClient.cancelQueries();
+    queryClient.clear();
     await supabase.auth.signOut();
 
     void navigate({
@@ -134,18 +139,12 @@ export function SiteHeader() {
 
     setSignInOpen(false);
 
-    void supabase
-      .from("user_roles")
-      .select("role")
-      .eq("user_id", user.id)
-      .then(({ data }) => {
-        const staff = (data ?? []).some((row) => row.role === "owner" || row.role === "editor");
+    // Let GetStartedButton resume its pending purchase after authentication.
+    // Do not redirect customers to inventory and interrupt their checkout.
+    if (readPendingPurchase()) return;
 
-        void navigate({
-          to: staff ? "/admin" : "/search",
-        });
-      });
-  }, [user, signInOpen, navigate]);
+    void navigate({ to: isStaff ? "/admin" : "/my" });
+  }, [user, signInOpen, navigate, isStaff]);
 
   /**
    * Close mobile navigation after changing pages.
@@ -346,6 +345,7 @@ export function SiteHeader() {
               {/* SAVED VEHICLES / ACCOUNT */}
               <Link
                 to="/account"
+                hash="saved"
                 aria-label="Saved vehicles and account"
                 className="
                   inline-flex
@@ -443,17 +443,40 @@ export function SiteHeader() {
 
                   <DropdownMenuItem asChild>
                     <Link to="/my">
-                      <LayoutDashboard className="size-4" />
-                      My dashboard
+                      <LayoutDashboard className="mr-2 size-4" />
+                      Overview
                     </Link>
                   </DropdownMenuItem>
 
                   <DropdownMenuItem asChild>
-                    <Link to="/account">
-                      <User2 className="size-4" />
-                      Account settings
+                    <Link to="/my/purchases">
+                      <Car className="mr-2 size-4" />
+                      My purchases
                     </Link>
                   </DropdownMenuItem>
+
+                  <DropdownMenuItem asChild>
+                    <Link to="/account" hash="saved">
+                      <Heart className="mr-2 size-4" />
+                      Saved vehicles
+                    </Link>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem asChild>
+                    <Link to="/account" hash="requests">
+                      <ClipboardList className="mr-2 size-4" />
+                      My requests
+                    </Link>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem asChild>
+                    <Link to="/account" hash="settings">
+                      <Settings className="mr-2 size-4" />
+                      Profile & settings
+                    </Link>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuSeparator />
 
                   <DropdownMenuItem onSelect={() => void logout()}>
                     <LogOut className="size-4" />
