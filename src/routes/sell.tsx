@@ -423,10 +423,15 @@ function SellPage() {
 
       <div className="mx-auto max-w-[1020px] px-5 pb-20 pt-9 sm:px-8 lg:px-12">
         {/* Value tracker-style secondary conversion */}
-        <section className="grid items-center gap-5 rounded-xl bg-[#f3f6f9] p-5 sm:grid-cols-[130px_1fr_auto] sm:gap-7 sm:px-8 sm:py-5">
-          <div className="relative mx-auto flex h-[94px] w-[130px] items-center justify-center rounded-2xl bg-gradient-to-br from-[#e1f1ff] to-white">
-            <CarFront className="size-[76px] text-[#1d6fac]" strokeWidth={1.3} />
-            <TrendingUp className="absolute -right-1 top-1 size-6 text-[#1499e7]" />
+        <section className="grid items-center gap-5 overflow-hidden rounded-xl bg-[#f3f6f9] p-5 sm:grid-cols-[180px_1fr_auto] sm:gap-7 sm:py-5 sm:pl-2 sm:pr-8">
+          <div className="relative mx-auto flex h-[110px] w-[180px] items-center justify-center">
+            <svg className="absolute inset-0 h-full w-full" viewBox="0 0 180 110" fill="none" aria-hidden="true">
+              <path d="M-5 30 C 40 45, 30 95, 100 98 S 170 85, 180 90" stroke="#1499e7" strokeWidth="5" strokeLinecap="round" />
+              <circle cx="168" cy="88" r="4" fill="#1499e7" />
+            </svg>
+            <img src={valueSuv} alt="Vehicle value" width={1024} height={640} loading="lazy" className="relative w-[165px] object-contain drop-shadow-md" />
+            <span className="absolute right-2 top-[56px] flex size-6 items-center justify-center rounded-md bg-[#1499e7] text-[10px] font-bold text-white shadow">$</span>
+            <span className="absolute left-3 top-0 flex size-5 items-center justify-center rounded bg-white text-[9px] font-bold text-slate-400 shadow">$</span>
           </div>
           <div>
             <div className="flex items-center gap-1.5 text-sm font-bold text-[#136bac]">
