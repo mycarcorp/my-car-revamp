@@ -15,7 +15,7 @@ import { videoExtension } from "./vehicle-media";
  * nothing large ever passes through the server function body.
  */
 
-export type IncomingPhoto = { dataUrl: string; contentType?: string };
+export type IncomingPhoto = { dataUrl: string; contentType?: string; alt?: string };
 export type PhotoOrderItem =
   | { kind: "keep"; url: string; media?: "photo" | "video" }
   | { kind: "new"; index: number; media?: "photo" | "video"; uploadedKey?: string };
@@ -204,9 +204,7 @@ export async function saveVehiclePhotos(input: {
   for (const item of input.order) {
     const customAlt = typeof item.alt === "string" ? item.alt.trim().slice(0, 250) : "";
     const before = sources.length;
-    pushSource();
-    if (sources.length > before && customAlt) sources[sources.length - 1]!.alt = customAlt;
-    function pushSource() {
+    try {
     if (item.kind === "new") {
       if (item.uploadedKey) {
         const ext = item.uploadedKey.split(".").pop()?.toLowerCase() ?? "mp4";
@@ -234,6 +232,8 @@ export async function saveVehiclePhotos(input: {
         storageKey: sourceKey,
       });
     }
+    } finally {
+      if (sources.length > before && customAlt) sources[sources.length - 1]!.alt = customAlt;
     }
   }
 
