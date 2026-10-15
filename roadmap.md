@@ -28,3 +28,8 @@
   `/api/public/receive-article` (bearer AUTOSEO_WEBHOOK_TOKEN), combined /blog listing + /blog/$slug
   article view (hero, prose, FAQ accordion, related, JSON-LD), /sitemap.xml, robots sitemap line
 - Open: run the SQL once in the project's SQL editor — until then the webhook returns 500 (table missing)
+
+## Phase 1 — Buy a Car (Oct 15)
+- Done: /my dashboard, Get Started, 5-step purchase flow, admin Transactions
+- Open: run supabase/migrations_legacy/2026_mc_purchases.sql in SQL editor
+- Waiting: Phase 2 needs user approval
