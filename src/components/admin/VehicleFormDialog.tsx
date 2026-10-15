@@ -24,7 +24,7 @@ import { supabase } from "@/integrations/supabase/app-client";
 import { useAuth } from "@/hooks/useAuth";
 import type { Database } from "@/integrations/supabase/types";
 import { MAX_PHOTOS, MAX_PHOTO_BYTES, type PhotoDraft, type Vehicle, type VehiclePhoto } from "@/lib/admin-inventory";
-import { ALLOWED_VIDEO_TYPES, MAX_VIDEOS, MAX_VIDEO_BYTES, isVideoUrl } from "@/lib/vehicle-media";
+import { ALLOWED_VIDEO_TYPES, MAX_VIDEOS, MAX_VIDEO_BYTES, VIDEO_TYPES, encodeVideoAlt, isVideoUrl, parseVideoAlt, type VideoType } from "@/lib/vehicle-media";
 
 import { VIN_RE, vehicleSlug } from "@/lib/inventory-csv";
 import { saveLegacyInventoryRow } from "@/lib/legacy-inventory.functions";
@@ -103,6 +103,22 @@ async function mapWithConcurrency<T, R>(
 
   await Promise.all(Array.from({ length: Math.min(limit, items.length) }, () => runWorker()));
   return results;
+}
+
+/** PUT with upload progress (fetch has no upload progress events). */
+function putWithProgress(url: string, file: File, onProgress: (pct: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const xhr = new XMLHttpRequest();
+    xhr.open("PUT", url);
+    xhr.setRequestHeader("content-type", file.type);
+    xhr.setRequestHeader("x-upsert", "true");
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100));
+    };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`Could not upload ${file.name}. Please try again.`)));
+    xhr.onerror = () => reject(new Error(`Could not upload ${file.name}. Please check your connection.`));
+    xhr.send(file);
+  });
 }
 
 function isVideoDraft(draft: PhotoDraft): boolean {
@@ -299,6 +315,7 @@ export function VehicleFormDialog({
   const { session } = useAuth();
   const [form, setForm] = useState<FormState>(empty);
   const [photos, setPhotos] = useState<PhotoDraft[]>([]);
+  const [uploadPct, setUploadPct] = useState<Record<string, number | "failed">>({});
   const [existing, setExisting] = useState<VehiclePhoto[]>([]);
   const [saving, setSaving] = useState(false);
   const [uploadLabel, setUploadLabel] = useState<string | null>(null);
@@ -550,13 +567,14 @@ export function VehicleFormDialog({
               contentType: item.file.type,
             },
           });
-          const response = await fetch(uploadUrl, {
-            method: "PUT",
-            headers: { "content-type": item.file.type, "x-upsert": "true" },
-            body: item.file,
-          });
-          if (!response.ok) {
-            throw new Error(`Could not upload ${item.file.name}. Please try again.`);
+          const progressKey = item.previewUrl;
+          try {
+            await putWithProgress(uploadUrl, item.file, (pct) =>
+              setUploadPct((cur) => ({ ...cur, [progressKey]: pct })),
+            );
+          } catch (uploadError) {
+            setUploadPct((cur) => ({ ...cur, [progressKey]: "failed" }));
+            throw uploadError;
           }
           completedUploads += 1;
           setUploadLabel(`Uploading media… ${completedUploads}/${pendingUploads.length}`);
@@ -785,11 +803,11 @@ export function VehicleFormDialog({
             />
           </div>
 
-          {photos.length === 0 ? (
+          {photos.every(isVideoDraft) ? (
             <p className="text-center text-xs text-muted-foreground">No photos yet.</p>
           ) : (
             <ul className="grid gap-3 sm:grid-cols-3">
-              {photos.map((p, i) => (
+              {photos.map((p, i) => isVideoDraft(p) ? null : (
                 <li
                   key={p.kind === "existing" ? p.id : p.previewUrl}
                   draggable
@@ -835,14 +853,14 @@ export function VehicleFormDialog({
                   <div className="flex items-center justify-between gap-1 p-1">
                     <span className="flex items-center gap-1 pl-1 text-xs text-muted-foreground">
                       <GripVertical className="size-3" />#{i + 1}
-                      {i === 0 && (
+                      {i === photos.findIndex((d) => !isVideoDraft(d)) && (
                         <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">
                           Primary
                         </span>
                       )}
                     </span>
                     <div className="flex">
-                      {i !== 0 && !isVideoDraft(p) && (
+                      {i !== photos.findIndex((d) => !isVideoDraft(d)) && !isVideoDraft(p) && (
                         <Button size="icon" variant="ghost" onClick={() => moveTo(i, 0)} aria-label="Make primary photo" title="Make primary photo">
                           <Star className="size-3" />
                         </Button>
@@ -876,6 +894,150 @@ export function VehicleFormDialog({
                 </li>
               ))}
             </ul>
+          )}
+        </div>
+
+
+        <div className="space-y-3 rounded-lg border border-border p-4">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <div>
+              <p className="flex items-center gap-1.5 text-sm font-medium">
+                <Play className="size-4" /> 360° Walkaround &amp; Vehicle Videos
+              </p>
+              <p className="text-xs text-muted-foreground">
+                MP4, WebM or MOV up to 5 GB, up to {MAX_VIDEOS} videos. The featured video plays first on the public page.
+              </p>
+            </div>
+            <label className="inline-flex cursor-pointer items-center gap-2 rounded-md border border-border px-3 py-2 text-sm font-medium hover:bg-muted">
+              <Upload className="size-4" />
+              Upload video
+              <input
+                type="file"
+                accept="video/mp4,video/webm,video/quicktime"
+                multiple
+                className="hidden"
+                onChange={(e) => {
+                  addFiles(Array.from(e.target.files ?? []).filter((f) => f.type.startsWith("video/")));
+                  e.target.value = "";
+                }}
+              />
+            </label>
+          </div>
+          <div
+            onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              event.stopPropagation();
+            }}
+            onDrop={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return;
+              event.preventDefault();
+              event.stopPropagation();
+              addFiles(Array.from(event.dataTransfer.files).filter((f) => f.type.startsWith("video/")));
+            }}
+            className="rounded-lg border-2 border-dashed border-border bg-muted/30 px-4 py-4 text-center text-xs text-muted-foreground"
+          >
+            Drag and drop walkaround videos here
+          </div>
+          {photos.some(isVideoDraft) ? (
+            <ul className="space-y-3">
+              {photos.map((p, i) => {
+                if (!isVideoDraft(p)) return null;
+                const meta = parseVideoAlt(p.alt);
+                const isFeatured = i === photos.findIndex(isVideoDraft);
+                const pct = p.kind === "new" ? uploadPct[p.previewUrl] : undefined;
+                const status =
+                  p.kind === "existing"
+                    ? "Saved"
+                    : pct === "failed"
+                      ? "Upload failed"
+                      : pct === 100
+                        ? "Finalizing…"
+                        : typeof pct === "number"
+                          ? `Uploading ${pct}%`
+                          : "Ready to upload — saves with the vehicle";
+                const setMeta = (type: VideoType | null, title: string) =>
+                  setPhotos((cur) => cur.map((item, idx) => (idx === i ? { ...item, alt: encodeVideoAlt(type, title) } : item)));
+                return (
+                  <li key={p.kind === "existing" ? p.id : p.previewUrl} className="grid gap-3 rounded-md border border-border p-3 sm:grid-cols-[220px_1fr]">
+                    <video
+                      src={p.kind === "existing" ? p.url : p.previewUrl}
+                      className="aspect-video w-full rounded bg-black object-contain"
+                      playsInline
+                      preload="metadata"
+                      controls
+                    />
+                    <div className="min-w-0 space-y-2">
+                      <div className="flex flex-wrap items-center gap-2 text-xs">
+                        {isFeatured && (
+                          <span className="rounded bg-primary px-1.5 py-0.5 text-[10px] font-bold text-primary-foreground">Featured</span>
+                        )}
+                        <span className={pct === "failed" ? "text-destructive" : "text-muted-foreground"}>{status}</span>
+                      </div>
+                      {typeof pct === "number" && pct < 100 && (
+                        <div className="h-1.5 overflow-hidden rounded bg-muted">
+                          <div className="h-full bg-primary transition-all" style={{ width: `${pct}%` }} />
+                        </div>
+                      )}
+                      <Input
+                        value={meta.title}
+                        maxLength={200}
+                        placeholder="Video title, e.g. 2017 Chrysler Pacifica Exterior Walkaround"
+                        aria-label="Video title"
+                        className="h-8 text-xs"
+                        onChange={(e) => setMeta(meta.type, e.target.value)}
+                      />
+                      <select
+                        aria-label="Video type"
+                        className="flex h-8 w-full rounded-md border border-input bg-background px-2 text-xs"
+                        value={meta.type ?? ""}
+                        onChange={(e) => setMeta((e.target.value || null) as VideoType | null, meta.title)}
+                      >
+                        <option value="">Type not set</option>
+                        {VIDEO_TYPES.map((t) => (
+                          <option key={t.value} value={t.value}>{t.label}</option>
+                        ))}
+                      </select>
+                      <div className="flex flex-wrap gap-1">
+                        {!isFeatured && (
+                          <Button size="sm" variant="outline" className="h-7 text-xs" onClick={() => moveTo(i, photos.findIndex(isVideoDraft))}>
+                            <Star className="mr-1 size-3" /> Make featured
+                          </Button>
+                        )}
+                        <label className="inline-flex h-7 cursor-pointer items-center rounded-md border border-border px-2 text-xs font-medium hover:bg-muted">
+                          <RefreshCw className="mr-1 size-3" /> Replace
+                          <input
+                            type="file"
+                            accept="video/mp4,video/webm,video/quicktime"
+                            className="hidden"
+                            onChange={(e) => {
+                              const file = e.target.files?.[0];
+                              e.target.value = "";
+                              if (!file) return;
+                              if (!ALLOWED_VIDEO_TYPES.includes(file.type) || file.size > MAX_VIDEO_BYTES) {
+                                toast.warning("Videos must be MP4, WebM or MOV up to 5 GB.");
+                                return;
+                              }
+                              // The old file is only removed once the vehicle is saved.
+                              setPhotos((cur) =>
+                                cur.map((item, idx) =>
+                                  idx === i ? { kind: "new" as const, file, previewUrl: URL.createObjectURL(file), alt: item.alt } : item,
+                                ),
+                              );
+                            }}
+                          />
+                        </label>
+                        <Button size="sm" variant="ghost" className="h-7 text-xs text-destructive" onClick={() => removePhoto(i)}>
+                          <Trash2 className="mr-1 size-3" /> Remove
+                        </Button>
+                      </div>
+                    </div>
+                  </li>
+                );
+              })}
+            </ul>
+          ) : (
+            <p className="text-center text-xs text-muted-foreground">No videos yet. The Walkaround section only appears on the public page once a video is saved.</p>
           )}
         </div>
 
