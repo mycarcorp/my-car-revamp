@@ -192,3 +192,21 @@
 .vehicle-description th { background: var(--muted); font-weight: 700; }
 .vehicle-description td > p, .vehicle-description th > p { margin: 0; }
 .vehicle-description .selectedCell { background: color-mix(in oklab, var(--primary) 12%, transparent); }
+
+/* Homepage brand story (scroll-driven, see BrandStory.tsx) */
+.brand-story-text {
+  --t: clamp(0, calc(var(--p) * 5), 1);
+  opacity: var(--t);
+  transform: translate3d(0, calc((1 - var(--t)) * 40px), 0);
+  will-change: opacity, transform;
+}
+.brand-story-image {
+  --i: clamp(0, calc((var(--p) - 0.18) * 2.6), 1);
+  opacity: var(--i);
+  transform: translate3d(0, calc((1 - var(--i)) * 80px), 0) scale(calc(0.62 + var(--i) * 0.38));
+  transform-origin: center top;
+  will-change: opacity, transform;
+}
+@media (prefers-reduced-motion: reduce) {
+  .brand-story-text, .brand-story-image { opacity: 1; transform: none; }
+}
