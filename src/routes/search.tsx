@@ -18,13 +18,14 @@ import {
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Slider } from "@/components/ui/slider";
-import { allVehiclesQuery, siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
-import { VehicleCard } from "@/components/VehicleCard";
+import { allVehiclesQuery, type VehicleWithPhotos } from "@/lib/queries";
+import { isVideoUrl } from "@/lib/vehicle-media";
+import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
 
 /**
  * My Car inventory page: replace the file currently registering /search.
  * All filter options and vehicle imagery are derived from the real inventory query.
- * Photo navigation/fullscreen galleries stay inside the shared VehicleCard.
+ * Listing cards open the full vehicle details page when clicked.
  * Unsupported metadata is never invented. Empty facets explain what's missing.
  */
 type Filters = {
@@ -50,7 +51,6 @@ type Filters = {
   mpgMin?: number;
   seatsMin?: number;
   seatsMax?: number;
-  paymentMax?: number;
   page?: number;
 };
 type MultiKey = "make" | "model" | "body" | "fuel" | "drivetrain" | "color" | "interior" | "features" | "deal";
@@ -86,6 +86,7 @@ const isBrandNew = (vehicle: VehicleWithPhotos): boolean => {
     ["new", "brand new", "new vehicle", "new car"].includes(classification.trim().toLowerCase())
   );
 };
+
 const money = (n: number) =>
   new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(n);
 const integer = (n: number) => new Intl.NumberFormat("en-US").format(n);
@@ -143,6 +144,7 @@ const combinedMpg = (v: VehicleWithPhotos) =>
   fieldNumber(v, ["mpg_combined", "mpge_combined", "combined_mpg", "combined_mpge"]);
 const carFeatures = (v: VehicleWithPhotos): string[] => {
   const row = record(v);
+
   const source = firstField(row, ["features", "vehicle_features", "equipment", "options"]);
   if (Array.isArray(source))
     return source
@@ -196,16 +198,87 @@ const bodyIcon = (value: string) => {
   if (b.includes("coupe") || b.includes("convertible")) return "🏎️";
   return "🚘";
 };
-const paymentFor = (v: VehicleWithPhotos, settings: Raw | undefined) => {
-  if (!settings) return undefined;
-  const apr = Number(settings.finance_apr);
-  const months = Number(settings.finance_term_months);
-  const downPct = Number(settings.finance_down_percent);
-  if (![apr, months, downPct].every(Number.isFinite) || months <= 0 || downPct < 0 || downPct >= 100) return undefined;
-  const principal = priceOf(v) * (1 - downPct / 100);
-  const rate = apr / 100 / 12;
-  return rate === 0 ? principal / months : (principal * rate) / (1 - Math.pow(1 + rate, -months));
-};
+/**
+ * Inventory-only listing card. The entire card is a navigation link.
+ * The purchase flow remains on the vehicle detail page only.
+ * Shipping offers are shown only when explicitly flagged in vehicle data.
+ */
+function InventoryListingCard({ vehicle }: { vehicle: VehicleWithPhotos }) {
+  const photos = [...(vehicle.vehicle_photos ?? [])]
+    .sort((a, b) => a.position - b.position)
+    .filter((photo) => Boolean(photo.url) && !isVideoUrl(photo.url));
+  const image = photos[0];
+  const title = vehicleTitle(vehicle);
+  const slug = String(vehicle.slug ?? "").trim();
+
+  // Never navigate using an invented slug.
+  if (!slug) {
+    return (
+      <article className="overflow-hidden rounded-xl border border-slate-200 bg-white shadow-sm">
+        <div className="flex aspect-[16/9] items-center justify-center bg-slate-100 text-slate-400">
+          <CarFront className="size-12" />
+        </div>
+        <div className="space-y-2 p-4">
+          <h3 className="text-sm font-bold text-[#173954]">{title}</h3>
+          <p className="text-sm text-slate-500">Vehicle details unavailable</p>
+        </div>
+      </article>
+    );
+  }
+
+  return (
+    <Link
+      to="/inventory/$slug"
+      params={{ slug }}
+      aria-label={`View details for ${title}`}
+      className="group flex h-full min-w-0 flex-col overflow-hidden rounded-xl border border-slate-200 bg-white text-left shadow-sm transition hover:-translate-y-0.5 hover:border-[#9ac1e6] hover:shadow-lg focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-[#1478cc]"
+    >
+      <div className="relative aspect-[16/9] w-full overflow-hidden bg-[#f2f5f8]">
+        {image ? (
+          <img
+            src={image.url}
+            alt={image.alt || `${title} exterior or interior photo`}
+            loading="lazy"
+            className="h-full w-full object-contain transition-transform duration-300 group-hover:scale-[1.025]"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center text-slate-400">
+            <CarFront className="size-12" />
+          </div>
+        )}
+        {photos.length > 1 && (
+          <div className="absolute bottom-2 left-1/2 flex -translate-x-1/2 items-center gap-1 rounded-full bg-black/35 px-2 py-1">
+            {photos.slice(0, 5).map((photo, index) => (
+              <span
+                key={photo.id}
+                className={`size-1.5 rounded-full ${index === 0 ? "bg-[#1595e9]" : "bg-white/90"}`}
+              />
+            ))}
+          </div>
+        )}
+      </div>
+      <div className="flex flex-1 flex-col p-4">
+        <h3 className="line-clamp-2 text-sm font-bold text-[#173954] sm:text-[15px]">{title}</h3>
+        <p className="mt-1 text-xs text-slate-500">
+          {vehicle.trim ? `${vehicle.trim} · ` : ""}
+          {formatMiles(vehicle.mileage)}
+        </p>
+        <p className="mt-3 text-xl font-extrabold tracking-tight text-[#173954]">
+          {formatUsd(Number(vehicle.price_cents))}
+        </p>
+        <div className="mt-auto pt-8">
+          <div className="border-t border-slate-200 pt-3 text-xs font-semibold">
+            {freeShipping(vehicle) ? (
+              <span className="text-emerald-600">Free shipping</span>
+            ) : (
+              <span className="text-slate-500">View pickup & delivery details</span>
+            )}
+          </div>
+        </div>
+      </div>
+    </Link>
+  );
+}
 
 export const Route = createFileRoute("/search")({
   validateSearch: (r: Record<string, unknown>): Filters => ({
@@ -231,7 +304,6 @@ export const Route = createFileRoute("/search")({
     mpgMin: asNum(r.mpgMin),
     seatsMin: asNum(r.seatsMin),
     seatsMax: asNum(r.seatsMax),
-    paymentMax: asNum(r.paymentMax),
     page: asNum(r.page),
   }),
   head: () => ({
@@ -284,7 +356,6 @@ const FILTER_KEYS: (keyof Filters)[] = [
   "mpgMin",
   "seatsMin",
   "seatsMax",
-  "paymentMax",
 ];
 const compact = (f: Filters): Filters => {
   const out: Raw = {};
@@ -360,6 +431,7 @@ function Checklist({
           />
         </div>
       )}
+
       {options.length === 0 && (
         <p className="rounded-md bg-slate-50 px-2 py-2 text-[11px] leading-4 text-slate-500">{emptyText}</p>
       )}
@@ -452,6 +524,7 @@ function RangeFilter({
         aria-label={label}
         className="py-2"
       />
+
       <div className="grid grid-cols-2 gap-2">
         <label className="text-[10px] text-slate-500">
           Minimum
@@ -545,23 +618,13 @@ function Promotion({ type }: { type: "finance" | "trade" | "schedule" | "deals" 
 type SidebarProps = {
   filters: Filters;
   vehicles: VehicleWithPhotos[];
-  settings?: Raw;
   onChange: (patch: Partial<Filters>) => void;
   onClear: () => void;
   onlySaved: boolean;
   onSaved: (n: boolean) => void;
   savedCount: number;
 };
-function FilterSidebar({
-  filters,
-  vehicles,
-  settings,
-  onChange,
-  onClear,
-  onlySaved,
-  onSaved,
-  savedCount,
-}: SidebarProps) {
+function FilterSidebar({ filters, vehicles, onChange, onClear, onlySaved, onSaved, savedCount }: SidebarProps) {
   const toggle = (key: MultiKey, option: string) => {
     const old = splitValues(filters[key]);
     const next = old.some((x) => x.toLowerCase() === option.toLowerCase())
@@ -594,10 +657,6 @@ function FilterSidebar({
   const seatMax = seats.length ? Math.max(...seats) : 0;
   const mpgs = vehicles.map(combinedMpg).filter((x): x is number => x !== undefined && x > 0);
   const mpgMax = mpgs.length ? Math.ceil(Math.max(...mpgs) / 5) * 5 : 0;
-  const payments = settings
-    ? vehicles.map((v) => paymentFor(v, settings)).filter((x): x is number => x !== undefined && x >= 0)
-    : [];
-  const maxPayment = payments.length ? Math.ceil(Math.max(...payments) / 100) * 100 : 0;
   const dealOptions: FacetOption[] = [
     { value: "price-drop", count: vehicles.filter(isDrop).length },
     { value: "recent", count: vehicles.filter(isRecent).length },
@@ -649,26 +708,6 @@ function FilterSidebar({
             onChange({ priceMin: min <= priceMin ? undefined : min, priceMax: max >= priceMax ? undefined : max })
           }
         />
-        {maxPayment > 0 && (
-          <div className="border-t pt-3">
-            <label className="block text-[11px] font-semibold">Max estimated monthly payment</label>
-            <Slider
-              min={0}
-              max={maxPayment}
-              step={25}
-              value={[filters.paymentMax ?? maxPayment]}
-              onValueChange={(v) => onChange({ paymentMax: (v[0] ?? 0) >= maxPayment ? undefined : v[0] })}
-              className="mt-3 mb-1"
-            />
-            <div className="flex justify-between text-[10px] text-slate-500">
-              <span>$0</span>
-              <span>{money(filters.paymentMax ?? maxPayment)}/mo</span>
-            </div>
-            <p className="mt-2 text-[10px] leading-4 text-slate-500">
-              Estimates use the finance assumptions in your site settings, before taxes and fees. Not a financing offer.
-            </p>
-          </div>
-        )}
         <a
           href="/finance"
           className="inline-flex items-center gap-1 text-xs font-semibold text-blue-700 hover:underline"
@@ -817,8 +856,6 @@ function SearchPage() {
   const params = Route.useSearch();
   const navigate = useNavigate({ from: "/search" });
   const { data: allVehicles = [], isLoading, isError } = useQuery(allVehiclesQuery());
-  const { data: siteSettings } = useQuery(siteSettingsQuery());
-  const settings = siteSettings as Raw | undefined;
   const [filters, setFilters] = useState<Filters>(params);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<string[]>([]);
@@ -891,7 +928,6 @@ function SearchPage() {
       if (filters.mpgMin !== undefined && (combinedMpg(v) ?? -1) < filters.mpgMin) return false;
       if (filters.seatsMin !== undefined && (seating(v) ?? -1) < filters.seatsMin) return false;
       if (filters.seatsMax !== undefined && (seating(v) ?? Infinity) > filters.seatsMax) return false;
-      if (filters.paymentMax !== undefined && (paymentFor(v, settings) ?? Infinity) > filters.paymentMax) return false;
       if (filters.shipping === "free" && !freeShipping(v)) return false;
       const deals = splitValues(filters.deal);
       if (deals.length && !deals.some((d) => (d === "price-drop" ? isDrop(v) : d === "recent" ? isRecent(v) : false)))
@@ -922,7 +958,7 @@ function SearchPage() {
           );
       }
     });
-  }, [vehicles, filters, onlySaved, savedIds, settings]);
+  }, [vehicles, filters, onlySaved, savedIds]);
   const totalPages = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
   const page = Math.max(1, Math.min(Number(filters.page) || 1, totalPages));
   const displayed = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
@@ -937,7 +973,6 @@ function SearchPage() {
   const sidebarProps: SidebarProps = {
     filters,
     vehicles,
-    settings,
     onChange: update,
     onClear: clear,
     onlySaved,
@@ -1085,9 +1120,7 @@ function SearchPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {displayed.flatMap((vehicle, index) => {
                 const absolute = (page - 1) * PAGE_SIZE + index + 1;
-                const elements = [
-                  <VehicleCard key={`vehicle-${vehicle.id}`} vehicle={vehicle} settings={siteSettings} />,
-                ];
+                const elements = [<InventoryListingCard key={`vehicle-${vehicle.id}`} vehicle={vehicle} />];
                 if (absolute === 6) elements.push(<Promotion key="finance" type="finance" />);
                 if (absolute === 15) elements.push(<Promotion key="trade" type="trade" />);
                 if (absolute === 23) elements.push(<Promotion key="deals" type="deals" />);
@@ -1096,6 +1129,7 @@ function SearchPage() {
               })}
             </div>
           )}
+
           {!isLoading && filtered.length > PAGE_SIZE && (
             <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
               <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => pageTo(page - 1)}>
