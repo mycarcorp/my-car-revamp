@@ -1,0 +1,42 @@
+name: Lighthouse CI
+
+on:
+  pull_request:
+  workflow_dispatch:
+    inputs:
+      base_url:
+        description: "Site to audit"
+        default: "https://mycarcorp.com"
+
+permissions:
+  contents: read
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    continue-on-error: true # never block merges or deploys
+    env:
+      LHCI_BASE_URL: ${{ github.event.inputs.base_url || 'https://mycarcorp.com' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Pick URLs (core pages + 2 vehicles + 1 blog post from sitemap)
+        run: |
+          B="$LHCI_BASE_URL"
+          MAP=$(curl -fsSL "$B/sitemap.xml" || true)
+          VDP=$(echo "$MAP" | grep -o "<loc>[^<]*/inventory/[^<]*</loc>" | head -2 | sed 's/<[^>]*>//g' | sed "s#https://mycarcorp.com#$B#")
+          POST=$(echo "$MAP" | grep -o "<loc>[^<]*/blog/[^<]*</loc>" | head -1 | sed 's/<[^>]*>//g' | sed "s#https://mycarcorp.com#$B#")
+          URLS="$B/ $B/search $B/finance $B/sell $B/schedule $B/contact $B/blog $B/locations $VDP $POST"
+          echo "LHCI_URLS=$(echo $URLS)" >> "$GITHUB_ENV"
+          echo "Auditing: $URLS"
+      - name: Run Lighthouse CI
+        run: npx --yes @lhci/cli@0.14.x autorun --config=./lighthouserc.cjs || echo "Lighthouse reported issues (non-blocking)"
+      - name: Upload reports
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-reports
+          path: lhci-reports
+          retention-days: 30
