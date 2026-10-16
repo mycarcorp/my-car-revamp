@@ -504,29 +504,28 @@ function Home() {
       )}
       {/* POPULAR MODELS */}
       {/* POPULAR MODELS */}
-{models.length > 0 && (
-  <HomeRail title="Shop popular models" itemClassName="basis-[62%] sm:basis-1/3 lg:basis-1/5">
-            {models.map((m) => (
-              <Link
-                key={`${m.make}-${m.model}`}
-                to="/search"
-                search={{ make: m.make, model: m.model }}
-                className="group flex h-full flex-col rounded-2xl bg-surface p-5 transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]"
-              >
-                <div className="text-sm text-muted-foreground">{m.make}</div>
-                <div className="font-display text-lg font-bold">{m.model}</div>
-                <div className="mt-6 aspect-[4/3] overflow-hidden rounded-xl">
-                  <img
-                    src={m.image}
-                    alt={`${m.make} ${m.model}`}
-                    loading="lazy"
-                    className="h-full w-full object-cover mix-blend-multiply transition duration-500 group-hover:scale-105"
-                  />
-                </div>
-              </Link>
-            ))}
-          </HomeRail>
-        </ScrollReveal>
+      {models.length > 0 && (
+        <HomeRail title="Shop popular models" itemClassName="basis-[62%] sm:basis-1/3 lg:basis-1/5">
+          {models.map((m) => (
+            <Link
+              key={`${m.make}-${m.model}`}
+              to="/search"
+              search={{ make: m.make, model: m.model }}
+              className="group flex h-full flex-col rounded-2xl bg-surface p-5 transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]"
+            >
+              <div className="text-sm text-muted-foreground">{m.make}</div>
+              <div className="font-display text-lg font-bold">{m.model}</div>
+              <div className="mt-6 aspect-[4/3] overflow-hidden rounded-xl">
+                <img
+                  src={m.image}
+                  alt={`${m.make} ${m.model}`}
+                  loading="lazy"
+                  className="h-full w-full object-cover mix-blend-multiply transition duration-500 group-hover:scale-105"
+                />
+              </div>
+            </Link>
+          ))}
+        </HomeRail>
       )}
 
       {/* BRAND STORY */}
