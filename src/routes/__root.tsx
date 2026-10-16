@@ -187,7 +187,7 @@ function RootComponent() {
       fbq?.("init", "913977571315979");
     }
     w.fbq?.("track", "PageView");
-  }, [pathname, isAdmin]);
+  }, [pathname, skipTracking]);
 
   useEffect(() => {
     const widgetId = "6a43bb0bbd10bf7f08bff1e7";
