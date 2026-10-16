@@ -38,6 +38,7 @@ import heroImage from "@/assets/home-hero-dealership.jpg";
 import greeterImage from "@/assets/explore-greeter.png";
 import { CustomerGallery } from "@/components/home/CustomerGallery";
 import { DealershipMap } from "@/components/home/DealershipMap";
+import { ScrollReveal } from "@/components/home/ScrollReveal";
 
 import { formatUsd } from "@/lib/format";
 import bodySuv from "@/assets/body-suv.png";
