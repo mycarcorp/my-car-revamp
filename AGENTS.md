@@ -13,4 +13,5 @@
 - Vehicle descriptions are stored as sanitized HTML in the existing description column and always rendered via src/lib/vehicle-description.ts (plain-text legacy values still supported); why: one safe, SEO-crawlable format with no schema change.
 - Lighthouse CI audits the live site via .github/workflows/lighthouse.yml + lighthouserc.cjs, warn-only; why: worker build isn't servable in CI and audits must never block deploys.
 - Secondary vehicle card interactions use DeferredContent with React.lazy, while searchable inventory and service areas are primed by route loaders; why: critical content is available early without loading offscreen interaction code.
+- Router SSR query integration hydrates the per-request QueryClient and preserves the root QueryClientProvider; why: loader data must not disappear and refetch during hydration.
 - Public article list structure is normalized with the browser-safe parse5 parser after existing content sanitization; why: pasted document lists retain their content while receiving valid list parents.
