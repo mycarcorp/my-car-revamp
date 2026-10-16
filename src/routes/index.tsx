@@ -34,7 +34,7 @@ import {
   siteSettingsQuery,
   type VehicleWithPhotos,
 } from "@/lib/queries";
-import heroImage from "@/assets/home-hero-dealership-v2.jpg";
+import heroImage from "@/assets/home-hero-dealership-v3.jpg";
 import greeterImage from "@/assets/explore-greeter.png";
 import { CustomerGallery } from "@/components/home/CustomerGallery";
 import { DealershipMap } from "@/components/home/DealershipMap";
@@ -272,8 +272,8 @@ function Home() {
           fetchPriority="high"
           className="absolute inset-0 -z-10 h-full w-full object-cover object-[70%_center]"
         />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary via-primary/80 to-primary/0 md:via-primary/55" />
-        <div className="absolute inset-x-0 bottom-0 -z-10 h-1/2 bg-gradient-to-t from-primary/90 to-transparent" />
+        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary/70 via-primary/25 to-transparent md:via-transparent md:to-transparent" />
+        <div className="absolute inset-x-0 bottom-0 -z-10 h-1/4 bg-gradient-to-t from-primary/40 to-transparent" />
 
         <div className="mx-auto max-w-7xl px-4 pb-10 pt-16 md:pb-14 md:pt-24 lg:pt-28">
           <div className="max-w-xl">
