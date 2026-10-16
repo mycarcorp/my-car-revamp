@@ -152,6 +152,8 @@ function Home() {
   const navigate = useNavigate();
   const { data: settings } = useQuery(siteSettingsQuery());
   const { data: publishedHero } = useQuery({ queryKey: ["home-hero"], queryFn: () => getPublishedHeroFn(), staleTime: 60_000 });
+  const { data: facets } = useQuery(facetsQuery());
+  const { data: all } = useQuery(allVehiclesQuery());
   // Admin hero editor loads this page in a frame (?heroPreview=1) and streams draft settings in.
   const [draftHero, setDraftHero] = useState<HeroSettings | null>(null);
   const [isHeroPreview, setIsHeroPreview] = useState(false);
