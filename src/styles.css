@@ -411,3 +411,32 @@
     will-change: auto;
   }
 }
+
+/* MyCar Brand Story headline readability */
+
+.brand-story-heading {
+  color: var(--primary);
+  text-shadow: none;
+  transition:
+    color 180ms ease,
+    text-shadow 180ms ease;
+}
+
+.brand-story-text.is-over-image .brand-story-heading {
+  color: #ffffff;
+  text-shadow:
+    0 2px 8px rgb(0 0 0 / 65%),
+    0 4px 24px rgb(0 0 0 / 75%);
+}
+
+/* Prevent unwanted fade or zoom */
+.brand-story-text,
+.brand-story-image {
+  opacity: 1;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .brand-story-heading {
+    transition: none;
+  }
+}
