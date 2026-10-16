@@ -39,6 +39,8 @@ import greeterImage from "@/assets/explore-greeter.png";
 import { CustomerGallery } from "@/components/home/CustomerGallery";
 import { DealershipMap } from "@/components/home/DealershipMap";
 import { ScrollReveal } from "@/components/home/ScrollReveal";
+import { HeroMedia } from "@/components/home/HeroMedia";
+import { getPublishedHeroFn } from "@/lib/home-gallery.functions";
 
 import { formatUsd } from "@/lib/format";
 import bodySuv from "@/assets/body-suv.png";
@@ -149,6 +151,7 @@ function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { data: settings } = useQuery(siteSettingsQuery());
+  const { data: hero } = useQuery({ queryKey: ["home-hero"], queryFn: () => getPublishedHeroFn(), staleTime: 60_000 });
   const { data: facets } = useQuery(facetsQuery());
   const { data: all } = useQuery(allVehiclesQuery());
   const visitor = useVisitorState();
@@ -264,16 +267,12 @@ function Home() {
 
       {/* HERO */}
       <section className={visitor.returning ? "hidden" : "relative isolate overflow-hidden bg-primary"}>
-        <img
-          src={heroImage}
+        <HeroMedia
+          src={hero?.imageUrl ?? heroImage}
           alt="Smiling My Car team member handing over car keys in front of the My Car dealership"
-          width={1376}
-          height={768}
-          fetchPriority="high"
-          className="absolute inset-0 -z-10 h-full w-full object-cover object-[70%_center]"
+          frames={hero?.frames}
+          overlay={hero?.overlay ?? { left: 70, bottom: 40, shadow: 0, direction: "both" }}
         />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary/70 via-primary/25 to-transparent md:via-transparent md:to-transparent" />
-        <div className="absolute inset-x-0 bottom-0 -z-10 h-1/4 bg-gradient-to-t from-primary/40 to-transparent" />
 
         <div className="mx-auto max-w-7xl px-4 pb-10 pt-16 md:pb-14 md:pt-24 lg:pt-28">
           <div className="max-w-xl">
