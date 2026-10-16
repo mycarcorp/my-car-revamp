@@ -146,18 +146,20 @@ function RootComponent() {
   const isAdmin = pathname.startsWith("/admin");
 
   const searchStr = useRouterState({ select: (s) => s.location.searchStr });
+  // Admin hero-editor preview frame loads "/" — never count it as a visit.
+  const skipTracking = isAdmin || searchStr.includes("heroPreview=1");
   useEffect(() => {
-    if (!isAdmin) captureAttribution();
-  }, [pathname, searchStr, isAdmin]);
+    if (!skipTracking) captureAttribution();
+  }, [pathname, searchStr, skipTracking]);
 
   useEffect(() => {
-    if (isAdmin) return;
+    if (skipTracking) return;
     beginVisit();
     trackPath(pathname);
-  }, [pathname, isAdmin]);
+  }, [pathname, skipTracking]);
 
   useEffect(() => {
-    if (isAdmin) return;
+    if (skipTracking) return;
     const w = window as unknown as { fbq?: (...args: unknown[]) => void };
     if (!w.fbq) {
       /* eslint-disable */
@@ -185,7 +187,7 @@ function RootComponent() {
       fbq?.("init", "913977571315979");
     }
     w.fbq?.("track", "PageView");
-  }, [pathname, isAdmin]);
+  }, [pathname, skipTracking]);
 
   useEffect(() => {
     const widgetId = "6a43bb0bbd10bf7f08bff1e7";

@@ -109,18 +109,32 @@ function AdminGallery() {
     });
 
   return (
-    <div className="space-y-6">
+    <div className="space-y-8 pb-10">
       <AdminPageHeader
-        title="Customer gallery"
-        subtitle="Photos and videos of real customers, shown on the homepage slider."
-        actions={
-          <Button onClick={() => persist(items)} disabled={saving || loading}>
-            {saving && <Loader2 className="size-4 animate-spin" />} Save changes
-          </Button>
-        }
+        title="Gallery"
+        subtitle="Homepage hero and real customer photos & videos."
       />
 
-      <HeroEditor token={token} />
+      <section className="space-y-3 px-4">
+        <div>
+          <h2 className="font-display text-lg font-bold">Hero section editor</h2>
+          <p className="text-xs text-muted-foreground">Live preview of the real homepage banner on desktop and mobile.</p>
+        </div>
+        <HeroEditor token={token} />
+      </section>
+
+      <section className="space-y-3 px-4">
+        <div className="flex flex-wrap items-end justify-between gap-2">
+          <div>
+            <h2 className="font-display text-lg font-bold">Gallery management</h2>
+            <p className="text-xs text-muted-foreground">
+              {items.length} item{items.length === 1 ? "" : "s"} in the “Real customers. Real keys.” slider.
+            </p>
+          </div>
+          <Button size="sm" onClick={() => persist(items)} disabled={saving || loading}>
+            {saving && <Loader2 className="size-4 animate-spin" />} Save gallery
+          </Button>
+        </div>
 
       <label
         onDragOver={(e) => e.preventDefault()}
@@ -128,10 +142,10 @@ function AdminGallery() {
           e.preventDefault();
           void addFiles(e.dataTransfer.files);
         }}
-        className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card px-6 py-10 text-center hover:border-accent"
+        className="flex cursor-pointer flex-col items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-border bg-card px-6 py-8 text-center transition hover:border-accent"
       >
-        <Upload className="size-6 text-muted-foreground" />
-        <span className="font-semibold">{progress ?? "Drop photos or videos here, or click to choose"}</span>
+        <span className="flex size-10 items-center justify-center rounded-full bg-muted"><Upload className="size-5 text-muted-foreground" /></span>
+        <span className="text-sm font-semibold">{progress ?? "Drop photos or videos here, or click to choose"}</span>
         <span className="text-xs text-muted-foreground">Videos upload directly, so long clips are fine.</span>
         <input type="file" accept="image/*,video/*" multiple className="sr-only" onChange={(e) => e.target.files && void addFiles(e.target.files)} />
       </label>
@@ -175,6 +189,7 @@ function AdminGallery() {
           ))}
         </div>
       )}
+      </section>
     </div>
   );
 }
