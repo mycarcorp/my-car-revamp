@@ -27,6 +27,7 @@ import { Route as AdminIndexRouteImport } from './routes/admin.index'
 import { Route as AdminCustomersRouteImport } from './routes/admin.customers'
 import { Route as AdminGalleryRouteImport } from './routes/admin.gallery'
 import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
+import { Route as AdminMarketingRouteImport } from './routes/admin.marketing'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminTransactionsRouteImport } from './routes/admin.transactions'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
@@ -42,6 +43,7 @@ import { Route as ApiPublicReceiveArticleRouteImport } from './routes/api/public
 import { Route as MyPurchasesIndexRouteImport } from './routes/my.purchases.index'
 import { Route as MyPurchasesIdRouteImport } from './routes/my.purchases.$id'
 import { Route as AdminBlogIdEditRouteImport } from './routes/admin.blog.$id.edit'
+import { Route as ApiPublicJobsMarketingRefreshRouteImport } from './routes/api/public/jobs/marketing-refresh'
 import { Route as ApiPublicVehiclePhotosSplatRouteImport } from './routes/api/public/vehicle-photos.$'
 
 const IndexRoute = IndexRouteImport.update({
@@ -134,6 +136,11 @@ const AdminInventoryRoute = AdminInventoryRouteImport.update({
   path: '/inventory',
   getParentRoute: () => AdminRoute,
 } as any)
+const AdminMarketingRoute = AdminMarketingRouteImport.update({
+  id: '/marketing',
+  path: '/marketing',
+  getParentRoute: () => AdminRoute,
+} as any)
 const AdminSettingsRoute = AdminSettingsRouteImport.update({
   id: '/settings',
   path: '/settings',
@@ -209,6 +216,12 @@ const AdminBlogIdEditRoute = AdminBlogIdEditRouteImport.update({
   path: '/blog/$id/edit',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApiPublicJobsMarketingRefreshRoute =
+  ApiPublicJobsMarketingRefreshRouteImport.update({
+    id: '/api/public/jobs/marketing-refresh',
+    path: '/api/public/jobs/marketing-refresh',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicVehiclePhotosSplatRoute =
   ApiPublicVehiclePhotosSplatRouteImport.update({
     id: '/api/public/vehicle-photos/$',
@@ -234,6 +247,7 @@ export interface FileRoutesByFullPath {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/gallery': typeof AdminGalleryRoute
   '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/marketing': typeof AdminMarketingRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -250,6 +264,7 @@ export interface FileRoutesByFullPath {
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/my/purchases/': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
+  '/api/public/jobs/marketing-refresh': typeof ApiPublicJobsMarketingRefreshRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
 export interface FileRoutesByTo {
@@ -268,6 +283,7 @@ export interface FileRoutesByTo {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/gallery': typeof AdminGalleryRoute
   '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/marketing': typeof AdminMarketingRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -284,6 +300,7 @@ export interface FileRoutesByTo {
   '/admin/blog': typeof AdminBlogIndexRoute
   '/my/purchases': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
+  '/api/public/jobs/marketing-refresh': typeof ApiPublicJobsMarketingRefreshRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
 export interface FileRoutesById {
@@ -305,6 +322,7 @@ export interface FileRoutesById {
   '/admin/customers': typeof AdminCustomersRoute
   '/admin/gallery': typeof AdminGalleryRoute
   '/admin/inventory': typeof AdminInventoryRoute
+  '/admin/marketing': typeof AdminMarketingRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
   '/auth/callback': typeof AuthCallbackRoute
@@ -321,6 +339,7 @@ export interface FileRoutesById {
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/my/purchases/': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
+  '/api/public/jobs/marketing-refresh': typeof ApiPublicJobsMarketingRefreshRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
 export interface FileRouteTypes {
@@ -343,6 +362,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/gallery'
     | '/admin/inventory'
+    | '/admin/marketing'
     | '/admin/settings'
     | '/admin/transactions'
     | '/auth/callback'
@@ -359,6 +379,7 @@ export interface FileRouteTypes {
     | '/admin/blog/'
     | '/my/purchases/'
     | '/admin/blog/$id/edit'
+    | '/api/public/jobs/marketing-refresh'
     | '/api/public/vehicle-photos/$'
   fileRoutesByTo: FileRoutesByTo
   to:
@@ -377,6 +398,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/gallery'
     | '/admin/inventory'
+    | '/admin/marketing'
     | '/admin/settings'
     | '/admin/transactions'
     | '/auth/callback'
@@ -393,6 +415,7 @@ export interface FileRouteTypes {
     | '/admin/blog'
     | '/my/purchases'
     | '/admin/blog/$id/edit'
+    | '/api/public/jobs/marketing-refresh'
     | '/api/public/vehicle-photos/$'
   id:
     | '__root__'
@@ -413,6 +436,7 @@ export interface FileRouteTypes {
     | '/admin/customers'
     | '/admin/gallery'
     | '/admin/inventory'
+    | '/admin/marketing'
     | '/admin/settings'
     | '/admin/transactions'
     | '/auth/callback'
@@ -429,6 +453,7 @@ export interface FileRouteTypes {
     | '/admin/blog/'
     | '/my/purchases/'
     | '/admin/blog/$id/edit'
+    | '/api/public/jobs/marketing-refresh'
     | '/api/public/vehicle-photos/$'
   fileRoutesById: FileRoutesById
 }
@@ -453,6 +478,7 @@ export interface RootRouteChildren {
   BlogIndexRoute: typeof BlogIndexRoute
   LocationsIndexRoute: typeof LocationsIndexRoute
   ApiPublicReceiveArticleRoute: typeof ApiPublicReceiveArticleRoute
+  ApiPublicJobsMarketingRefreshRoute: typeof ApiPublicJobsMarketingRefreshRoute
   ApiPublicVehiclePhotosSplatRoute: typeof ApiPublicVehiclePhotosSplatRoute
 }
 
@@ -584,6 +610,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminInventoryRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/admin/marketing': {
+      id: '/admin/marketing'
+      path: '/marketing'
+      fullPath: '/admin/marketing'
+      preLoaderRoute: typeof AdminMarketingRouteImport
+      parentRoute: typeof AdminRoute
+    }
     '/admin/settings': {
       id: '/admin/settings'
       path: '/settings'
@@ -689,6 +722,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminBlogIdEditRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/api/public/jobs/marketing-refresh': {
+      id: '/api/public/jobs/marketing-refresh'
+      path: '/api/public/jobs/marketing-refresh'
+      fullPath: '/api/public/jobs/marketing-refresh'
+      preLoaderRoute: typeof ApiPublicJobsMarketingRefreshRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/api/public/vehicle-photos/$': {
       id: '/api/public/vehicle-photos/$'
       path: '/api/public/vehicle-photos/$'
@@ -703,6 +743,7 @@ interface AdminRouteChildren {
   AdminCustomersRoute: typeof AdminCustomersRoute
   AdminGalleryRoute: typeof AdminGalleryRoute
   AdminInventoryRoute: typeof AdminInventoryRoute
+  AdminMarketingRoute: typeof AdminMarketingRoute
   AdminSettingsRoute: typeof AdminSettingsRoute
   AdminTransactionsRoute: typeof AdminTransactionsRoute
   AdminIndexRoute: typeof AdminIndexRoute
@@ -715,6 +756,7 @@ const AdminRouteChildren: AdminRouteChildren = {
   AdminCustomersRoute: AdminCustomersRoute,
   AdminGalleryRoute: AdminGalleryRoute,
   AdminInventoryRoute: AdminInventoryRoute,
+  AdminMarketingRoute: AdminMarketingRoute,
   AdminSettingsRoute: AdminSettingsRoute,
   AdminTransactionsRoute: AdminTransactionsRoute,
   AdminIndexRoute: AdminIndexRoute,
@@ -770,6 +812,7 @@ const rootRouteChildren: RootRouteChildren = {
   BlogIndexRoute: BlogIndexRoute,
   LocationsIndexRoute: LocationsIndexRoute,
   ApiPublicReceiveArticleRoute: ApiPublicReceiveArticleRoute,
+  ApiPublicJobsMarketingRefreshRoute: ApiPublicJobsMarketingRefreshRoute,
   ApiPublicVehiclePhotosSplatRoute: ApiPublicVehiclePhotosSplatRoute,
 }
 export const routeTree = rootRouteImport
