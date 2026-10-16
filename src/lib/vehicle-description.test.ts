@@ -11,6 +11,10 @@ describe("vehicle descriptions", () => {
     expect(html).toBe("<h2>Overview</h2><p>Hi</p>");
   });
 
+  it("renders escaped HTML descriptions as formatted content and drops empty paragraphs", () => {
+    expect(descriptionToSafeHtml("&lt;p&gt;&lt;strong&gt;V6&lt;/strong&gt;&lt;/p&gt;<p></p>")).toBe("<p><strong>V6</strong></p>");
+  });
+
   it("produces plain text for meta and schema", () => {
     expect(descriptionToPlainText("<h2>Overview</h2><p>Leather &amp; Stow</p>")).toBe("Overview Leather & Stow");
   });

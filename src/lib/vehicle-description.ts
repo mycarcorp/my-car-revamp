@@ -10,11 +10,19 @@ export function isHtmlDescription(value: string | null | undefined): boolean {
  * Plain text keeps its paragraphs and line breaks.
  */
 export function descriptionToSafeHtml(value: string | null | undefined): string {
-  const raw = String(value ?? "").trim();
+  let raw = String(value ?? "").trim();
   if (!raw) return "";
+  // Recover descriptions saved as escaped HTML ("&lt;p&gt;…") — display only, data untouched.
+  if (!isHtmlDescription(raw) && /&lt;\/?(p|h[1-4]|ul|ol|li|strong|em|br|table)\b/i.test(raw)) {
+    raw = raw.replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&#39;/g, "'");
+  }
   if (isHtmlDescription(raw)) {
     // Demote any h1 so the page keeps a single H1 (the vehicle title).
-    return sanitizeHtml(raw).replace(/<(\/?)h1>/g, "<$1h2>").replace(/<(\/?)h4>/g, "<$1h3>");
+    return sanitizeHtml(raw)
+      .replace(/<(\/?)h1>/g, "<$1h2>")
+      .replace(/<(\/?)h4>/g, "<$1h3>")
+      .replace(/<p>(\s|&nbsp;|<br\s*\/?>)*<\/p>/gi, "")
+      .trim();
   }
   return raw
     .split(/\n{2,}/)
