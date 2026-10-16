@@ -1,6 +1,5 @@
-import { QueryClient } from "@tanstack/react-query";
+import { QueryClient, dehydrate, hydrate, type DehydratedState } from "@tanstack/react-query";
 import { createRouter } from "@tanstack/react-router";
-import { setupRouterSsrQueryIntegration } from "@tanstack/react-router-ssr-query";
 import { routeTree } from "./routeTree.gen";
 
 export const getRouter = () => {
@@ -11,8 +10,11 @@ export const getRouter = () => {
     context: { queryClient },
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
+    dehydrate: () => ({ queryClientState: dehydrate(queryClient) }),
+    hydrate: (state: { queryClientState?: DehydratedState }) => {
+      if (state.queryClientState) hydrate(queryClient, state.queryClientState);
+    },
   });
-  setupRouterSsrQueryIntegration({ router, queryClient, wrapQueryClient: false });
 
   return router;
 };
