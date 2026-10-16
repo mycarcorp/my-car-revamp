@@ -1,4 +1,5 @@
 import { unzip } from "fflate";
+import { getRequest } from "@tanstack/react-start/server";
 import { appAdminCreds } from "./app-admin.server";
 import { emptySnapshot, mergeArticles, resolveProperty, type MarketingSnapshot, type ServiceReport, type SearchReport, type SearchRow, type ResearchReport, type SemrushTable, type LighthouseReport, type SiteHealth, type Prospect, type ProspectInput } from "./marketing";
 
@@ -8,6 +9,12 @@ const REPO = "/repos/mycarcorp/my-car-revamp";
 const ENV = { google_search_console: "GOOGLE_SEARCH_CONSOLE_API_KEY", github: "GITHUB_API_KEY", semrush: "SEMRUSH_API_KEY" } as const;
 type Connector = keyof typeof ENV;
 const now = () => new Date().toISOString();
+export async function requireMarketingStaff() {
+  const token = getRequest().headers.get("authorization")?.replace(/^Bearer\s+/i, "");
+  if (!token) throw new Error("Not signed in.");
+  const { requireStaff } = await import("./legacy-blog.server");
+  return requireStaff(token);
+}
 function storageHeaders() { const { key } = appAdminCreds(); return { apikey: key, ...(key.split(".").length === 3 ? { Authorization: `Bearer ${key}` } : {}), "Content-Type": "application/json" }; }
 async function storage(path: string, init: RequestInit = {}) { const { url } = appAdminCreds(); return fetch(`${url}/storage/v1/${path}`, { ...init, headers: { ...storageHeaders(), ...init.headers }, signal: AbortSignal.timeout(25000) }); }
 async function ensureStorage() {
@@ -77,7 +84,7 @@ async function semrushTable(path: string): Promise<SemrushTable> {
 }
 async function researchReport(): Promise<ResearchReport> {
   const domains = await semrushTable("/backlinks/backlinks_refdomains?target=mycarcorp.com&target_type=root_domain&export_columns=domain,ascore,backlinks_num&display_limit=10");
-  const backlinks = await semrushTable("/backlinks/backlinks?target=mycarcorp.com&target_type=root_domain&display_limit=10");
+  const backlinks = await semrushTable("/backlinks/backlinks?target=mycarcorp.com&target_type=root_domain&export_columns=page_ascore,source_title,source_url,target_url&display_limit=10");
   const keywords = await semrushTable("/domains/domain_organic?domain=mycarcorp.com&database=us&export_columns=Ph,Po,Nq,Ur&display_limit=10");
   return { domains, backlinks, keywords };
 }
@@ -105,9 +112,10 @@ async function lighthouseReport(): Promise<LighthouseReport> {
   return { runUrl: run.html_url, conclusion: run.conclusion, audits, artifactAvailable: true };
 }
 async function websiteReport(): Promise<SiteHealth> {
-  const [sitemap, robots, homepage] = await Promise.all(["/sitemap.xml", "/robots.txt", "/"].map((path) => fetch(`${ORIGIN}${path}`, { signal: AbortSignal.timeout(25000) })));
+  const fetchPage = (path: string) => fetch(`${ORIGIN}${path}`, { signal: AbortSignal.timeout(25000) });
+  const [sitemap, robots, homepage] = await Promise.all([fetchPage("/sitemap.xml"), fetchPage("/robots.txt"), fetchPage("/")]);
   const [xml, txt, html] = await Promise.all([sitemap.text(), robots.text(), homepage.text()]);
-  const locations = [...xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/g)].map((m) => m[1]);
+  const locations = [...xml.matchAll(/<loc>\s*([^<]+)\s*<\/loc>/g)].map((m) => m[1] ?? "");
   const [{ listAutoseoPosts }, { listPublishedPosts }] = await Promise.all([import("./autoseo-blog.server"), import("./legacy-blog.server")]);
   const auto = await listAutoseoPosts(true), manual = await listPublishedPosts();
   return { sitemap: { status: sitemap.status, urls: locations.length, sameOriginUrls: locations.filter((v) => v.startsWith(`${ORIGIN}/`)).length },
