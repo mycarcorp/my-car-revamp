@@ -83,7 +83,7 @@ async function semrushTable(path: string): Promise<SemrushTable> {
   return { columnNames: report.data.columnNames, rows: report.data.rows.slice(0, 100) };
 }
 async function researchReport(): Promise<ResearchReport> {
-  const domains = await semrushTable("/backlinks/backlinks_refdomains?target=mycarcorp.com&target_type=root_domain&export_columns=domain,ascore,backlinks_num&display_limit=10");
+  const domains = await semrushTable("/backlinks/backlinks_refdomains?target=mycarcorp.com&target_type=root_domain&export_columns=domain,domain_ascore,backlinks_num&display_limit=10");
   const backlinks = await semrushTable("/backlinks/backlinks?target=mycarcorp.com&target_type=root_domain&export_columns=page_ascore,source_title,source_url,target_url&display_limit=10");
   const keywords = await semrushTable("/domains/domain_organic?domain=mycarcorp.com&database=us&export_columns=Ph,Po,Nq,Ur&display_limit=10");
   return { domains, backlinks, keywords };
