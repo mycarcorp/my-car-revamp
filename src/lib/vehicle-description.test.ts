@@ -12,7 +12,7 @@ describe("vehicle descriptions", () => {
   });
 
   it("renders escaped HTML descriptions as formatted content and drops empty paragraphs", () => {
-    expect(descriptionToSafeHtml("&lt;p&gt;&lt;strong&gt;V6&lt;/strong&gt;&lt;/p&gt;<p></p>")).toBe("<p><strong>V6</strong></p>");
+    expect(descriptionToSafeHtml("&lt;p&gt;&lt;strong&gt;V6&lt;/strong&gt;&lt;/p&gt;&lt;p&gt;&lt;/p&gt;")).toBe("<p><strong>V6</strong></p>");
   });
 
   it("produces plain text for meta and schema", () => {
