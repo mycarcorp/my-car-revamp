@@ -250,7 +250,37 @@
 }
 
 .vehicle-description ul {
-  list-style: disc;
+  list-style: none;
+  padding-left: 0;
+}
+
+.vehicle-description ul > li {
+  position: relative;
+  padding-left: 1.6rem;
+}
+
+.vehicle-description ul > li::before {
+  content: "";
+  position: absolute;
+  left: 0.1rem;
+  top: 0.45em;
+  width: 1rem;
+  height: 1rem;
+  border-radius: 9999px;
+  background: color-mix(in oklab, var(--primary) 14%, transparent);
+  mask: none;
+}
+
+.vehicle-description ul > li::after {
+  content: "";
+  position: absolute;
+  left: 0.45rem;
+  top: 0.62em;
+  width: 0.3rem;
+  height: 0.55rem;
+  border: solid var(--primary);
+  border-width: 0 2px 2px 0;
+  transform: rotate(45deg);
 }
 
 .vehicle-description ol {
@@ -258,11 +288,35 @@
 }
 
 .vehicle-description li {
-  margin: 0.25rem 0;
+  margin: 0.4rem 0;
 }
 
 .vehicle-description li > p {
   margin: 0;
+}
+
+.vehicle-description strong {
+  color: var(--foreground);
+  font-weight: 700;
+}
+
+.vehicle-description h2,
+.vehicle-description h3 {
+  color: var(--foreground);
+}
+
+.vehicle-description h3 {
+  padding-top: 1rem;
+  border-top: 1px solid var(--border);
+}
+
+.vehicle-description > h3:first-child {
+  padding-top: 0;
+  border-top: 0;
+}
+
+.vehicle-description p:empty {
+  display: none;
 }
 
 .vehicle-description a {
