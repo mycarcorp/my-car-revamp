@@ -11,3 +11,4 @@
 - Returning-visitor personalization lives in src/lib/visitor-personalization.ts (localStorage only, loaded after hydration, never form contents); why: keeps anonymous tracking first-party, SSR-safe and in one place.
 - Customer purchases live in mycarco_db.mc_purchases/mc_purchase_events, accessed only via server fns in src/lib/purchases*.ts with token checks; why: legacy schema is never exposed to the browser.
 - Vehicle descriptions are stored as sanitized HTML in the existing description column and always rendered via src/lib/vehicle-description.ts (plain-text legacy values still supported); why: one safe, SEO-crawlable format with no schema change.
+- Lighthouse CI audits the live site via .github/workflows/lighthouse.yml + lighthouserc.cjs, warn-only; why: worker build isn't servable in CI and audits must never block deploys.
