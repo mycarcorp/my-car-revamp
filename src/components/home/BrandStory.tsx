@@ -65,7 +65,7 @@ export function BrandStory() {
       <div className="brand-story-content mx-auto w-full max-w-6xl px-4">
         <div ref={anchorRef} className="brand-story-anchor mb-10 md:mb-16">
           <div ref={headlineRef} className="brand-story-text mx-auto max-w-5xl text-center">
-            <h2 className="rounded-2xl bg-background/90 px-4 py-4 font-display text-[clamp(2rem,5vw,4.5rem)] font-black leading-[1.05] tracking-[-0.045em] text-primary shadow-sm md:px-8">
+            <h2 className="px-4 py-4 font-display text-[clamp(2rem,5vw,4.5rem)] font-black leading-[1.05] tracking-[-0.045em] text-primary md:px-8">
               We’ll Make Every Drive Feel Like a Dream Come True.
             </h2>
           </div>
