@@ -104,8 +104,10 @@ async function lighthouseReport(): Promise<LighthouseReport> {
   const files = await new Promise<Record<string, Uint8Array>>((resolve, reject) => unzip(bytes, { filter: (file) => { const include = file.name.endsWith(".json") && file.originalSize <= 5000000; if (include) totalSize += file.originalSize; return include && totalSize <= 30000000; } }, (error, result) => error ? reject(error) : resolve(result)));
   const audits: LighthouseReport["audits"] = [];
   for (const bytes of Object.values(files)) {
+    if (!(bytes instanceof Uint8Array)) continue;
     try { const report = JSON.parse(new TextDecoder().decode(bytes)); if (!report.categories || !report.finalUrl) continue;
       const score = (key: string) => { const v = report.categories[key]?.score; return typeof v === "number" ? Math.round(v * 100) : null; };
+      if (report.runtimeError) continue;
       audits.push({ url: String(report.finalUrl), date: String(report.fetchTime ?? ""), performance: score("performance"), accessibility: score("accessibility"), seo: score("seo"), bestPractices: score("best-practices") });
     } catch { /* Non-LHR JSON files in the artifact are not scores. */ }
   }
