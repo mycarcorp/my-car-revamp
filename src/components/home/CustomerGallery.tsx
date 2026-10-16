@@ -106,10 +106,10 @@ function Slide({ item, active }: { item: GalleryItem; active: boolean }) {
           playsInline
           controls={playing}
           onEnded={() => setPlaying(false)}
-          className="h-full w-full object-cover"
+          className="h-full w-full object-contain"
         />
       ) : (
-        <img src={item.url} alt={item.title || "My Car customer"} loading="lazy" className="h-full w-full object-cover" />
+        <img src={item.url} alt={item.title || "My Car customer"} loading="lazy" className="h-full w-full object-contain" />
       )}
       {!playing && (
         <>

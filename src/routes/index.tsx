@@ -34,7 +34,7 @@ import {
   siteSettingsQuery,
   type VehicleWithPhotos,
 } from "@/lib/queries";
-import heroImage from "@/assets/home-hero-dealership.jpg";
+import heroImage from "@/assets/home-hero-dealership-v2.jpg";
 import greeterImage from "@/assets/explore-greeter.png";
 import { CustomerGallery } from "@/components/home/CustomerGallery";
 import { DealershipMap } from "@/components/home/DealershipMap";
@@ -267,16 +267,15 @@ function Home() {
         <img
           src={heroImage}
           alt="Smiling My Car team member handing over car keys in front of the My Car dealership"
-          width={1920}
-          height={1088}
+          width={1376}
+          height={768}
           fetchPriority="high"
-          className="absolute inset-0 -z-10 h-full w-full object-cover object-[70%_center]"
+          className="block h-auto w-full"
         />
-        <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary via-primary/80 to-primary/0 md:via-primary/55" />
-        <div className="absolute inset-x-0 bottom-0 -z-10 h-1/2 bg-gradient-to-t from-primary/90 to-transparent" />
+        <div className="pointer-events-none absolute inset-x-0 top-0 hidden aspect-[1376/768] bg-gradient-to-r from-primary/90 via-primary/40 to-primary/0 md:block" />
 
-        <div className="mx-auto max-w-7xl px-4 pb-10 pt-16 md:pb-14 md:pt-24 lg:pt-28">
-          <div className="max-w-xl">
+        <div className="mx-auto max-w-7xl px-4 pb-10 pt-8 md:pb-14">
+          <div className="max-w-xl md:absolute md:top-0 md:flex md:aspect-[1376/768] md:w-full md:max-w-none md:left-0 md:items-center md:px-[4vw]"><div className="md:max-w-xl">
             <h1 className="text-xs font-bold uppercase tracking-[0.22em] text-primary-foreground/80">
               Used cars, trucks &amp; SUVs in Fredericksburg, VA
             </h1>
@@ -305,9 +304,9 @@ function Home() {
                 Search
               </Button>
             </form>
-          </div>
+          </div></div>
 
-          <div className="mt-12 grid gap-4 md:mt-20 md:grid-cols-2">
+          <div className="mt-2 grid gap-4 md:mt-0 md:grid-cols-2">
             <HeroCard
               icon={<Banknote className="size-6" />}
               title="Financing made simple"
