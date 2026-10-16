@@ -189,6 +189,7 @@ function AdminGallery() {
           ))}
         </div>
       )}
+      </section>
     </div>
   );
 }
