@@ -38,7 +38,7 @@ import heroImage from "@/assets/home-hero-dealership.jpg";
 import greeterImage from "@/assets/explore-greeter.png";
 import { CustomerGallery } from "@/components/home/CustomerGallery";
 import { DealershipMap } from "@/components/home/DealershipMap";
-import { ScrollReveal } from "@/components/home/ScrollReveal";
+
 import { formatUsd } from "@/lib/format";
 import bodySuv from "@/assets/body-suv.png";
 import bodySedan from "@/assets/body-sedan.png";
@@ -53,8 +53,15 @@ import exploreBudget from "@/assets/explore-budget.png";
 import exploreRecent from "@/assets/explore-recent.jpg";
 
 const BODY_ART: Record<string, string> = {
-  SUV: bodySuv, Sedan: bodySedan, Truck: bodyTruck, Coupe: bodyCoupe, Hatchback: bodyHatch,
-  Convertible: bodyConv, Minivan: bodyMinivan, Wagon: bodyWagon, Van: bodyVan,
+  SUV: bodySuv,
+  Sedan: bodySedan,
+  Truck: bodyTruck,
+  Coupe: bodyCoupe,
+  Hatchback: bodyHatch,
+  Convertible: bodyConv,
+  Minivan: bodyMinivan,
+  Wagon: bodyWagon,
+  Van: bodyVan,
 };
 
 export const Route = createFileRoute("/")({
@@ -188,7 +195,9 @@ function Home() {
         count: under.length,
         image: firstCover(under),
         search: { priceMax: 20000 },
-        tone: "light", art: exploreBudget, artClass: "absolute bottom-0 right-0 h-[78%] w-auto object-contain",
+        tone: "light",
+        art: exploreBudget,
+        artClass: "absolute bottom-0 right-0 h-[78%] w-auto object-contain",
       },
       {
         key: "recent",
@@ -198,7 +207,9 @@ function Home() {
         count: recent.length,
         image: firstCover(recent),
         search: { sort: "newest" },
-        tone: "navy", art: exploreRecent, artClass: "absolute inset-x-0 bottom-0 h-[70%] w-full object-cover opacity-90",
+        tone: "navy",
+        art: exploreRecent,
+        artClass: "absolute inset-x-0 bottom-0 h-[70%] w-full object-cover opacity-90",
       },
       {
         key: "deals",
@@ -208,7 +219,9 @@ function Home() {
         count: drops.length,
         image: firstCover(drops),
         search: drops.length ? { deal: "price-drop" } : {},
-        tone: "muted", art: greeterImage, artClass: "absolute bottom-0 left-1/2 h-[66%] w-auto -translate-x-1/2 object-contain",
+        tone: "muted",
+        art: greeterImage,
+        artClass: "absolute bottom-0 left-1/2 h-[66%] w-auto -translate-x-1/2 object-contain",
       },
       {
         key: "family",
@@ -218,7 +231,9 @@ function Home() {
         count: family.length,
         image: firstCover(family),
         search: { body: "SUV|Minivan" },
-        tone: "dark", art: bodyMinivan, artClass: "",
+        tone: "dark",
+        art: bodyMinivan,
+        artClass: "",
       },
     ].filter((c) => c.count > 0 || c.key === "deals");
   }, [live]);
@@ -375,7 +390,12 @@ function Home() {
           <HomeRail title="Explore cars you'll love" itemClassName="basis-[85%] sm:basis-1/2 lg:basis-1/3 xl:basis-1/4">
             {discovery.map((c) => {
               const dark = c.tone === "navy" || c.tone === "dark";
-              const bg = { light: "bg-[oklch(0.86_0.08_235)]", navy: "bg-primary", muted: "bg-secondary", dark: "bg-foreground" }[c.tone];
+              const bg = {
+                light: "bg-[oklch(0.86_0.08_235)]",
+                navy: "bg-primary",
+                muted: "bg-secondary",
+                dark: "bg-foreground",
+              }[c.tone];
               return (
                 <Link
                   key={c.key}
@@ -383,22 +403,42 @@ function Home() {
                   search={c.search}
                   className={`group relative flex h-[22rem] flex-col overflow-hidden rounded-2xl ${bg} p-6 transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]`}
                 >
-                  <h3 className={`relative z-10 font-display text-2xl font-black tracking-tight ${dark ? "text-background" : "text-foreground"}`}>{c.title}</h3>
-                  <p className={`relative z-10 mt-2 max-w-[17rem] text-sm leading-6 ${dark ? "text-background/85" : "text-muted-foreground"}`}>{c.body}</p>
+                  <h3
+                    className={`relative z-10 font-display text-2xl font-black tracking-tight ${dark ? "text-background" : "text-foreground"}`}
+                  >
+                    {c.title}
+                  </h3>
+                  <p
+                    className={`relative z-10 mt-2 max-w-[17rem] text-sm leading-6 ${dark ? "text-background/85" : "text-muted-foreground"}`}
+                  >
+                    {c.body}
+                  </p>
                   {c.tone === "dark" ? (
                     <div className="relative z-10 mt-auto mb-20 flex items-center gap-2 rounded-lg bg-card p-3 shadow">
                       <div className="min-w-0 flex-1 text-xs text-card-foreground">
                         <p className="font-bold">SUVs &amp; minivans</p>
                         <p className="text-muted-foreground">{c.count} in stock</p>
                       </div>
-                      <img src={c.art} alt="" loading="lazy" className="h-14 w-auto object-contain transition duration-500 group-hover:translate-x-1" />
+                      <img
+                        src={c.art}
+                        alt=""
+                        loading="lazy"
+                        className="h-14 w-auto object-contain transition duration-500 group-hover:translate-x-1"
+                      />
                     </div>
                   ) : (
-                    <img src={c.art} alt="" loading="lazy" className={`${c.artClass} transition duration-500 group-hover:scale-105`} />
+                    <img
+                      src={c.art}
+                      alt=""
+                      loading="lazy"
+                      className={`${c.artClass} transition duration-500 group-hover:scale-105`}
+                    />
                   )}
                   <span
                     className={`absolute inset-x-6 bottom-6 z-10 flex h-12 items-center justify-center rounded-full text-sm font-bold shadow transition ${
-                      c.tone === "light" || c.tone === "muted" ? "bg-primary text-primary-foreground" : "bg-card text-primary"
+                      c.tone === "light" || c.tone === "muted"
+                        ? "bg-primary text-primary-foreground"
+                        : "bg-card text-primary"
                     }`}
                   >
                     {c.cta}
@@ -418,23 +458,42 @@ function Home() {
               <h2 className="font-display text-2xl font-bold leading-snug md:text-3xl">
                 We&apos;re always repricing inventory to make room for more vehicles.
               </h2>
-              <Link to="/search" search={{ deal: "price-drop" }} className="mt-4 inline-block font-semibold underline underline-offset-4 hover:text-accent">
+              <Link
+                to="/search"
+                search={{ deal: "price-drop" }}
+                className="mt-4 inline-block font-semibold underline underline-offset-4 hover:text-accent"
+              >
                 Shop All {dropCount} Price {dropCount === 1 ? "Drop" : "Drops"}
               </Link>
             </div>
             {dropVehicle && (
-              <Link to="/inventory/$slug" params={{ slug: dropVehicle.slug }} className="relative mx-auto h-48 w-full max-w-md">
+              <Link
+                to="/inventory/$slug"
+                params={{ slug: dropVehicle.slug }}
+                className="relative mx-auto h-48 w-full max-w-md"
+              >
                 <div className="absolute left-[18%] top-0 w-52 rounded-xl bg-card p-3 shadow-xl">
-                  <img src={coverOf(dropVehicle)} alt={`${dropVehicle.year} ${dropVehicle.make} ${dropVehicle.model}`} loading="lazy" className="aspect-[4/3] w-full rounded-lg object-cover" />
+                  <img
+                    src={coverOf(dropVehicle)}
+                    alt={`${dropVehicle.year} ${dropVehicle.make} ${dropVehicle.model}`}
+                    loading="lazy"
+                    className="aspect-[4/3] w-full rounded-lg object-cover"
+                  />
                   <div className="mt-3 h-2.5 w-3/4 rounded bg-muted" />
                   <div className="mt-2 h-2.5 w-1/2 rounded bg-muted" />
                 </div>
-                <span className="absolute left-0 top-3 -rotate-3 rounded-full bg-success px-4 py-2 text-sm font-bold text-success-foreground shadow-lg">Price Drop</span>
+                <span className="absolute left-0 top-3 -rotate-3 rounded-full bg-success px-4 py-2 text-sm font-bold text-success-foreground shadow-lg">
+                  Price Drop
+                </span>
                 <div className="absolute right-0 top-14 flex rotate-3 items-center gap-3 rounded-xl bg-card px-4 py-3 text-card-foreground shadow-xl">
-                  <span className="flex size-9 items-center justify-center rounded-full bg-success text-success-foreground"><TrendingDown className="size-5" /></span>
+                  <span className="flex size-9 items-center justify-center rounded-full bg-success text-success-foreground">
+                    <TrendingDown className="size-5" />
+                  </span>
                   <div>
                     <div className="font-display text-2xl font-black">{formatUsd(dropVehicle.price_cents)}</div>
-                    <div className="text-xs text-muted-foreground">was <s>{formatUsd(dropVehicle.prior_price_cents)}</s></div>
+                    <div className="text-xs text-muted-foreground">
+                      was <s>{formatUsd(dropVehicle.prior_price_cents)}</s>
+                    </div>
                   </div>
                 </div>
               </Link>

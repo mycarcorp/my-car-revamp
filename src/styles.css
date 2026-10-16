@@ -103,7 +103,6 @@
   --chart-3: oklch(0.58 0.13 155);
   --chart-4: oklch(0.6 0.118 185);
   --chart-5: oklch(0.55 0.2 25);
-
   --sidebar: oklch(0.28 0.06 254);
   --sidebar-foreground: oklch(0.97 0.006 250);
   --sidebar-primary: oklch(0.76 0.16 66);
@@ -306,27 +305,16 @@
 }
 
 /* =====================================================
-   MYCAR BRAND STORY — PIN / MOVE / RELEASE
-
-   No fades, no scaling, no transitions.
-   The image and headline are visible immediately.
-   Requires BrandStory.tsx to update --p from 0 to 1.
+   MYCAR BRAND STORY — HEADLINE FOLLOW / RELEASE
+   The page and image scroll normally; only the heading follows.
+   BrandStory.tsx sets the heading's translate3d in pixels.
+   No fades, zooms, or whole-section pinning.
 ===================================================== */
 
 .brand-story {
   position: relative;
+  overflow: visible;
   isolation: isolate;
-}
-
-/* Pinned only while the outer section is scrolling. */
-.brand-story-stage {
-  position: sticky;
-  top: 0;
-  height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  overflow: hidden;
 }
 
 .brand-story-content {
@@ -334,6 +322,27 @@
   width: 100%;
   max-width: 72rem;
   margin-inline: auto;
+}
+
+.brand-story-anchor {
+  position: relative;
+  z-index: 20;
+}
+
+.brand-story-text {
+  position: relative;
+  opacity: 1;
+  transform: none;
+  will-change: transform;
+}
+
+.brand-story-text h2 {
+  font-family: var(--font-display);
+  font-size: clamp(2rem, 5vw, 4.5rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+  color: var(--primary);
 }
 
 .brand-story-image {
@@ -357,122 +366,27 @@
   transform: none;
 }
 
-/*
- * Start WITHIN the image, 16vh above its center, so desktop
- * visitors can already see the headline at the section entrance.
- * When --p reaches 1, it reaches the image center, exactly as
- * the sticky section finishes. No fade or zoom.
- */
-.brand-story-text {
-  position: absolute;
-  top: 50%;
-  left: 0;
-  right: 0;
-  z-index: 10;
-  width: 100%;
-  padding-inline: 1.25rem;
-  text-align: center;
-  opacity: 1;
-  transform: translate3d(0, calc(-50% - 16vh + var(--p, 0) * 16vh), 0);
-  will-change: transform;
-}
-
-.brand-story-text h2 {
-  max-width: 64rem;
-  margin-inline: auto;
-  font-family: var(--font-display);
-  font-size: clamp(1.8rem, 5vw, 4.5rem);
-  font-weight: 900;
-  line-height: 1.05;
-  letter-spacing: -0.045em;
-  color: var(--primary-foreground);
-  text-shadow: 0 3px 24px oklch(0.15 0.03 258 / 0.65);
-}
-
 @media (max-width: 1024px) {
-  .brand-story-content {
-    max-width: 95%;
-  }
-
   .brand-story-image {
     height: 60vh;
-  }
-
-  .brand-story-text h2 {
-    font-size: clamp(2rem, 5vw, 3.8rem);
   }
 }
 
 @media (max-width: 767px) {
-  .brand-story-stage {
-    padding-inline: 1rem;
-  }
-
-  .brand-story-content {
-    width: 100%;
-    max-width: 100%;
-  }
-
   .brand-story-image {
-    width: 100%;
     height: 55vh;
     min-height: 320px;
     border-radius: 1.25rem;
   }
-
-  .brand-story-text {
-    padding-inline: 1rem;
-    transform: translate3d(0, calc(-50% - 12vh + var(--p, 0) * 12vh), 0);
-  }
-
   .brand-story-text h2 {
     font-size: clamp(1.7rem, 7vw, 2.8rem);
     line-height: 1.08;
-    letter-spacing: -0.035em;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .brand-story {
-    height: auto !important;
-  }
-
-  .brand-story-stage {
-    position: relative;
-    top: auto;
-    height: auto;
-    min-height: 0;
-    padding-block: 4rem;
-    overflow: visible;
-  }
-
-  .brand-story-content {
-    display: flex;
-    flex-direction: column;
-    align-items: center;
-  }
-
   .brand-story-text {
-    position: relative;
-    top: auto;
-    left: auto;
-    right: auto;
-    order: -1;
-    margin-bottom: 2rem;
-    opacity: 1;
     transform: none !important;
-    will-change: auto;
-  }
-
-  .brand-story-text h2 {
-    color: var(--primary);
-    text-shadow: none;
-  }
-
-  .brand-story-image,
-  .brand-story-image img {
-    opacity: 1;
-    transform: none;
     will-change: auto;
   }
 }
