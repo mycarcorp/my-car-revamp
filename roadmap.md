@@ -1,5 +1,15 @@
 # MyCar build roadmap
 
+## Lighthouse improvements — Oct 16
+- [x] Optimize VDP primary image, secondary gallery work, and repeated rendering.
+- [x] Optimize search initial loading and hidden carousel photos.
+- [x] Optimize blog image loading and locations layout stability.
+- [x] Address source-confirmed accessibility/SEO issues and review third-party scripts.
+- [x] Run relevant tests and browser checks; document changes, measurements, and external limitations.
+- [ ] Production Lighthouse score verification — waits for approval to publish these changes.
+- [ ] Responsive transformed photo variants — requires an approved managed image transformation service; original vehicle photos retained.
+- [ ] GHL avatar aspect ratio and third-party cookie configuration — requires changes in the provider's widget settings.
+
 ## Done
 - Database schema (vehicles, photos, leads, appointments, blog, collections, service areas, site settings, roles, saved items) + RLS
 - Design system, header/footer, home, search, VDP, finance, sell, schedule, contact, about, blog, locations, auth, account

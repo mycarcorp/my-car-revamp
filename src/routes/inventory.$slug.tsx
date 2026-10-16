@@ -2,7 +2,7 @@ import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { descriptionToPlainText, descriptionToSafeHtml, extractDescriptionFaqs } from "@/lib/vehicle-description";
 import { trackEvent } from "@/lib/visitor-personalization";
 import { useQuery } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
   ArrowLeft,
   ArrowRight,
@@ -24,18 +24,18 @@ import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
-import { VehicleCard } from "@/components/VehicleCard";
+import { DeferredContent } from "@/components/DeferredContent";
 import { GetStartedButton } from "@/components/GetStartedButton";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
 import {
   allVehiclesQuery,
-  similarVehiclesQuery,
   siteSettingsQuery,
   vehicleBySlugQuery,
   type VehicleWithPhotos,
 } from "@/lib/queries";
 
 const SITE_URL = "https://mycarcorp.com";
+const RelatedVehicleCard = lazy(() => import("@/components/VehicleCard").then((module) => ({ default: module.VehicleCard })));
 
 /**
  * Build the canonical public URL for a vehicle detail page.
@@ -242,6 +242,7 @@ export const Route = createFileRoute("/inventory/$slug")({
     return {
       meta,
       links: [
+        ...(image ? [{ rel: "preload", as: "image", href: v.vehicle_photos.find((photo) => !isVideoUrl(photo.url))?.url ?? image, fetchPriority: "high" as const }] : []),
         {
           rel: "canonical",
           href: canonicalUrl,
@@ -251,6 +252,8 @@ export const Route = createFileRoute("/inventory/$slug")({
   },
 
   component: VehicleDetail,
+  errorComponent: () => <div role="alert" className="mx-auto max-w-5xl px-4 py-16">Unable to load this vehicle. <Link to="/search">Browse inventory</Link></div>,
+  notFoundComponent: () => <div className="mx-auto max-w-5xl px-4 py-16">Vehicle unavailable. <Link to="/search">Browse inventory</Link></div>,
 });
 
 function VehicleDetail() {
@@ -262,21 +265,21 @@ function VehicleDetail() {
 
   const { data: allVehicles } = useQuery(allVehiclesQuery());
 
-  const { data: similar } = useQuery(similarVehiclesQuery(v.body_style, v.id));
+  const similar = useMemo(() => allVehicles?.filter((item) => item.id !== v.id && item.body_style === v.body_style).slice(0, 4), [allVehicles, v.id, v.body_style]);
 
-  const photos = [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position);
+  const photos = useMemo(() => [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position).map((photo) => ({ ...photo, id: photo.id || photo.url })), [v.vehicle_photos]);
 
   /*
    * These are absolute, crawlable image URLs used by
    * Product/Vehicle structured data.
    */
-  const schemaImages = getVehicleImages(v);
+  const schemaImages = useMemo(() => getVehicleImages(v), [v.vehicle_photos]);
 
   const canonicalUrl = getVehicleUrl(slug);
 
-  const schemaDescription = getVehicleDescription(v);
-  const descriptionHtml = descriptionToSafeHtml(v.description);
-  const descriptionFaqs = extractDescriptionFaqs(descriptionHtml);
+  const schemaDescription = useMemo(() => getVehicleDescription(v), [v]);
+  const descriptionHtml = useMemo(() => descriptionToSafeHtml(v.description), [v.description]);
+  const descriptionFaqs = useMemo(() => extractDescriptionFaqs(descriptionHtml), [descriptionHtml]);
 
   const priceCurrency = getPriceCurrency(v);
 
@@ -583,7 +586,7 @@ function VehicleDetail() {
               asChild
               variant="outline"
               size="sm"
-              className="h-9 rounded-full text-xs"
+              className="h-11 rounded-full text-xs"
               disabled={!previousVehicleSlug}
             >
               {previousVehicleSlug ? (
@@ -600,7 +603,7 @@ function VehicleDetail() {
               asChild
               variant="outline"
               size="sm"
-              className="h-9 rounded-full text-xs"
+              className="h-11 rounded-full text-xs"
               disabled={!nextVehicleSlug}
             >
               {nextVehicleSlug ? (
@@ -651,6 +654,9 @@ function VehicleDetail() {
                     key={currentMedia.url}
                     src={currentMedia.url}
                     alt={currentMedia.alt ?? `${vehicleTitle(v)} photo ${active + 1}`}
+                    loading="eager"
+                    fetchPriority={active === 0 ? "high" : "auto"}
+                    decoding="async"
                     onError={() => markFailed(currentMedia.id)}
                     className="h-full w-full object-contain transition-transform duration-500 group-hover:scale-[1.015]"
                   />
@@ -673,7 +679,7 @@ function VehicleDetail() {
                   type="button"
                   aria-label="Previous vehicle photo"
                   onClick={() => movePhoto(-1)}
-                  className="absolute left-3 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:scale-105"
+                  className="absolute left-3 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:scale-105"
                 >
                   <ChevronLeft className="size-5" />
                 </button>
@@ -681,7 +687,7 @@ function VehicleDetail() {
                   type="button"
                   aria-label="Next vehicle photo"
                   onClick={() => movePhoto(1)}
-                  className="absolute right-3 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:scale-105"
+                  className="absolute right-3 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 shadow-md transition hover:scale-105"
                 >
                   <ChevronRight className="size-5" />
                 </button>
@@ -721,6 +727,7 @@ function VehicleDetail() {
                       src={photo.url}
                       alt={photo.alt ?? `Photo ${index + 1}`}
                       loading="lazy"
+                      decoding="async"
                       className="size-full object-cover"
                     />
                   )}
@@ -762,7 +769,7 @@ function VehicleDetail() {
                     src={activeVideo.url}
                     controls
                     playsInline
-                    preload="metadata"
+                    preload="none"
                     onError={() => markFailed(activeVideo.id)}
                     className="aspect-video w-full bg-black object-contain"
                   />
@@ -827,9 +834,9 @@ function VehicleDetail() {
                   </div>
                   <div className="relative mx-auto mt-5 flex max-w-[700px] items-center justify-center overflow-hidden px-4 pb-8 pt-3">
                     <div className="absolute bottom-7 left-[18%] right-[18%] h-8 rounded-full bg-slate-500/20 blur-2xl" />
-                    {getVehicleImages(v)[0] ? (
+                    {photos.find((photo) => !isVideoUrl(photo.url))?.url ? (
                       <img
-                        src={getVehicleImages(v)[0]}
+                        src={photos.find((photo) => !isVideoUrl(photo.url))?.url}
                         alt={`Actual ${vehicleTitle(v)} inventory photograph`}
                         loading="lazy"
                         className="relative h-[235px] w-full rounded-xl object-contain drop-shadow-[0_16px_18px_rgba(20,45,70,0.22)] sm:h-[310px]"
@@ -840,7 +847,7 @@ function VehicleDetail() {
                       </div>
                     )}
                   </div>
-                  <p className="px-5 pb-5 text-center text-[11px] text-slate-500">
+                  <p className="px-5 pb-5 text-center text-[11px] text-muted-foreground">
                     Actual vehicle listing photo, not a generic or AI-generated substitute.
                   </p>
                 </div>
@@ -901,10 +908,10 @@ function VehicleDetail() {
                       </p>
                     </div>
                   </div>
-                  {getVehicleImages(v)[0] && (
+                  {photos.find((photo) => !isVideoUrl(photo.url))?.url && (
                     <div className="relative mx-auto mt-6 max-w-[650px] rounded-xl bg-white/60 p-4">
                       <img
-                        src={getVehicleImages(v)[0]}
+                        src={photos.find((photo) => !isVideoUrl(photo.url))?.url}
                         alt={`${vehicleTitle(v)} from My Car inventory`}
                         loading="lazy"
                         className="mx-auto h-64 w-full object-contain drop-shadow-xl sm:h-80"
@@ -965,11 +972,11 @@ function VehicleDetail() {
                 <div className="mt-6 rounded-2xl bg-[#e9f5fd] p-5 sm:p-7">
                   <div className="flex flex-wrap items-end justify-between gap-3">
                     <div>
-                      <p className="text-xs text-slate-500">Vehicle price</p>
+                      <p className="text-xs text-muted-foreground">Vehicle price</p>
                       <p className="text-3xl font-extrabold">{formatUsd(Number(v.price_cents))}</p>
                     </div>
                     <div>
-                      <p className="text-xs text-slate-500">Estimated monthly payment</p>
+                      <p className="text-xs text-muted-foreground">Estimated monthly payment</p>
                       <p className="text-3xl font-extrabold text-[#0969c5]">
                         ${Math.round(calculatedPayment).toLocaleString("en-US")}
                         <span className="text-base font-medium">/mo</span>
@@ -1018,7 +1025,7 @@ function VehicleDetail() {
                     </label>
                   </div>
 
-                     <p className="mt-4 text-xs leading-5 text-slate-500">{pricingDisclosure}</p>
+                     <p className="mt-4 text-xs leading-5 text-muted-foreground">{pricingDisclosure}</p>
                   <Button asChild className="mt-5 rounded-full bg-[#0969c5] hover:bg-[#0758a6]">
                     <Link to="/finance">
                       Explore financing <ArrowRight className="ml-2 size-4" />
@@ -1075,11 +1082,13 @@ function VehicleDetail() {
                   </Link>
                 </div>
                 {similar?.length ? (
-                  <div className="mt-5 grid gap-4 sm:grid-cols-2">
-                    {similar.slice(0, 4).map((item) => (
-                      <VehicleCard key={item.id} vehicle={item} settings={settings} />
-                    ))}
-                  </div>
+                  <DeferredContent fallback={<div className="mt-5 grid gap-4 sm:grid-cols-2" aria-hidden="true">{similar.map((item) => <div key={item.id} className="h-[420px] rounded-lg bg-muted" />)}</div>}>
+                    <Suspense fallback={<div className="mt-5 min-h-[840px] bg-muted" aria-hidden="true" />}>
+                      <div className="mt-5 grid gap-4 sm:grid-cols-2">
+                        {similar.map((item) => <RelatedVehicleCard key={item.id} vehicle={item} settings={settings} />)}
+                      </div>
+                    </Suspense>
+                  </DeferredContent>
                 ) : (
                   <p className="mt-5 text-sm text-slate-500">Browse available vehicles in our inventory.</p>
                 )}
@@ -1166,7 +1175,7 @@ function VehicleDetail() {
                     type="button"
                     aria-label="Previous gallery photo"
                     onClick={() => movePhoto(-1)}
-                    className="absolute left-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-900"
+                    className="absolute left-2 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-900"
                   >
                     <ChevronLeft />
                   </button>
@@ -1174,7 +1183,7 @@ function VehicleDetail() {
                     type="button"
                     aria-label="Next gallery photo"
                     onClick={() => movePhoto(1)}
-                    className="absolute right-2 top-1/2 flex size-10 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-900"
+                    className="absolute right-2 top-1/2 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/90 text-slate-900"
                   >
 
                        <ChevronRight />
@@ -1185,16 +1194,18 @@ function VehicleDetail() {
             <div className="flex max-h-24 flex-none gap-2 overflow-x-auto border-t border-white/10 p-3">
               {(displayedIndexes.length ? displayedIndexes : photoIndexes).map((index) => (
                 <button
-                  key={photos[index]!.id}
+                  key={photos[index]?.id}
+                  aria-label={`View gallery photo ${index + 1}`}
+                  aria-pressed={index === active}
                   onClick={() => setActive(index)}
                   className={`h-16 w-24 shrink-0 overflow-hidden rounded border-2 ${index === active ? "border-[#55abff]" : "border-white/10"}`}
                 >
-                  {isVideoUrl(photos[index]!.url) ? (
+                  {isVideoUrl(photos[index]?.url) ? (
                     <span className="flex size-full items-center justify-center bg-slate-700">
                       <Play />
                     </span>
                   ) : (
-                    <img src={photos[index]!.url} alt={`Photo ${index + 1}`} className="size-full object-cover" />
+                    <img src={photos[index]?.url} alt={`Photo ${index + 1}`} loading="lazy" decoding="async" className="size-full object-cover" />
                   )}
                 </button>
               ))}

@@ -1,9 +1,10 @@
 import { createFileRoute, Link, notFound, redirect } from "@tanstack/react-router";
 import { formatDate } from "@/lib/format";
 import { publicBlogPost } from "@/lib/legacy-blog.functions";
-import { publicAutoseoList, publicAutoseoPost, type AutoseoPost } from "@/lib/autoseo-blog.functions";
+import { publicAutoseoSummaryList, publicAutoseoPost, type AutoseoPost } from "@/lib/autoseo-blog.functions";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { escapeHtml, normalizeCta, normalizeHeadingStyles, sanitizeHtml, type HeadingStyle } from "@/lib/blog-content";
+import { normalizeArticleLists } from "@/lib/article-lists";
 
 const ORIGIN = "https://mycarcorp.com";
 
@@ -309,7 +310,7 @@ export const Route = createFileRoute("/blog/$slug")({
 
     if (!article) throw notFound();
 
-    const all = await publicAutoseoList();
+    const all = await publicAutoseoSummaryList();
 
     /**
      * Find the established URL that owns this article's primary intent.
@@ -615,7 +616,7 @@ const PROSE_CSS = [
 function AutoseoArticle({ article, related }: { article: AutoseoPost; related: AutoseoPost[] }) {
   const faqs = faqList(article);
 
-  const html = (article.content_html ?? "")
+  const html = normalizeArticleLists(article.content_html ?? "")
     .replace(/<table\b/gi, '<div class="table-scroll"><table')
     .replace(/<\/table>/gi, "</table></div>")
     .replace(/<img\b(?![^>]*onerror)/gi, "<img onerror=\"this.style.display='none'\" ");
@@ -748,7 +749,7 @@ function LegacyPost() {
   const cta = normalizeCta(post.primary_cta);
 
   const bodyHtml = /<(h1|h2|h3|h4|p|ul|ol|blockquote|table)[\s>]/i.test(post.body ?? "")
-    ? sanitizeHtml(post.body ?? "")
+    ? normalizeArticleLists(sanitizeHtml(post.body ?? ""))
     : String(post.body ?? "")
         .split(/\n\s*\n/)
         .filter((p) => p.trim())

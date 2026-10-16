@@ -199,13 +199,22 @@ function RootComponent() {
     }
 
     if (document.querySelector(selector)) return;
-
-    const script = document.createElement("script");
-    script.src = "https://widgets.leadconnectorhq.com/loader.js";
-    script.async = true;
-    script.dataset["resourcesUrl"] = "https://widgets.leadconnectorhq.com/chat-widget/loader.js";
-    script.dataset["widgetId"] = widgetId;
-    document.body.appendChild(script);
+    // Chat is not a conversion tracker: keep its initialization out of the
+    // first render while leaving Meta/attribution event timing unchanged.
+    let cancelled = false;
+    const timer = window.setTimeout(() => {
+      if (cancelled || document.querySelector(selector)) return;
+      const script = document.createElement("script");
+      script.src = "https://widgets.leadconnectorhq.com/loader.js";
+      script.async = true;
+      script.dataset["resourcesUrl"] = "https://widgets.leadconnectorhq.com/chat-widget/loader.js";
+      script.dataset["widgetId"] = widgetId;
+      document.body.appendChild(script);
+    }, 1500);
+    return () => {
+      cancelled = true;
+      window.clearTimeout(timer);
+    };
   }, [isAdmin]);
 
   return (

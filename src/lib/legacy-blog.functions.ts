@@ -428,6 +428,16 @@ export const publicBlogList = createServerFn({
   }
 });
 
+/** Homepage blog cards need metadata, not full article bodies/editor settings. */
+export const publicBlogSummaryList = createServerFn({ method: "GET" }).handler(async (): Promise<LegacyBlogPost[]> => {
+  const m = await import("./legacy-blog.server");
+  try {
+    return (await m.listPublishedPosts()).map((post) => ({ ...post, body: null, heading_styles: null, primary_cta: null }));
+  } catch {
+    return [];
+  }
+});
+
 export const publicBlogPost = createServerFn({
   method: "GET",
 })

@@ -6,7 +6,10 @@ import { featuredVehiclesQuery, serviceAreaQuery, siteSettingsQuery } from "@/li
 
 export const Route = createFileRoute("/locations/$slug")({
   loader: async ({ context, params }) => {
-    const area = await context.queryClient.ensureQueryData(serviceAreaQuery(params.slug));
+    const [area] = await Promise.all([
+      context.queryClient.ensureQueryData(serviceAreaQuery(params.slug)),
+      context.queryClient.ensureQueryData(featuredVehiclesQuery()),
+    ]);
     if (!area) throw notFound();
     return { area };
   },
@@ -24,10 +27,14 @@ export const Route = createFileRoute("/locations/$slug")({
         { name: "description", content: description },
         { property: "og:title", content: title },
         { property: "og:description", content: description },
+        { property: "og:type", content: "website" },
+        { name: "twitter:card", content: "summary_large_image" },
       ],
     };
   },
   component: LocationPage,
+  errorComponent: () => <div role="alert" className="mx-auto max-w-5xl px-4 py-12">Unable to load this service area. Please refresh.</div>,
+  notFoundComponent: () => <div className="mx-auto max-w-5xl px-4 py-12">Service area unavailable. <Link to="/locations">See areas we serve</Link></div>,
 });
 
 function LocationPage() {
