@@ -11,7 +11,7 @@ export function DealershipMap({ phone }: { phone?: string | null }) {
     <section className="mx-auto max-w-7xl px-4 pb-20 pt-8">
       <div className="grid overflow-hidden rounded-3xl border border-border bg-card shadow-[var(--shadow-card)] md:grid-cols-[minmax(0,2fr)_minmax(0,3fr)]">
         <div className="flex flex-col justify-center gap-5 p-7 md:p-10">
-          <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent">Visit the lot</p>
+          <p className="text-xs font-bold uppercase tracking-[0.22em] text-accent-text">Visit the lot</p>
           <h2 className="font-display text-3xl font-black tracking-tight md:text-4xl">Come see us in Fredericksburg</h2>
           <p className="flex items-start gap-2 text-muted-foreground">
             <MapPin className="mt-0.5 size-5 shrink-0 text-accent" /> {ADDRESS}

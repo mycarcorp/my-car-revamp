@@ -1,5 +1,12 @@
 # MyCar build roadmap
 
+## Lighthouse improvements — Oct 16
+- [ ] Optimize VDP primary image, secondary gallery work, and repeated rendering.
+- [ ] Optimize search initial loading and hidden carousel photos.
+- [ ] Optimize blog image loading and locations layout stability.
+- [ ] Address source-confirmed accessibility/SEO issues and review third-party scripts.
+- [ ] Run relevant tests and browser checks; document changes, measurements, and external limitations.
+
 ## Done
 - Database schema (vehicles, photos, leads, appointments, blog, collections, service areas, site settings, roles, saved items) + RLS
 - Design system, header/footer, home, search, VDP, finance, sell, schedule, contact, about, blog, locations, auth, account

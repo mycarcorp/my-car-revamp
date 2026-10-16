@@ -1,12 +1,11 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
-import { useEffect, useState } from "react";
+import { lazy, Suspense, useEffect, useState } from "react";
 import { Car, ClipboardList, Heart, LayoutDashboard, LogOut, Menu, Settings, User2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
 import { useAuth } from "@/hooks/useAuth";
 import { BrandLogo } from "@/components/BrandLogo";
-import { SignInSheet } from "@/components/SignInSheet";
 import { supabase } from "@/integrations/supabase/app-client";
 import { readPendingPurchase } from "@/components/GetStartedButton";
 import { useQueryClient } from "@tanstack/react-query";
@@ -25,6 +24,7 @@ const NAV = [
   { to: "/sell", label: "Sell or trade" },
   { to: "/blog", label: "Blog" },
 ] as const;
+const SignInSheet = lazy(() => import("@/components/SignInSheet").then((module) => ({ default: module.SignInSheet })));
 
 export function SiteHeader() {
   const { user, isStaff } = useAuth();
@@ -255,12 +255,12 @@ export function SiteHeader() {
 
                   ${
                     active
-                      ? "text-[#F7941D]"
+                      ? "text-accent-text"
                       : `
                         text-foreground/80
                         hover:-translate-y-[2px]
                         hover:scale-[1.035]
-                        hover:text-[#F7941D]
+                        hover:text-accent-text
                       `
                   }
                 `}
@@ -619,7 +619,7 @@ export function SiteHeader() {
             sm:max-w-md
           "
         >
-          <SignInSheet />
+          {signInOpen && <Suspense fallback={<div className="min-h-64" role="status">Loading sign in…</div>}><SignInSheet /></Suspense>}
         </SheetContent>
       </Sheet>
     </header>

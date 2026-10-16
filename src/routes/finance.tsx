@@ -70,6 +70,7 @@ export const Route = createFileRoute("/finance")({
         property: "og:type",
         content: "website",
       },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [
       {
@@ -1063,11 +1064,13 @@ function FinancePage() {
             </div>
             <div
               className="mt-5 flex items-center justify-center gap-2"
+              role="group"
               aria-label="Featured vehicle carousel pagination"
             >
               {featuredVehicles.map((v, index) => (
                 <span
                   key={v.id}
+                  role="img"
                   aria-label={`Featured vehicle ${index + 1}${index === featureIndex ? ", active" : ""}`}
                   className={`h-1.5 rounded-full transition-all duration-500 ${index === featureIndex ? "w-6 bg-blue-600" : "w-1.5 bg-slate-300"}`}
                 />
@@ -1220,7 +1223,7 @@ function FinancePage() {
               </div>
             </div>
             <div className="animate-in fade-in slide-in-from-right-4 absolute bottom-8 right-0 z-10 rounded-xl bg-white px-4 py-3 shadow-[0_12px_30px_rgba(0,0,0,.18)] delay-200 duration-700">
-              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-[#00a862]">
+              <span className="flex items-center gap-1.5 text-[11px] font-semibold text-positive-text">
                 <ShieldCheck className="h-3.5 w-3.5" /> Pre-qualified
               </span>
               <span className="mt-0.5 block text-sm font-extrabold text-[#0a2946]">No impact to credit</span>

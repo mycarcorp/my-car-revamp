@@ -349,7 +349,11 @@ export const Route = createFileRoute("/blog/")({
     </div>
   ),
 
-  head: () => ({
+  notFoundComponent: () => <div className="mx-auto max-w-3xl px-4 py-16">Articles unavailable.</div>,
+  head: ({ loaderData }) => {
+    const featured = loaderData?.cards.find((card) => card.featured) ?? loaderData?.cards[0];
+    const heroImage = featured?.image;
+    return {
     meta: [
       {
         title: "Used Car Buying Tips in Fredericksburg, VA | My Car",
@@ -380,15 +384,21 @@ export const Route = createFileRoute("/blog/")({
         name: "twitter:card",
         content: "summary_large_image",
       },
+      ...(heroImage?.startsWith("https://") ? [
+        { property: "og:image", content: heroImage },
+        { name: "twitter:image", content: heroImage },
+      ] : []),
     ],
 
     links: [
+      ...(heroImage ? [{ rel: "preload", as: "image", href: heroImage, fetchPriority: "high" as const }] : []),
       {
         rel: "canonical",
         href: "https://mycarcorp.com/blog",
       },
     ],
-  }),
+  };
+  },
 
   component: BlogIndex,
 });
@@ -578,8 +588,9 @@ function BlogIndex() {
                   <img
                     src={featured.image}
                     alt={featured.title}
+                    decoding="async"
                     onError={(e) => {
-                      e.currentTarget.style.display = "none";
+                      e.currentTarget.style.visibility = "hidden";
                     }}
                     className="aspect-[16/9] h-full w-full object-cover transition duration-500 group-hover:scale-[1.02]"
                   />
@@ -631,8 +642,9 @@ function BlogIndex() {
                       src={p.image}
                       alt={p.title}
                       loading="lazy"
+                      decoding="async"
                       onError={(e) => {
-                        e.currentTarget.style.display = "none";
+                        e.currentTarget.style.visibility = "hidden";
                       }}
                       className="aspect-[16/9] w-full rounded-t-xl object-cover"
                     />

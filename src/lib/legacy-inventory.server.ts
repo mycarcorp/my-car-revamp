@@ -422,9 +422,10 @@ export async function listPublicLegacyInventory(input: {
   )) as Array<Record<string, unknown> & { id: string; vin: string }>;
   const publicIds = new Map(publicRows.map((row) => [row.vin.toUpperCase(), row.id]));
   const publicPhotos = await photosByVehicleIds(publicRows.map((row) => row.id));
+  const publicByVin = new Map(publicRows.map((row) => [row.vin.toUpperCase(), row]));
   let rows = cars.map((car) => {
     const vin = (car.source_id ?? `legacy-${car.id}`).trim().toUpperCase();
-    const publicRow = publicRows.find((row) => row.vin.toUpperCase() === vin);
+    const publicRow = publicByVin.get(vin);
     const publicId = publicIds.get(vin) ?? `legacy-${car.id}`;
     return adapt(car, publicId, publicRow, publicPhotos.get(publicId));
   });

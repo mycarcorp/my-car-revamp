@@ -1,9 +1,12 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
+import { useSuspenseQuery } from "@tanstack/react-query";
 import { MapPin } from "lucide-react";
 import { serviceAreasQuery } from "@/lib/queries";
 
 export const Route = createFileRoute("/locations/")({
+  loader: ({ context }) => context.queryClient.ensureQueryData(serviceAreasQuery()),
+  errorComponent: () => <div role="alert" className="mx-auto max-w-5xl px-4 py-12">Unable to load service areas. Please refresh.</div>,
+  notFoundComponent: () => <div className="mx-auto max-w-5xl px-4 py-12">Service area unavailable.</div>,
   head: () => ({
     meta: [
       { title: "Areas We Serve — MyCar Used Cars near Fredericksburg, VA" },
@@ -13,6 +16,8 @@ export const Route = createFileRoute("/locations/")({
           "MyCar serves Fredericksburg, Spotsylvania, Stafford, King George, Richmond and Northern Virginia with inspected used cars, trucks and SUVs.",
       },
       { property: "og:title", content: "Areas We Serve — MyCar" },
+      { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
       {
         property: "og:description",
         content: "Used vehicles for Fredericksburg, Spotsylvania, Stafford, King George and beyond.",
@@ -23,7 +28,7 @@ export const Route = createFileRoute("/locations/")({
 });
 
 function LocationsIndex() {
-  const { data: areas } = useQuery(serviceAreasQuery());
+  const { data: areas } = useSuspenseQuery(serviceAreasQuery());
 
   return (
     <div className="mx-auto max-w-5xl px-4 py-12">

@@ -7,7 +7,7 @@ import { listGalleryFn, type GalleryCta, type GalleryItem } from "@/lib/home-gal
 
 export const GALLERY_CTAS: Record<GalleryCta, { label: string; to: string } | null> = {
   value: { label: "Get Your Value", to: "/sell" },
-  learn: { label: "Learn More", to: "/contact" },
+  learn: { label: "Contact My Car", to: "/contact" },
   offer: { label: "Get Your Offer", to: "/sell" },
   shop: { label: "Shop Inventory", to: "/search" },
   finance: { label: "Explore Financing", to: "/finance" },
@@ -95,7 +95,7 @@ function Slide({ item, active }: { item: GalleryItem; active: boolean }) {
   return (
     <div
       className={`relative aspect-[16/10] overflow-hidden rounded-2xl bg-foreground transition duration-500 md:aspect-[16/9] ${
-        active ? "opacity-100" : "opacity-40"
+        active ? "opacity-100" : "brightness-75"
       }`}
     >
       {item.type === "video" ? (

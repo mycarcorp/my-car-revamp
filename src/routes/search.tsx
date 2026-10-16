@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
-import { useQuery } from "@tanstack/react-query";
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useSuspenseQuery } from "@tanstack/react-query";
+import { memo, useCallback, useEffect, useMemo, useState } from "react";
 import {
   ArrowDown,
   ArrowRight,
@@ -205,12 +205,13 @@ const bodyIcon = (value: string) => {
  * Shipping offers are shown only when explicitly flagged in vehicle data.
  */
 
-function InventoryListingCard({ vehicle }: { vehicle: VehicleWithPhotos }) {
-  const photos = [...(vehicle.vehicle_photos ?? [])]
+const InventoryListingCard = memo(function InventoryListingCard({ vehicle, priority = false }: { vehicle: VehicleWithPhotos; priority?: boolean }) {
+  const photos = useMemo(() => [...(vehicle.vehicle_photos ?? [])]
     .sort((a, b) => a.position - b.position)
-    .filter((photo) => Boolean(photo.url) && !isVideoUrl(photo.url));
+    .filter((photo) => Boolean(photo.url) && !isVideoUrl(photo.url)), [vehicle.vehicle_photos]);
 
   const [activePhoto, setActivePhoto] = useState(0);
+  const [visitedPhotos, setVisitedPhotos] = useState<number[]>([0]);
   const title = vehicleTitle(vehicle);
   const slug = String(vehicle.slug ?? "").trim();
   const hasMultiplePhotos = photos.length > 1;
@@ -218,10 +219,13 @@ function InventoryListingCard({ vehicle }: { vehicle: VehicleWithPhotos }) {
   // Reset the carousel when this card receives a different vehicle.
   useEffect(() => {
     setActivePhoto(0);
+    setVisitedPhotos([0]);
   }, [vehicle.id]);
 
   function changePhoto(direction: -1 | 1) {
-    setActivePhoto((previous) => (previous + direction + photos.length) % photos.length);
+    const next = (activePhoto + direction + photos.length) % photos.length;
+    setVisitedPhotos((previous) => previous.includes(next) ? previous : [...previous, next]);
+    setActivePhoto(next);
   }
 
   return (
@@ -243,18 +247,19 @@ function InventoryListingCard({ vehicle }: { vehicle: VehicleWithPhotos }) {
             style={{
               transform: `translate3d(-${activePhoto * 100}%, 0, 0)`,
               transition: "transform 560ms cubic-bezier(0.22, 1, 0.36, 1)",
-              willChange: "transform",
             }}
           >
             {photos.map((photo, index) => (
               <div key={photo.id || `${vehicle.id}-${index}`} className="h-full w-full shrink-0 grow-0 basis-full">
-                <img
+                {visitedPhotos.includes(index) && <img
                   src={photo.url}
                   alt={photo.alt || `${title} — photo ${index + 1}`}
-                  loading="lazy"
+                  loading={priority && index === 0 ? "eager" : "lazy"}
+                  fetchPriority={priority && index === 0 ? "high" : "auto"}
+                  decoding="async"
                   draggable={false}
                   className="h-full w-full select-none object-contain"
-                />
+                />}
               </div>
             ))}
           </div>
@@ -270,7 +275,7 @@ function InventoryListingCard({ vehicle }: { vehicle: VehicleWithPhotos }) {
               type="button"
               aria-label={`Previous image of ${title}`}
               onClick={() => changePhoto(-1)}
-              className="absolute left-2 top-1/2 z-20 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-[#173954] shadow-md transition-all hover:scale-110 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="absolute left-2 top-1/2 z-20 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-[#173954] shadow-md transition-all hover:scale-110 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               <ChevronLeft className="size-5" />
             </button>
@@ -278,7 +283,7 @@ function InventoryListingCard({ vehicle }: { vehicle: VehicleWithPhotos }) {
               type="button"
               aria-label={`Next image of ${title}`}
               onClick={() => changePhoto(1)}
-              className="absolute right-2 top-1/2 z-20 flex size-9 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-[#173954] shadow-md transition-all hover:scale-110 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
+              className="absolute right-2 top-1/2 z-20 flex size-11 -translate-y-1/2 items-center justify-center rounded-full bg-white/95 text-[#173954] shadow-md transition-all hover:scale-110 hover:bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500"
             >
               <ChevronRight className="size-5" />
             </button>
@@ -304,7 +309,7 @@ function InventoryListingCard({ vehicle }: { vehicle: VehicleWithPhotos }) {
       </div>
 
       <div className="flex flex-1 flex-col p-4">
-        <h3 className="line-clamp-2 text-sm font-bold text-[#173954] sm:text-[15px]">{title}</h3>
+        <h2 className="line-clamp-2 text-sm font-bold text-[#173954] sm:text-[15px]">{title}</h2>
         <p className="mt-1 text-xs text-slate-500">
           {vehicle.trim ? `${vehicle.trim} · ` : ""}
           {formatMiles(vehicle.mileage)}
@@ -324,7 +329,7 @@ function InventoryListingCard({ vehicle }: { vehicle: VehicleWithPhotos }) {
       </div>
     </article>
   );
-}
+});
 
 export const Route = createFileRoute("/search")({
   validateSearch: (r: Record<string, unknown>): Filters => ({
@@ -352,6 +357,9 @@ export const Route = createFileRoute("/search")({
     seatsMax: asNum(r.seatsMax),
     page: asNum(r.page),
   }),
+  loader: ({ context }) => context.queryClient.ensureQueryData(allVehiclesQuery()),
+  errorComponent: () => <div role="alert" className="mx-auto max-w-5xl px-4 py-16">Unable to load inventory. Please refresh or contact My Car.</div>,
+  notFoundComponent: () => <div className="mx-auto max-w-5xl px-4 py-16">Inventory unavailable.</div>,
   head: () => ({
     meta: [
       { title: "Used Cars for Sale in Fredericksburg, VA | My Car" },
@@ -364,6 +372,7 @@ export const Route = createFileRoute("/search")({
       { property: "og:description", content: "Browse used cars, current deals and financing options at My Car." },
       { property: "og:url", content: "https://mycarcorp.com/search" },
       { property: "og:type", content: "website" },
+      { name: "twitter:card", content: "summary_large_image" },
     ],
     links: [{ rel: "canonical", href: "https://mycarcorp.com/search" }],
   }),
@@ -561,6 +570,7 @@ function RangeFilter({
         </span>
       </div>
       <Slider
+        role="group"
         min={min}
         max={safeMax}
         step={step}
@@ -901,7 +911,7 @@ function FilterSidebar({ filters, vehicles, onChange, onClear, onlySaved, onSave
 function SearchPage() {
   const params = Route.useSearch();
   const navigate = useNavigate({ from: "/search" });
-  const { data: allVehicles = [], isLoading, isError } = useQuery(allVehiclesQuery());
+  const { data: allVehicles, isLoading, isError } = useSuspenseQuery(allVehiclesQuery());
   const [filters, setFilters] = useState<Filters>(params);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<string[]>([]);
@@ -1049,6 +1059,7 @@ function SearchPage() {
           <FilterSidebar {...sidebarProps} />
         </aside>
         <main className="min-w-0">
+          <h1 className="sr-only">Used cars for sale at My Car</h1>
           <div className="rounded-lg bg-blue-50 p-3 sm:p-4">
             <div className="relative">
               <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
@@ -1168,7 +1179,7 @@ function SearchPage() {
             <div className="grid grid-cols-1 gap-3 sm:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4">
               {displayed.flatMap((vehicle, index) => {
                 const absolute = (page - 1) * PAGE_SIZE + index + 1;
-                const elements = [<InventoryListingCard key={`vehicle-${vehicle.id}`} vehicle={vehicle} />];
+                const elements = [<InventoryListingCard key={`vehicle-${vehicle.id}`} vehicle={vehicle} priority={index === 0} />];
                 if (absolute === 6) elements.push(<Promotion key="finance" type="finance" />);
                 if (absolute === 15) elements.push(<Promotion key="trade" type="trade" />);
                 if (absolute === 23) elements.push(<Promotion key="deals" type="deals" />);
@@ -1180,7 +1191,7 @@ function SearchPage() {
 
           {!isLoading && filtered.length > PAGE_SIZE && (
             <div className="mt-8 flex flex-wrap items-center justify-center gap-2">
-              <Button variant="outline" size="sm" disabled={page <= 1} onClick={() => pageTo(page - 1)}>
+              <Button aria-label="Previous results page" variant="outline" size="sm" disabled={page <= 1} onClick={() => pageTo(page - 1)}>
                 <ChevronLeft className="h-4 w-4" />
               </Button>
               {Array.from({ length: totalPages }, (_, i) => i + 1)
@@ -1190,7 +1201,7 @@ function SearchPage() {
                     {n}
                   </Button>
                 ))}
-              <Button variant="outline" size="sm" disabled={page >= totalPages} onClick={() => pageTo(page + 1)}>
+              <Button aria-label="Next results page" variant="outline" size="sm" disabled={page >= totalPages} onClick={() => pageTo(page + 1)}>
                 <ChevronRight className="h-4 w-4" />
               </Button>
             </div>
