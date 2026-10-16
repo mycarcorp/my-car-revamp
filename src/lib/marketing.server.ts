@@ -1,4 +1,4 @@
-import { unzip } from "fflate";
+import { unzipSync } from "fflate";
 import { getRequest } from "@tanstack/react-start/server";
 import { appAdminCreds } from "./app-admin.server";
 import { emptySnapshot, mergeArticles, resolveProperty, type MarketingSnapshot, type ServiceReport, type SearchReport, type SearchRow, type ResearchReport, type SemrushTable, type LighthouseReport, type SiteHealth, type Prospect, type ProspectInput } from "./marketing";
@@ -101,7 +101,9 @@ async function lighthouseReport(): Promise<LighthouseReport> {
   if (!archive.ok) throw new Error(`Could not read Lighthouse archive (${archive.status}).`);
   const bytes = new Uint8Array(await archive.arrayBuffer()); if (bytes.length > 25000000) throw new Error("Lighthouse archive exceeds the safe report size.");
   let totalSize = 0;
-  const files = await new Promise<Record<string, Uint8Array>>((resolve, reject) => unzip(bytes, { filter: (file) => { const include = file.name.endsWith(".json") && file.originalSize <= 5000000; if (include) totalSize += file.originalSize; return include && totalSize <= 30000000; } }, (error, result) => error ? reject(error) : resolve(result)));
+  // Synchronous pure-JS extraction avoids fflate's Node/browser worker spawning,
+  // which is unavailable in the published server runtime. Bounds apply before inflation.
+  const files = unzipSync(bytes, { filter: (file) => { const include = file.name.endsWith(".json") && file.originalSize <= 5000000; if (include) totalSize += file.originalSize; return include && totalSize <= 30000000; } });
   const audits: LighthouseReport["audits"] = [];
   for (const bytes of Object.values(files)) {
     if (!(bytes instanceof Uint8Array)) continue;
