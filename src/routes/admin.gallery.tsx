@@ -16,6 +16,7 @@ import {
   type GalleryItem,
 } from "@/lib/home-gallery.functions";
 import { GALLERY_CTAS } from "@/components/home/CustomerGallery";
+import { HeroEditor } from "@/components/admin/HeroEditor";
 
 export const Route = createFileRoute("/admin/gallery")({
   head: () => ({
@@ -118,6 +119,8 @@ function AdminGallery() {
           </Button>
         }
       />
+
+      <HeroEditor token={token} />
 
       <label
         onDragOver={(e) => e.preventDefault()}

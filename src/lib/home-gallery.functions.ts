@@ -29,3 +29,37 @@ export const createGalleryUploadFn = createServerFn({ method: "POST" })
     const { createGalleryUpload } = await import("./home-gallery.server");
     return createGalleryUpload(data.accessToken, data.contentType);
   });
+
+export type { HeroConfig, HeroSettings, HeroFrame, HeroDevice, HeroImage } from "./home-gallery.server";
+import type { HeroConfig } from "./home-gallery.server";
+
+export const getPublishedHeroFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { getPublishedHero } = await import("./home-gallery.server");
+  return getPublishedHero();
+});
+
+export const getHeroConfigFn = createServerFn({ method: "GET" }).handler(async () => {
+  const { getHeroConfig } = await import("./home-gallery.server");
+  return getHeroConfig();
+});
+
+export const saveHeroConfigFn = createServerFn({ method: "POST" })
+  .inputValidator((input: { accessToken: string; config: HeroConfig }) => {
+    if (!input?.accessToken) throw new Error("Not signed in.");
+    return input;
+  })
+  .handler(async ({ data }) => {
+    const { saveHeroConfig } = await import("./home-gallery.server");
+    return saveHeroConfig(data.accessToken, data.config);
+  });
+
+export const createHeroUploadFn = createServerFn({ method: "POST" })
+  .inputValidator((input: { accessToken: string; contentType: string }) => {
+    if (!input?.accessToken) throw new Error("Not signed in.");
+    if (!/^image\//.test(input?.contentType ?? "")) throw new Error("Only photos are allowed.");
+    return input;
+  })
+  .handler(async ({ data }) => {
+    const { createHeroUpload } = await import("./home-gallery.server");
+    return createHeroUpload(data.accessToken, data.contentType);
+  });
