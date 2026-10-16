@@ -503,9 +503,9 @@ function Home() {
         </section>
       )}
       {/* POPULAR MODELS */}
-      {models.length > 0 && (
-        <ScrollReveal>
-          <HomeRail title="Shop popular models" itemClassName="basis-[62%] sm:basis-1/3 lg:basis-1/5">
+      {/* POPULAR MODELS */}
+{models.length > 0 && (
+  <HomeRail title="Shop popular models" itemClassName="basis-[62%] sm:basis-1/3 lg:basis-1/5">
             {models.map((m) => (
               <Link
                 key={`${m.make}-${m.model}`}
