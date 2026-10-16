@@ -22,7 +22,6 @@ import { Textarea } from "@/components/ui/textarea";
 import { LeadForm } from "@/components/LeadForm";
 import { vehicleMedia } from "@/components/VehicleCard";
 import { HomeRail } from "@/components/home/HomeRail";
-import { HomeVehicleCard } from "@/components/home/HomeVehicleCard";
 import { BrandStory } from "@/components/home/BrandStory";
 import { ReturningHero, ReturningSections, useVisitorState } from "@/components/ReturningVisitor";
 import { useAuth } from "@/hooks/useAuth";
@@ -41,7 +40,6 @@ import { CustomerGallery } from "@/components/home/CustomerGallery";
 import { DealershipMap } from "@/components/home/DealershipMap";
 import { ScrollReveal } from "@/components/home/ScrollReveal";
 import { formatUsd } from "@/lib/format";
-import trustImage from "@/assets/home-trust.jpg";
 import bodySuv from "@/assets/body-suv.png";
 import bodySedan from "@/assets/body-sedan.png";
 import bodyTruck from "@/assets/body-truck.png";
@@ -53,7 +51,6 @@ import bodyWagon from "@/assets/body-wagon.png";
 import bodyVan from "@/assets/body-van.png";
 import exploreBudget from "@/assets/explore-budget.png";
 import exploreRecent from "@/assets/explore-recent.jpg";
-import exploreDeals from "@/assets/explore-deals.png";
 
 const BODY_ART: Record<string, string> = {
   SUV: bodySuv, Sedan: bodySedan, Truck: bodyTruck, Coupe: bodyCoupe, Hatchback: bodyHatch,
@@ -144,10 +141,8 @@ function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { data: settings } = useQuery(siteSettingsQuery());
-  const { data: featured, isLoading: featuredLoading } = useQuery(featuredVehiclesQuery());
   const { data: facets } = useQuery(facetsQuery());
   const { data: all } = useQuery(allVehiclesQuery());
-  const { data: areas } = useQuery(serviceAreasQuery());
   const visitor = useVisitorState();
   const [term, setTerm] = useState("");
   const [carFinderOpen, setCarFinderOpen] = useState(false);
