@@ -5,135 +5,108 @@ import storyImage from "@/assets/home-story.jpg";
 /**
  * MyCar Brand Story
  *
- * Scroll behavior:
- * 1. Image and headline are visible immediately.
- * 2. Section pins when it reaches the viewport.
- * 3. Headline travels toward the image center.
- * 4. At progress 1, headline reaches center.
- * 5. Sticky section releases naturally.
- *
- * No opacity animation.
- * No image zooming.
- * No React re-renders during scrolling.
+ * Desktop and mobile scroll interaction:
+ * - Image is visible immediately
+ * - Headline is visible immediately
+ * - Section pins during scrolling
+ * - Headline follows scroll toward image center
+ * - Section releases when headline reaches center
+ * - No fading, scaling, or zooming
  */
 
 export function BrandStory() {
-  const wrapRef = useRef<HTMLElement>(null);
+  const sectionRef = useRef<HTMLElement>(null);
+  const imageRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
-    const section = wrapRef.current;
+    const section = sectionRef.current;
+    const image = imageRef.current;
+    const headline = textRef.current;
 
-    if (!section) return;
+    if (!section || !image || !headline) return;
 
-    const reducedMotion = window.matchMedia("(prefers-reduced-motion: reduce)");
+    const motion = window.matchMedia("(prefers-reduced-motion: reduce)");
 
-    let animationFrame = 0;
+    let frame = 0;
 
-    const updateProgress = () => {
-      animationFrame = 0;
+    const update = () => {
+      frame = 0;
 
-      if (reducedMotion.matches) {
+      if (motion.matches) {
         section.style.setProperty("--p", "1");
+        headline.style.transform = "none";
         return;
       }
 
-      const rect = section.getBoundingClientRect();
+      const sectionRect = section.getBoundingClientRect();
 
       const viewportHeight = window.innerHeight;
 
-      const scrollDistance = Math.max(1, rect.height - viewportHeight);
+      const scrollDistance = Math.max(1, sectionRect.height - viewportHeight);
 
-      const rawProgress = -rect.top / scrollDistance;
+      const progress = Math.max(0, Math.min(1, -sectionRect.top / scrollDistance));
 
-      const progress = Math.min(1, Math.max(0, rawProgress));
+      const imageHeight = image.offsetHeight;
+      const headlineHeight = headline.offsetHeight;
+
+      // Begin near the image's upper edge.
+      // Finish with the headline exactly centered.
+      const travelDistance = Math.max(0, (imageHeight - headlineHeight) / 2 - 20);
+
+      const remainingDistance = travelDistance * (1 - progress);
+
+      // Use calculated pixels rather than complex CSS math.
+      headline.style.transform = `translate3d(0, calc(-50% - ${remainingDistance}px), 0)`;
 
       section.style.setProperty("--p", progress.toFixed(4));
     };
 
-    const handleScroll = () => {
-      if (animationFrame) return;
-
-      animationFrame = window.requestAnimationFrame(updateProgress);
+    const onScroll = () => {
+      if (frame) return;
+      frame = window.requestAnimationFrame(update);
     };
 
-    updateProgress();
+    update();
 
-    window.addEventListener("scroll", handleScroll, {
+    window.addEventListener("scroll", onScroll, {
       passive: true,
     });
 
-    window.addEventListener("resize", handleScroll);
+    window.addEventListener("resize", onScroll);
 
-    reducedMotion.addEventListener("change", handleScroll);
+    motion.addEventListener("change", onScroll);
+
+    const observer = new ResizeObserver(onScroll);
+    observer.observe(section);
+    observer.observe(image);
+    observer.observe(headline);
 
     return () => {
-      window.removeEventListener("scroll", handleScroll);
+      window.removeEventListener("scroll", onScroll);
+      window.removeEventListener("resize", onScroll);
+      motion.removeEventListener("change", onScroll);
 
-      window.removeEventListener("resize", handleScroll);
+      observer.disconnect();
 
-      reducedMotion.removeEventListener("change", handleScroll);
-
-      if (animationFrame) {
-        window.cancelAnimationFrame(animationFrame);
+      if (frame) {
+        window.cancelAnimationFrame(frame);
       }
     };
   }, []);
 
   return (
     <section
-      ref={wrapRef}
+      ref={sectionRef}
       aria-label="The MyCar experience"
-      className="
-        brand-story
-        relative
-        h-[180vh]
-        bg-background
-        md:h-[200vh]
-        motion-reduce:h-auto
-      "
-      style={
-        {
-          "--p": 0,
-        } as CSSProperties
-      }
+      className="brand-story relative h-[180vh] bg-background md:h-[200vh] motion-reduce:h-auto"
+      style={{ "--p": 0 } as CSSProperties}
     >
-      {/* Sticky scroll container */}
-      <div
-        className="
-          brand-story-stage
-          sticky
-          top-0
-          flex
-          h-screen
-          items-center
-          justify-center
-          overflow-hidden
-          px-4
-          motion-reduce:relative
-          motion-reduce:h-auto
-          motion-reduce:py-20
-        "
-      >
-        {/* Image and headline wrapper */}
-        <div
-          className="
-            brand-story-content
-            relative
-            mx-auto
-            w-full
-            max-w-6xl
-          "
-        >
-          {/* Image always visible */}
+      <div className="brand-story-stage sticky top-0 flex h-screen items-center justify-center overflow-hidden px-4 motion-reduce:relative motion-reduce:h-auto motion-reduce:py-20">
+        <div className="brand-story-content relative mx-auto w-full max-w-6xl">
           <div
-            className="
-              brand-story-image
-              relative
-              w-full
-              overflow-hidden
-              rounded-3xl
-              shadow-[var(--shadow-lift)]
-            "
+            ref={imageRef}
+            className="brand-story-image relative w-full overflow-hidden rounded-3xl shadow-[var(--shadow-lift)]"
           >
             <img
               src={storyImage}
@@ -142,38 +115,19 @@ export function BrandStory() {
               height={1088}
               loading="lazy"
               decoding="async"
-              className="
-                block
-                h-full
-                w-full
-                object-cover
-              "
+              className="block h-full w-full object-cover"
             />
           </div>
 
-          {/* Scroll-controlled headline */}
           <div
-            className="
-              brand-story-text
-              absolute
-              inset-x-0
-              z-10
-              px-5
-              text-center
-            "
+            ref={textRef}
+            className="brand-story-text absolute inset-x-0 z-10 px-5 text-center"
+            style={{
+              top: "50%",
+              opacity: 1,
+            }}
           >
-            <h2
-              className="
-                mx-auto
-                max-w-4xl
-                font-display
-                text-[clamp(1.8rem,5vw,4.5rem)]
-                font-black
-                leading-[1.05]
-                tracking-[-0.045em]
-                text-white
-              "
-            >
+            <h2 className="mx-auto max-w-4xl font-display text-[clamp(1.8rem,5vw,4.5rem)] font-black leading-[1.05] tracking-[-0.045em] text-white">
               We’ll Make Every Drive Feel Like a Dream Come True.
             </h2>
           </div>
