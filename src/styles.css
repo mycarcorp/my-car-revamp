@@ -7,7 +7,7 @@
 /*
  * MyCar design system.
  * Deep navy + signal amber, dense retail-automotive layout.
- * All colors are oklch tokens. Never hardcode colors in components.
+ * All colors are oklch tokens.
  */
 
 @theme inline {
@@ -18,8 +18,10 @@
   --radius-2xl: calc(var(--radius) + 8px);
   --radius-3xl: calc(var(--radius) + 12px);
   --radius-4xl: calc(var(--radius) + 16px);
+
   --font-display: "Archivo", ui-sans-serif, system-ui, sans-serif;
   --font-sans: "Inter", ui-sans-serif, system-ui, sans-serif;
+
   --color-background: var(--background);
   --color-foreground: var(--foreground);
   --color-card: var(--card);
@@ -61,34 +63,47 @@
 
 :root {
   --radius: 0.5rem;
+
   --background: oklch(1 0 0);
   --foreground: oklch(0.21 0.03 258);
+
   --card: oklch(1 0 0);
   --card-foreground: oklch(0.21 0.03 258);
+
   --popover: oklch(1 0 0);
   --popover-foreground: oklch(0.21 0.03 258);
+
   --primary: oklch(0.34 0.087 254);
   --primary-foreground: oklch(0.985 0.005 250);
+
   --secondary: oklch(0.96 0.01 250);
   --secondary-foreground: oklch(0.28 0.06 254);
+
   --muted: oklch(0.968 0.007 248);
   --muted-foreground: oklch(0.53 0.03 253);
+
   --accent: oklch(0.76 0.16 66);
   --accent-foreground: oklch(0.24 0.05 258);
+
   --destructive: oklch(0.577 0.245 27.325);
   --destructive-foreground: oklch(0.985 0.003 248);
+
   --success: oklch(0.58 0.13 155);
   --success-foreground: oklch(0.985 0.003 248);
+
   --surface: oklch(0.975 0.008 250);
   --surface-foreground: oklch(0.21 0.03 258);
+
   --border: oklch(0.912 0.014 255);
   --input: oklch(0.912 0.014 255);
   --ring: oklch(0.34 0.087 254);
+
   --chart-1: oklch(0.34 0.087 254);
   --chart-2: oklch(0.76 0.16 66);
   --chart-3: oklch(0.58 0.13 155);
   --chart-4: oklch(0.6 0.118 185);
   --chart-5: oklch(0.55 0.2 25);
+
   --sidebar: oklch(0.28 0.06 254);
   --sidebar-foreground: oklch(0.97 0.006 250);
   --sidebar-primary: oklch(0.76 0.16 66);
@@ -98,42 +113,58 @@
   --sidebar-border: oklch(0.38 0.07 254);
   --sidebar-ring: oklch(0.76 0.16 66);
 
-  --gradient-hero: linear-gradient(
-    135deg,
-    oklch(0.26 0.07 256) 0%,
-    oklch(0.36 0.09 252) 55%,
-    oklch(0.44 0.1 248) 100%
-  );
+  --gradient-hero: linear-gradient(135deg, oklch(0.26 0.07 256) 0%, oklch(0.36 0.09 252) 55%, oklch(0.44 0.1 248) 100%);
+
   --gradient-accent: linear-gradient(90deg, oklch(0.76 0.16 66), oklch(0.82 0.15 82));
+
   --shadow-card: 0 1px 2px oklch(0.21 0.03 258 / 0.06), 0 8px 24px -12px oklch(0.21 0.03 258 / 0.18);
+
   --shadow-lift: 0 12px 32px -12px oklch(0.21 0.03 258 / 0.3);
 }
+
+/* =====================================================
+   DARK MODE
+===================================================== */
 
 .dark {
   --background: oklch(0.19 0.03 258);
   --foreground: oklch(0.97 0.006 250);
+
   --card: oklch(0.24 0.04 257);
   --card-foreground: oklch(0.97 0.006 250);
+
   --popover: oklch(0.24 0.04 257);
   --popover-foreground: oklch(0.97 0.006 250);
+
   --primary: oklch(0.72 0.11 250);
   --primary-foreground: oklch(0.19 0.03 258);
+
   --secondary: oklch(0.28 0.04 257);
   --secondary-foreground: oklch(0.97 0.006 250);
+
   --muted: oklch(0.28 0.04 257);
   --muted-foreground: oklch(0.72 0.03 254);
+
   --accent: oklch(0.76 0.16 66);
   --accent-foreground: oklch(0.2 0.04 258);
+
   --destructive: oklch(0.704 0.191 22);
   --destructive-foreground: oklch(0.985 0.003 248);
+
   --success: oklch(0.68 0.14 155);
   --success-foreground: oklch(0.19 0.03 258);
+
   --surface: oklch(0.23 0.035 257);
   --surface-foreground: oklch(0.97 0.006 250);
+
   --border: oklch(1 0 0 / 12%);
   --input: oklch(1 0 0 / 16%);
   --ring: oklch(0.72 0.11 250);
 }
+
+/* =====================================================
+   BASE STYLES
+===================================================== */
 
 @layer base {
   * {
@@ -155,6 +186,10 @@
   }
 }
 
+/* =====================================================
+   UTILITIES
+===================================================== */
+
 @utility hero-surface {
   background-image: var(--gradient-hero);
   color: var(--color-primary-foreground);
@@ -166,56 +201,367 @@
 
 @utility card-lift {
   box-shadow: var(--shadow-card);
+
   transition:
     box-shadow 180ms ease,
     transform 180ms ease;
+
   &:hover {
     box-shadow: var(--shadow-lift);
     transform: translateY(-2px);
   }
 }
 
-/* Formatted vehicle descriptions (admin editor + public detail page) */
-.vehicle-description { line-height: 1.75; color: inherit; overflow-wrap: anywhere; }
-.vehicle-description > :first-child { margin-top: 0; }
-.vehicle-description h2 { margin: 1.75rem 0 0.6rem; font-size: 1.2rem; font-weight: 800; line-height: 1.3; }
-.vehicle-description h3 { margin: 1.25rem 0 0.4rem; font-size: 1rem; font-weight: 700; line-height: 1.4; }
-.vehicle-description p { margin: 0 0 0.85rem; }
-.vehicle-description ul, .vehicle-description ol { margin: 0 0 1rem; padding-left: 1.4rem; }
-.vehicle-description ul { list-style: disc; }
-.vehicle-description ol { list-style: decimal; }
-.vehicle-description li { margin: 0.25rem 0; }
-.vehicle-description li > p { margin: 0; }
-.vehicle-description a { color: var(--primary); text-decoration: underline; text-underline-offset: 2px; }
-.vehicle-description table { display: block; width: 100%; max-width: 100%; overflow-x: auto; border-collapse: collapse; margin: 0 0 1.25rem; font-size: 0.875rem; }
-.vehicle-description th, .vehicle-description td { border: 1px solid var(--border); padding: 0.5rem 0.75rem; text-align: left; vertical-align: top; min-width: 8rem; }
-.vehicle-description th { background: var(--muted); font-weight: 700; }
-.vehicle-description td > p, .vehicle-description th > p { margin: 0; }
-.vehicle-description .selectedCell { background: color-mix(in oklab, var(--primary) 12%, transparent); }
+/* =====================================================
+   VEHICLE DESCRIPTION
+===================================================== */
 
-/* Homepage brand story (scroll-driven, see BrandStory.tsx) */
-.brand-story-text {
-  --t: clamp(0, calc(var(--p) * 5), 1);
-  opacity: var(--t);
-  transform: translate3d(0, calc((1 - var(--t)) * 40px), 0);
-  will-change: opacity, transform;
+.vehicle-description {
+  line-height: 1.75;
+  color: inherit;
+  overflow-wrap: anywhere;
 }
+
+.vehicle-description > :first-child {
+  margin-top: 0;
+}
+
+.vehicle-description h2 {
+  margin: 1.75rem 0 0.6rem;
+  font-size: 1.2rem;
+  font-weight: 800;
+  line-height: 1.3;
+}
+
+.vehicle-description h3 {
+  margin: 1.25rem 0 0.4rem;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1.4;
+}
+
+.vehicle-description p {
+  margin: 0 0 0.85rem;
+}
+
+.vehicle-description ul,
+.vehicle-description ol {
+  margin: 0 0 1rem;
+  padding-left: 1.4rem;
+}
+
+.vehicle-description ul {
+  list-style: disc;
+}
+
+.vehicle-description ol {
+  list-style: decimal;
+}
+
+.vehicle-description li {
+  margin: 0.25rem 0;
+}
+
+.vehicle-description li > p {
+  margin: 0;
+}
+
+.vehicle-description a {
+  color: var(--primary);
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.vehicle-description table {
+  display: block;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  margin: 0 0 1.25rem;
+  font-size: 0.875rem;
+}
+
+.vehicle-description th,
+.vehicle-description td {
+  border: 1px solid var(--border);
+  padding: 0.5rem 0.75rem;
+  text-align: left;
+  vertical-align: top;
+  min-width: 8rem;
+}
+
+.vehicle-description th {
+  background: var(--muted);
+  font-weight: 700;
+}
+
+.vehicle-description td > p,
+.vehicle-description th > p {
+  margin: 0;
+}
+
+.vehicle-description .selectedCell {
+  background: color-mix(in oklab, var(--primary) 12%, transparent);
+}
+
+/* =====================================================
+   MYCAR BRAND STORY
+   PIN -> HEADLINE MOVEMENT -> RELEASE
+
+   No opacity animations.
+   No image scaling.
+   No fade transitions.
+
+   Requires BrandStory.tsx to set --p from 0 to 1.
+===================================================== */
+
+/*
+ * The outer section provides the scroll distance.
+ * The inner stage sticks to the viewport during that
+ * distance and releases at the end of the section.
+ */
+
+.brand-story {
+  --p: 0;
+  position: relative;
+  isolation: isolate;
+}
+
+/* Sticky viewport */
+
+.brand-story-stage {
+  position: sticky;
+  top: 0;
+  height: 100vh;
+  height: 100dvh;
+
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  overflow: hidden;
+}
+
+/* Main image container */
+
+.brand-story-content {
+  position: relative;
+  width: 100%;
+  max-width: 72rem;
+  margin-inline: auto;
+}
+
+/* Image is visible immediately */
+
 .brand-story-image {
-  --i: clamp(0, calc((var(--p) - 0.18) * 2.6), 1);
-  opacity: var(--i);
-  transform: translate3d(0, calc((1 - var(--i)) * 80px), 0) scale(calc(0.62 + var(--i) * 0.38));
-  transform-origin: center top;
-  will-change: opacity, transform;
+  position: relative;
+
+  width: 100%;
+  height: min(65vh, 650px);
+
+  overflow: hidden;
+  border-radius: 1.5rem;
+
+  opacity: 1;
+  transform: none;
+
+  box-shadow: var(--shadow-lift);
 }
+
+/* Image stays stationary while headline moves */
+
+.brand-story-image img {
+  display: block;
+  width: 100%;
+  height: 100%;
+
+  object-fit: cover;
+  object-position: center;
+
+  opacity: 1;
+  transform: none;
+}
+
+/*
+ * Headline begins above the image.
+ *
+ * As --p increases from 0 to 1, the headline
+ * travels into the exact vertical center
+ * of the image.
+ *
+ * When --p = 1, its center matches the
+ * image center, and the sticky section ends.
+ *
+ * No fading or scaling is applied.
+ */
+
+.brand-story-text {
+  position: absolute;
+  top: 50%;
+  left: 0;
+  right: 0;
+
+  z-index: 10;
+
+  width: 100%;
+  padding-inline: 1.25rem;
+
+  text-align: center;
+
+  opacity: 1;
+
+  transform: translate3d(0, calc(-50% - (1 - var(--p, 0)) * 55vh), 0);
+
+  will-change: transform;
+}
+
+/* Headline styling */
+
+.brand-story-text h2 {
+  max-width: 64rem;
+  margin-inline: auto;
+
+  font-family: var(--font-display);
+  font-size: clamp(1.8rem, 5vw, 4.5rem);
+  font-weight: 900;
+  line-height: 1.05;
+  letter-spacing: -0.045em;
+
+  color: var(--primary-foreground);
+
+  text-shadow: 0 3px 24px oklch(0.15 0.03 258 / 0.65);
+}
+
+/* =====================================================
+   TABLET
+===================================================== */
+
+@media (max-width: 1024px) {
+  .brand-story-content {
+    max-width: 95%;
+  }
+
+  .brand-story-image {
+    height: 60vh;
+  }
+
+  .brand-story-text h2 {
+    font-size: clamp(2rem, 5vw, 3.8rem);
+  }
+}
+
+/* =====================================================
+   MOBILE
+===================================================== */
+
+@media (max-width: 767px) {
+  .brand-story-stage {
+    padding-inline: 1rem;
+  }
+
+  .brand-story-content {
+    width: 100%;
+    max-width: 100%;
+  }
+
+  .brand-story-image {
+    width: 100%;
+    height: 55vh;
+    min-height: 320px;
+    border-radius: 1.25rem;
+  }
+
+  .brand-story-image img {
+    object-position: center;
+  }
+
+  .brand-story-text {
+    padding-inline: 1rem;
+
+    transform: translate3d(0, calc(-50% - (1 - var(--p, 0)) * 48vh), 0);
+  }
+
+  .brand-story-text h2 {
+    font-size: clamp(1.7rem, 7vw, 2.8rem);
+    line-height: 1.08;
+    letter-spacing: -0.035em;
+  }
+}
+
+/* =====================================================
+   REDUCED MOTION ACCESSIBILITY
+===================================================== */
+
 @media (prefers-reduced-motion: reduce) {
-  .brand-story-text, .brand-story-image { opacity: 1; transform: none; }
+  .brand-story {
+    height: auto !important;
+  }
+
+  .brand-story-stage {
+    position: relative;
+    top: auto;
+    height: auto;
+    min-height: 0;
+
+    padding-block: 4rem;
+    overflow: visible;
+  }
+
+  .brand-story-content {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .brand-story-text {
+    position: relative;
+    top: auto;
+    left: auto;
+    right: auto;
+
+    order: -1;
+    margin-bottom: 2rem;
+
+    opacity: 1;
+    transform: none !important;
+    will-change: auto;
+  }
+
+  .brand-story-text h2 {
+    color: var(--primary);
+    text-shadow: none;
+  }
+
+  .brand-story-image {
+    opacity: 1;
+    transform: none;
+    will-change: auto;
+  }
+
+  .brand-story-image img {
+    opacity: 1;
+    transform: none;
+  }
 }
+
+/* =====================================================
+   EXISTING SCROLL REVEAL
+   Preserved for other homepage sections.
+===================================================== */
 
 .scroll-reveal {
   transform: translate3d(calc((1 - var(--r, 1)) * 18%), 0, 0);
+
   opacity: calc(0.25 + var(--r, 1) * 0.75);
+
   will-change: transform;
 }
+
 @media (prefers-reduced-motion: reduce) {
-  .scroll-reveal { transform: none; opacity: 1; }
+  .scroll-reveal {
+    transform: none;
+    opacity: 1;
+    will-change: auto;
+  }
 }
