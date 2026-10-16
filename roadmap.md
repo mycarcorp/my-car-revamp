@@ -1,5 +1,12 @@
 # MyCar build roadmap
 
+## Marketing Automation launch — Oct 16
+- [ ] Inspect existing SEO, AutoSEO, analytics and Lighthouse integrations.
+- [ ] Add secure six-tab admin workspace with real integration states and available data.
+- [ ] Add durable snapshots and backlink outreach tracking without duplicate publication.
+- [ ] Verify tests, site health and staff dashboard; document external activation requirements.
+- Further Lighthouse optimization is postponed until after marketing launch.
+
 ## Lighthouse improvements — Oct 16
 - [x] Optimize VDP primary image, secondary gallery work, and repeated rendering.
 - [x] Optimize search initial loading and hidden carousel photos.
