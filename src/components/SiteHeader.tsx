@@ -23,7 +23,6 @@ const NAV = [
   { to: "/search", label: "Shop inventory" },
   { to: "/finance", label: "Financing" },
   { to: "/sell", label: "Sell or trade" },
-  { to: "/schedule", label: "Book a visit" },
   { to: "/blog", label: "Blog" },
 ] as const;
 
@@ -74,7 +73,6 @@ export function SiteHeader() {
       to: "/",
     });
   }
-
   /**
    * Scroll progress indicator.
    *
@@ -138,7 +136,6 @@ export function SiteHeader() {
     if (!user || !signInOpen) return;
 
     setSignInOpen(false);
-
     // Let GetStartedButton resume its pending purchase after authentication.
     // Do not redirect customers to inventory and interrupt their checkout.
     if (readPendingPurchase()) return;
@@ -306,40 +303,6 @@ export function SiteHeader() {
             RIGHT SIDE ACTIONS
             ===================================================== */}
         <div className="ml-auto flex items-center gap-2">
-          {/* =====================================================
-              DESKTOP CONTACT BUTTON
-              ===================================================== */}
-          <Button
-            asChild
-            size="sm"
-            variant="outline"
-            className={`
-              hidden
-              border-[#F7941D]/70
-              px-4
-              font-semibold
-              transition-all
-              duration-300
-              ease-out
-              lg:inline-flex
-
-              hover:-translate-y-[1px]
-              hover:scale-[1.025]
-              hover:border-[#F7941D]
-              hover:bg-[#F7941D]
-              hover:text-slate-950
-              hover:shadow-md
-
-              focus-visible:ring-[#F7941D]/40
-
-              ${isNavActive("/contact") ? "border-[#F7941D] bg-[#F7941D] text-slate-950" : ""}
-            `}
-          >
-            <Link to="/contact" aria-current={isNavActive("/contact") ? "page" : undefined}>
-              Contact
-            </Link>
-          </Button>
-
           {user ? (
             <>
               {/* SAVED VEHICLES / ACCOUNT */}
@@ -626,73 +589,6 @@ export function SiteHeader() {
                 </Link>
               );
             })}
-
-            {/* =====================================================
-                MOBILE CONTACT LINK
-                ===================================================== */}
-            {(() => {
-              const active = isNavActive("/contact");
-
-              return (
-                <Link
-                  to="/contact"
-                  onClick={() => setOpen(false)}
-                  aria-current={active ? "page" : undefined}
-                  className={`
-                    group
-                    relative
-                    flex
-                    items-center
-                    py-3
-                    text-sm
-                    font-semibold
-
-                    transition-all
-                    duration-300
-                    ease-out
-
-                    ${
-                      active
-                        ? "text-[#F7941D]"
-                        : `
-                          text-foreground/80
-                          hover:translate-x-1
-                          hover:text-[#F7941D]
-                        `
-                    }
-                  `}
-                >
-                  <span
-                    className="
-                      transition-transform
-                      duration-300
-                      ease-out
-                      group-hover:scale-[1.02]
-                    "
-                  >
-                    Contact
-                  </span>
-
-                  <span
-                    aria-hidden="true"
-                    className={`
-                      absolute
-                      inset-x-0
-                      bottom-0
-                      h-[2px]
-                      origin-left
-                      bg-[#F7941D]
-
-                      transition-transform
-                      duration-300
-                      ease-out
-
-                      ${active ? "scale-x-100" : "scale-x-0 group-hover:scale-x-100"}
-                    `}
-                  />
-                </Link>
-              );
-            })()}
           </div>
         </nav>
       )}
