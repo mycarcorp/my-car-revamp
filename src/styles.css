@@ -306,44 +306,28 @@
 }
 
 /* =====================================================
-   MYCAR BRAND STORY
-   PIN -> HEADLINE MOVEMENT -> RELEASE
+   MYCAR BRAND STORY — PIN / MOVE / RELEASE
 
-   No opacity animations.
-   No image scaling.
-   No fade transitions.
-
-   Requires BrandStory.tsx to set --p from 0 to 1.
+   No fades, no scaling, no transitions.
+   The image and headline are visible immediately.
+   Requires BrandStory.tsx to update --p from 0 to 1.
 ===================================================== */
 
-/*
- * The outer section provides the scroll distance.
- * The inner stage sticks to the viewport during that
- * distance and releases at the end of the section.
- */
-
 .brand-story {
-  --p: 0;
   position: relative;
   isolation: isolate;
 }
 
-/* Sticky viewport */
-
+/* Pinned only while the outer section is scrolling. */
 .brand-story-stage {
   position: sticky;
   top: 0;
   height: 100vh;
-  height: 100dvh;
-
   display: flex;
   align-items: center;
   justify-content: center;
-
   overflow: hidden;
 }
-
-/* Main image container */
 
 .brand-story-content {
   position: relative;
@@ -352,90 +336,58 @@
   margin-inline: auto;
 }
 
-/* Image is visible immediately */
-
 .brand-story-image {
   position: relative;
-
   width: 100%;
   height: min(65vh, 650px);
-
   overflow: hidden;
   border-radius: 1.5rem;
-
   opacity: 1;
   transform: none;
-
   box-shadow: var(--shadow-lift);
 }
-
-/* Image stays stationary while headline moves */
 
 .brand-story-image img {
   display: block;
   width: 100%;
   height: 100%;
-
   object-fit: cover;
   object-position: center;
-
   opacity: 1;
   transform: none;
 }
 
 /*
- * Headline begins above the image.
- *
- * As --p increases from 0 to 1, the headline
- * travels into the exact vertical center
- * of the image.
- *
- * When --p = 1, its center matches the
- * image center, and the sticky section ends.
- *
- * No fading or scaling is applied.
+ * Start WITHIN the image, 16vh above its center, so desktop
+ * visitors can already see the headline at the section entrance.
+ * When --p reaches 1, it reaches the image center, exactly as
+ * the sticky section finishes. No fade or zoom.
  */
-
 .brand-story-text {
   position: absolute;
   top: 50%;
   left: 0;
   right: 0;
-
   z-index: 10;
-
   width: 100%;
   padding-inline: 1.25rem;
-
   text-align: center;
-
   opacity: 1;
-
-  transform: translate3d(0, calc(-50% - (1 - var(--p, 0)) * 55vh), 0);
-
+  transform: translate3d(0, calc(-50% - 16vh + var(--p, 0) * 16vh), 0);
   will-change: transform;
 }
-
-/* Headline styling */
 
 .brand-story-text h2 {
   max-width: 64rem;
   margin-inline: auto;
-
   font-family: var(--font-display);
   font-size: clamp(1.8rem, 5vw, 4.5rem);
   font-weight: 900;
   line-height: 1.05;
   letter-spacing: -0.045em;
-
   color: var(--primary-foreground);
-
   text-shadow: 0 3px 24px oklch(0.15 0.03 258 / 0.65);
 }
-
-/* =====================================================
-   TABLET
-===================================================== */
 
 @media (max-width: 1024px) {
   .brand-story-content {
@@ -450,10 +402,6 @@
     font-size: clamp(2rem, 5vw, 3.8rem);
   }
 }
-
-/* =====================================================
-   MOBILE
-===================================================== */
 
 @media (max-width: 767px) {
   .brand-story-stage {
@@ -472,14 +420,9 @@
     border-radius: 1.25rem;
   }
 
-  .brand-story-image img {
-    object-position: center;
-  }
-
   .brand-story-text {
     padding-inline: 1rem;
-
-    transform: translate3d(0, calc(-50% - (1 - var(--p, 0)) * 48vh), 0);
+    transform: translate3d(0, calc(-50% - 12vh + var(--p, 0) * 12vh), 0);
   }
 
   .brand-story-text h2 {
@@ -488,10 +431,6 @@
     letter-spacing: -0.035em;
   }
 }
-
-/* =====================================================
-   REDUCED MOTION ACCESSIBILITY
-===================================================== */
 
 @media (prefers-reduced-motion: reduce) {
   .brand-story {
@@ -503,7 +442,6 @@
     top: auto;
     height: auto;
     min-height: 0;
-
     padding-block: 4rem;
     overflow: visible;
   }
@@ -519,10 +457,8 @@
     top: auto;
     left: auto;
     right: auto;
-
     order: -1;
     margin-bottom: 2rem;
-
     opacity: 1;
     transform: none !important;
     will-change: auto;
@@ -533,15 +469,11 @@
     text-shadow: none;
   }
 
-  .brand-story-image {
-    opacity: 1;
-    transform: none;
-    will-change: auto;
-  }
-
+  .brand-story-image,
   .brand-story-image img {
     opacity: 1;
     transform: none;
+    will-change: auto;
   }
 }
 
