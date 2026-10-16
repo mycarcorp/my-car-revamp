@@ -12,7 +12,7 @@ import {
   ShieldCheck,
   TrendingDown,
 } from "lucide-react";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
@@ -40,7 +40,7 @@ import { CustomerGallery } from "@/components/home/CustomerGallery";
 import { DealershipMap } from "@/components/home/DealershipMap";
 import { ScrollReveal } from "@/components/home/ScrollReveal";
 import { HeroMedia } from "@/components/home/HeroMedia";
-import { getPublishedHeroFn } from "@/lib/home-gallery.functions";
+import { getPublishedHeroFn, type HeroSettings } from "@/lib/home-gallery.functions";
 
 import { formatUsd } from "@/lib/format";
 import bodySuv from "@/assets/body-suv.png";
@@ -151,10 +151,24 @@ function Home() {
   const { user } = useAuth();
   const navigate = useNavigate();
   const { data: settings } = useQuery(siteSettingsQuery());
-  const { data: hero } = useQuery({ queryKey: ["home-hero"], queryFn: () => getPublishedHeroFn(), staleTime: 60_000 });
-  const { data: facets } = useQuery(facetsQuery());
-  const { data: all } = useQuery(allVehiclesQuery());
-  const visitor = useVisitorState();
+  const { data: publishedHero } = useQuery({ queryKey: ["home-hero"], queryFn: () => getPublishedHeroFn(), staleTime: 60_000 });
+  // Admin hero editor loads this page in a frame (?heroPreview=1) and streams draft settings in.
+  const [draftHero, setDraftHero] = useState<HeroSettings | null>(null);
+  const [isHeroPreview, setIsHeroPreview] = useState(false);
+  useEffect(() => {
+    if (!window.location.search.includes("heroPreview=1") || window.parent === window) return;
+    setIsHeroPreview(true);
+    const onMsg = (e: MessageEvent) => {
+      if (e.origin !== window.location.origin || e.data?.type !== "mycar-hero-preview") return;
+      setDraftHero(e.data.settings as HeroSettings);
+    };
+    window.addEventListener("message", onMsg);
+    window.parent.postMessage({ type: "mycar-hero-ready" }, window.location.origin);
+    return () => window.removeEventListener("message", onMsg);
+  }, []);
+  const hero = draftHero ?? publishedHero;
+  const realVisitor = useVisitorState();
+  const visitor = isHeroPreview ? { ...realVisitor, returning: false, summary: null } : realVisitor;
   const [term, setTerm] = useState("");
   const [carFinderOpen, setCarFinderOpen] = useState(false);
   const [carFinder, setCarFinder] = useState<CarFinderForm>(EMPTY_CAR_FINDER_FORM);
