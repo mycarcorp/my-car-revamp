@@ -1,7 +1,7 @@
 import { unzipSync } from "fflate";
 import { getRequest } from "@tanstack/react-start/server";
 import { appAdminCreds } from "./app-admin.server";
-import { emptySnapshot, mergeArticles, resolveProperty, type MarketingSnapshot, type ServiceReport, type SearchReport, type SearchRow, type ResearchReport, type SemrushTable, type LighthouseReport, type SiteHealth, type Prospect, type ProspectInput } from "./marketing";
+import { emptySnapshot, mergeArticles, resolveProperty, type MarketingSnapshot, type ServiceReport, type SearchReport, type SearchRow, type ResearchReport, type SemrushTable, type LighthouseReport, type SiteHealth, type Prospect, type ProspectInput, type Inspection } from "./marketing";
 
 const BUCKET = "marketing-private";
 const ORIGIN = "https://mycarcorp.com";
@@ -45,7 +45,8 @@ export async function readMarketing() {
   let prospects: Prospect[] = [];
   if (listing.ok) { const objects = await listing.json() as { name: string }[]; prospects = (await Promise.all(objects.filter((o) => o.name.endsWith(".json")).map((o) => readObject<Prospect | null>(`prospects/${o.name}`, null)))).filter((p): p is Prospect => Boolean(p)); }
   else if (listing.status !== 404 && listing.status !== 400) throw new Error(`Could not list outreach records (${listing.status}).`);
-  return { snapshot: { search, research, lighthouse, website }, property: config.property, prospects, configured: { search: Boolean(process.env[ENV.google_search_console]), research: Boolean(process.env[ENV.semrush]), lighthouse: Boolean(process.env[ENV.github]) } };
+  const inspections = await readObject<Inspection[]>("inspections.json", []);
+  return { snapshot: { search, research, lighthouse, website }, property: config.property, prospects, inspections, configured: { search: Boolean(process.env[ENV.google_search_console]), research: Boolean(process.env[ENV.semrush]), lighthouse: Boolean(process.env[ENV.github]) } };
 }
 async function gateway(connector: Connector, path: string, body?: unknown): Promise<Response> {
   const apiKey = process.env[ENV[connector]], lovable = process.env["LOVABLE_API_KEY"];
@@ -142,3 +143,16 @@ export async function refreshMarketing(service: keyof MarketingSnapshot, propert
 }
 export async function saveProspect(input: ProspectInput, userId: string): Promise<Prospect> { const record = { ...input, domain: input.domain.toLowerCase(), id: input.id ?? crypto.randomUUID(), updatedAt: now(), updatedBy: userId }; await writeObject(`prospects/${record.id}.json`, record); return record; }
 export async function removeProspect(id: string) { const response = await storage(`object/${BUCKET}`, { method: "DELETE", body: JSON.stringify({ prefixes: [`prospects/${id}.json`] }) }); if (!response.ok) throw new Error(`Could not remove outreach record (${response.status}).`); }
+export async function inspectUrl(url: string): Promise<Inspection> {
+  const config = await readObject<{ property: string | null }>("config.json", { property: null });
+  const sites = await api<{ siteEntry?: { siteUrl: string; permissionLevel?: string }[] }>("google_search_console", "/webmasters/v3/sites");
+  const resolution = resolveProperty(sites.siteEntry ?? [], config.property);
+  if (!resolution.selected) throw new Error("Select a verified Search Console property first.");
+  const result = await api<{ inspectionResult?: { indexStatusResult?: { verdict?: string; coverageState?: string; indexingState?: string; lastCrawlTime?: string; googleCanonical?: string } } }>("google_search_console", "/v1/urlInspection/index:inspect", { inspectionUrl: url, siteUrl: resolution.selected });
+  const status = result.inspectionResult?.indexStatusResult;
+  if (!status) throw new Error("Google returned no index status for this URL.");
+  const record: Inspection = { url, inspectedAt: now(), verdict: status.verdict ?? null, coverageState: status.coverageState ?? null, indexingState: status.indexingState ?? null, lastCrawlTime: status.lastCrawlTime ?? null, googleCanonical: status.googleCanonical ?? null };
+  const previous = await readObject<Inspection[]>("inspections.json", []);
+  await writeObject("inspections.json", [record, ...previous.filter((p) => p.url !== url)].slice(0, 50));
+  return record;
+}
