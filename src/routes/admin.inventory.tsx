@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from "react";
+import { descriptionToSafeHtml } from "@/lib/vehicle-description";
 import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
