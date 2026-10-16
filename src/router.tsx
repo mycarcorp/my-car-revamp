@@ -10,9 +10,10 @@ export const getRouter = () => {
     context: { queryClient },
     scrollRestoration: true,
     defaultPreloadStaleTime: 0,
-    dehydrate: () => ({ queryClientState: dehydrate(queryClient) }),
-    hydrate: (state: { queryClientState?: DehydratedState }) => {
-      if (state.queryClientState) hydrate(queryClient, state.queryClientState);
+    // Query results are plain DTOs; JSON keeps the router payload serializable.
+    dehydrate: () => ({ queryClientState: JSON.stringify(dehydrate(queryClient)) }),
+    hydrate: (state: { queryClientState?: string }) => {
+      if (state.queryClientState) hydrate(queryClient, JSON.parse(state.queryClientState) as DehydratedState);
     },
   });
 
