@@ -140,19 +140,20 @@ const SELECT =
  * enforced path.
  */
 
-export async function listAutoseoPosts(): Promise<AutoseoPost[]> {
+export async function listAutoseoPosts(summary = false): Promise<AutoseoPost[]> {
+  const select = summary ? SELECT.split(",").filter((column) => column !== "content_html" && column !== "faq_schema").join(",") : SELECT;
   try {
     return (await rest(
-      `blog_posts?select=${SELECT}&status=eq.published&quality_status=eq.approved&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
+      `blog_posts?select=${select}&status=eq.published&quality_status=eq.approved&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
     )) as AutoseoPost[];
   } catch {
     try {
       return (await rest(
-        `blog_posts?select=${SELECT}&status=eq.published&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
+        `blog_posts?select=${select}&status=eq.published&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
       )) as AutoseoPost[];
     } catch {
       return (await rest(
-        `blog_posts?select=${SELECT}&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
+        `blog_posts?select=${select}&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
       )) as AutoseoPost[];
     }
   }

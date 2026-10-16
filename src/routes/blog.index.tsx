@@ -2,8 +2,8 @@ import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ctaButtonClass } from "@/lib/ui";
 import { formatDate } from "@/lib/format";
-import { publicBlogList } from "@/lib/legacy-blog.functions";
-import { publicAutoseoList, type AutoseoPost } from "@/lib/autoseo-blog.functions";
+import { publicBlogSummaryList } from "@/lib/legacy-blog.functions";
+import { publicAutoseoSummaryList, type AutoseoPost } from "@/lib/autoseo-blog.functions";
 
 type Card = {
   key: string;
@@ -263,7 +263,7 @@ function dedupeAutoseoByIntent(articles: AutoseoPost[]): AutoseoPost[] {
 
 export const Route = createFileRoute("/blog/")({
   loader: async () => {
-    const [posts, rawArticles] = await Promise.all([publicBlogList(), publicAutoseoList()]);
+    const [posts, rawArticles] = await Promise.all([publicBlogSummaryList(), publicAutoseoSummaryList()]);
 
     /**
      * Remove newer AutoSEO articles that strongly overlap an already

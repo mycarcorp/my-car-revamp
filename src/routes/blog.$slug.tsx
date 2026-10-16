@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound, redirect } from "@tanstack/react-router";
 import { formatDate } from "@/lib/format";
 import { publicBlogPost } from "@/lib/legacy-blog.functions";
-import { publicAutoseoList, publicAutoseoPost, type AutoseoPost } from "@/lib/autoseo-blog.functions";
+import { publicAutoseoSummaryList, publicAutoseoPost, type AutoseoPost } from "@/lib/autoseo-blog.functions";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { escapeHtml, normalizeCta, normalizeHeadingStyles, sanitizeHtml, type HeadingStyle } from "@/lib/blog-content";
 import { normalizeArticleLists } from "@/lib/article-lists";
@@ -310,7 +310,7 @@ export const Route = createFileRoute("/blog/$slug")({
 
     if (!article) throw notFound();
 
-    const all = await publicAutoseoList();
+    const all = await publicAutoseoSummaryList();
 
     /**
      * Find the established URL that owns this article's primary intent.

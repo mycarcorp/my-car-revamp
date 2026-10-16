@@ -568,6 +568,16 @@ export const publicAutoseoList = createServerFn({
   }
 });
 
+/** Listing/intent ownership only: do not transfer every article body or FAQ. */
+export const publicAutoseoSummaryList = createServerFn({ method: "GET" }).handler(async (): Promise<AutoseoPost[]> => {
+  try {
+    const m = await import("./autoseo-blog.server");
+    return (await m.listAutoseoPosts(true)).map((post) => ({ ...post, content_html: null, faq_schema: null }));
+  } catch {
+    return [];
+  }
+});
+
 /**
  * Public AutoSEO article lookup.
  *
