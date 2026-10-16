@@ -35,7 +35,12 @@ import {
   siteSettingsQuery,
   type VehicleWithPhotos,
 } from "@/lib/queries";
-import heroImage from "@/assets/home-hero.jpg";
+import heroImage from "@/assets/home-hero-dealership.jpg";
+import greeterImage from "@/assets/explore-greeter.png";
+import { CustomerGallery } from "@/components/home/CustomerGallery";
+import { DealershipMap } from "@/components/home/DealershipMap";
+import { ScrollReveal } from "@/components/home/ScrollReveal";
+import { formatUsd } from "@/lib/format";
 import trustImage from "@/assets/home-trust.jpg";
 import bodySuv from "@/assets/body-suv.png";
 import bodySedan from "@/assets/body-sedan.png";
@@ -203,12 +208,12 @@ function Home() {
       {
         key: "deals",
         title: "Discover Great Deals!",
-        body: "Vehicles with recently reduced prices.",
+        body: "Our team is ready to help you find a great car at a great price.",
         cta: "Find Your Deal",
         count: drops.length,
         image: firstCover(drops),
-        search: { deal: "price-drop" },
-        tone: "muted", art: exploreDeals, artClass: "absolute bottom-0 left-1/2 h-[68%] w-auto -translate-x-1/2 object-contain",
+        search: drops.length ? { deal: "price-drop" } : {},
+        tone: "muted", art: greeterImage, artClass: "absolute bottom-0 left-1/2 h-[66%] w-auto -translate-x-1/2 object-contain",
       },
       {
         key: "family",
@@ -220,7 +225,7 @@ function Home() {
         search: { body: "SUV|Minivan" },
         tone: "dark", art: bodyMinivan, artClass: "",
       },
-    ].filter((c) => c.count > 0);
+    ].filter((c) => c.count > 0 || c.key === "deals");
   }, [live]);
 
   const models = useMemo(() => {
@@ -240,7 +245,7 @@ function Home() {
   }, [live]);
 
   const dropCount = useMemo(() => live.filter(isDrop).length, [live]);
-  const dropImage = useMemo(() => firstCover(live.filter(isDrop)), [live]);
+  const dropVehicle = useMemo(() => live.find((v) => isDrop(v) && coverOf(v)), [live]);
 
   return (
     <>
@@ -250,11 +255,11 @@ function Home() {
       <section className={visitor.returning ? "hidden" : "relative isolate overflow-hidden bg-primary"}>
         <img
           src={heroImage}
-          alt="Smiling man holding a phone in front of a city skyline and car tower at dusk"
+          alt="Smiling My Car team member handing over car keys in front of the My Car dealership"
           width={1920}
           height={1088}
           fetchPriority="high"
-          className="absolute inset-0 -z-10 h-full w-full object-cover object-[75%_center]"
+          className="absolute inset-0 -z-10 h-full w-full object-cover object-[70%_center]"
         />
         <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary via-primary/80 to-primary/0 md:via-primary/55" />
         <div className="absolute inset-x-0 bottom-0 -z-10 h-1/2 bg-gradient-to-t from-primary/90 to-transparent" />
@@ -410,174 +415,71 @@ function Home() {
         </div>
       )}
 
-      {/* FRESH ON THE LOT */}
-      <section className="mx-auto max-w-7xl px-4 py-12 md:py-16">
-        <div className="flex items-end justify-between">
-          <h2 className="font-display text-2xl font-black tracking-tight md:text-3xl">Fresh on the lot</h2>
-          <Link to="/search" className="text-sm font-semibold text-primary hover:underline">
-            View all inventory
-          </Link>
-        </div>
-        {featuredLoading ? (
-          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4" aria-label="Loading inventory">
-            {Array.from({ length: 4 }).map((_, index) => (
-              <div key={index} className="h-[320px] animate-pulse rounded-2xl bg-muted" />
-            ))}
-          </div>
-        ) : featured && featured.length > 0 ? (
-          <div className="mt-6 grid gap-5 sm:grid-cols-2 lg:grid-cols-4">
-            {featured.map((v) => (
-              <HomeVehicleCard key={v.id} vehicle={v} />
-            ))}
-          </div>
-        ) : (
-          <div className="mt-6 rounded-2xl border border-dashed border-border bg-surface/40 px-6 py-10 text-center">
-            <div className="mx-auto flex size-12 items-center justify-center rounded-full bg-muted">
-              <Car className="size-6 text-muted-foreground" />
+      {/* PRICE DROPS (dynamic) */}
+      {dropCount > 0 && (
+        <section className="mx-auto max-w-7xl px-4 py-10">
+          <div className="relative grid items-center gap-8 overflow-hidden rounded-3xl bg-gradient-to-r from-primary via-primary/90 to-primary px-8 py-12 text-primary-foreground md:grid-cols-2 md:px-16">
+            <div>
+              <h2 className="font-display text-2xl font-bold leading-snug md:text-3xl">
+                We&apos;re always repricing inventory to make room for more vehicles.
+              </h2>
+              <Link to="/search" search={{ deal: "price-drop" }} className="mt-4 inline-block font-semibold underline underline-offset-4 hover:text-accent">
+                Shop All {dropCount} Price {dropCount === 1 ? "Drop" : "Drops"}
+              </Link>
             </div>
-            <h3 className="mt-4 font-display text-lg font-bold">
-              {facets?.total === 0 ? "No vehicles currently available" : "Fresh arrivals are being updated"}
-            </h3>
-            <p className="mx-auto mt-2 max-w-xl text-sm leading-6 text-muted-foreground">
-              Inventory changes often. Browse everything or tell us what you&apos;re looking for.
-            </p>
-            <div className="mt-5 flex flex-col justify-center gap-2 sm:flex-row">
-              <Button asChild variant="outline">
-                <Link to="/search">View all inventory</Link>
-              </Button>
-              <Button type="button" className={ctaButtonClass} onClick={() => setCarFinderOpen(true)}>
-                Use Car Finder
-              </Button>
-            </div>
+            {dropVehicle && (
+              <Link to="/inventory/$slug" params={{ slug: dropVehicle.slug }} className="relative mx-auto h-48 w-full max-w-md">
+                <div className="absolute left-[18%] top-0 w-52 rounded-xl bg-card p-3 shadow-xl">
+                  <img src={coverOf(dropVehicle)} alt={`${dropVehicle.year} ${dropVehicle.make} ${dropVehicle.model}`} loading="lazy" className="aspect-[4/3] w-full rounded-lg object-cover" />
+                  <div className="mt-3 h-2.5 w-3/4 rounded bg-muted" />
+                  <div className="mt-2 h-2.5 w-1/2 rounded bg-muted" />
+                </div>
+                <span className="absolute left-0 top-3 -rotate-3 rounded-full bg-success px-4 py-2 text-sm font-bold text-success-foreground shadow-lg">Price Drop</span>
+                <div className="absolute right-0 top-14 flex rotate-3 items-center gap-3 rounded-xl bg-card px-4 py-3 text-card-foreground shadow-xl">
+                  <span className="flex size-9 items-center justify-center rounded-full bg-success text-success-foreground"><TrendingDown className="size-5" /></span>
+                  <div>
+                    <div className="font-display text-2xl font-black">{formatUsd(dropVehicle.price_cents)}</div>
+                    <div className="text-xs text-muted-foreground">was <s>{formatUsd(dropVehicle.prior_price_cents)}</s></div>
+                  </div>
+                </div>
+              </Link>
+            )}
           </div>
-        )}
-      </section>
-
+        </section>
+      )}
       {/* POPULAR MODELS */}
       {models.length > 0 && (
-        <HomeRail title="Shop popular models" itemClassName="basis-[55%] sm:basis-1/3 lg:basis-1/5">
-          {models.map((m) => (
-            <Link
-              key={`${m.make}-${m.model}`}
-              to="/search"
-              search={{ make: m.make, model: m.model }}
-              className="group block rounded-2xl border border-border bg-card p-3 transition duration-300 hover:-translate-y-1 hover:border-accent hover:shadow-[var(--shadow-lift)]"
-            >
-              <div className="aspect-[4/3] overflow-hidden rounded-xl bg-muted">
-                <img
-                  src={m.image}
-                  alt={`${m.make} ${m.model}`}
-                  loading="lazy"
-                  className="h-full w-full object-cover transition duration-500 group-hover:scale-105"
-                />
-              </div>
-              <div className="px-1 pb-1 pt-3">
-                <div className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">{m.make}</div>
-                <div className="font-display text-base font-bold">{m.model}</div>
-              </div>
-            </Link>
-          ))}
-        </HomeRail>
+        <ScrollReveal>
+          <HomeRail title="Shop popular models" itemClassName="basis-[62%] sm:basis-1/3 lg:basis-1/5">
+            {models.map((m) => (
+              <Link
+                key={`${m.make}-${m.model}`}
+                to="/search"
+                search={{ make: m.make, model: m.model }}
+                className="group flex h-full flex-col rounded-2xl bg-surface p-5 transition duration-300 hover:-translate-y-1 hover:shadow-[var(--shadow-lift)]"
+              >
+                <div className="text-sm text-muted-foreground">{m.make}</div>
+                <div className="font-display text-lg font-bold">{m.model}</div>
+                <div className="mt-6 aspect-[4/3] overflow-hidden rounded-xl">
+                  <img
+                    src={m.image}
+                    alt={`${m.make} ${m.model}`}
+                    loading="lazy"
+                    className="h-full w-full object-cover mix-blend-multiply transition duration-500 group-hover:scale-105"
+                  />
+                </div>
+              </Link>
+            ))}
+          </HomeRail>
+        </ScrollReveal>
       )}
 
       {/* BRAND STORY */}
       <BrandStory />
 
-      {/* TRUST */}
-      <section className="bg-surface">
-        <div className="mx-auto grid max-w-7xl items-center gap-10 px-4 py-16 md:grid-cols-2 md:py-24">
-          <img
-            src={trustImage}
-            alt="A dealership representative reviewing vehicle details with a shopper"
-            width={1280}
-            height={1024}
-            loading="lazy"
-            className="aspect-[5/4] w-full rounded-3xl object-cover shadow-[var(--shadow-card)]"
-          />
-          <div>
-            <h2 className="font-display text-3xl font-black leading-tight tracking-tight md:text-5xl">
-              Real people. Real cars. A better buying experience.
-            </h2>
-            <p className="mt-5 max-w-lg text-base leading-7 text-muted-foreground">
-              My Car is a local Fredericksburg dealership. Browse our real inventory online, ask questions, and start
-              your purchase when you&apos;re ready — our team is here to help along the way.
-            </p>
-            <ol className="mt-8 space-y-4">
-              {[
-                ["Find your car", "Search live inventory with real photos and prices."],
-                ["Choose how to pay", "Cash, My Car financing, or your own lender."],
-                ["Finish with our team", "We confirm details and help you take it home."],
-              ].map(([t, d], i) => (
-                <li key={t} className="flex gap-4">
-                  <span className="flex size-9 shrink-0 items-center justify-center rounded-full bg-primary font-display text-sm font-black text-primary-foreground">
-                    {i + 1}
-                  </span>
-                  <div>
-                    <div className="font-semibold">{t}</div>
-                    <div className="text-sm text-muted-foreground">{d}</div>
-                  </div>
-                </li>
-              ))}
-            </ol>
-            <Button asChild size="lg" className={`${ctaButtonClass} mt-8`}>
-              <Link to="/search">
-                Explore vehicles <ArrowRight className="size-4" />
-              </Link>
-            </Button>
-          </div>
-        </div>
-      </section>
+      <CustomerGallery />
 
-      {/* PRICE DROPS */}
-      {dropCount > 0 && (
-        <section className="mx-auto max-w-7xl px-4 py-12 md:py-16">
-          <div className="relative isolate overflow-hidden rounded-3xl bg-primary px-6 py-10 text-primary-foreground md:px-12 md:py-14">
-            {dropImage && (
-              <img
-                src={dropImage}
-                alt=""
-                loading="lazy"
-                className="absolute inset-y-0 right-0 -z-10 hidden h-full w-1/2 object-cover opacity-60 md:block"
-              />
-            )}
-            <div className="absolute inset-0 -z-10 bg-gradient-to-r from-primary via-primary/90 to-primary/20" />
-            <div className="max-w-lg">
-              <span className="inline-flex items-center gap-1.5 rounded-full bg-success px-3 py-1 text-xs font-bold text-success-foreground">
-                <TrendingDown className="size-3.5" /> {dropCount} price {dropCount === 1 ? "drop" : "drops"}
-              </span>
-              <h2 className="mt-4 font-display text-3xl font-black tracking-tight md:text-5xl">
-                Fresh prices. More possibilities.
-              </h2>
-              <p className="mt-3 text-primary-foreground/80">Explore vehicles with recently reduced prices.</p>
-              <Button asChild size="lg" className={`${ctaButtonClass} mt-6`}>
-                <Link to="/search" search={{ deal: "price-drop" }}>
-                  Shop Price Drops
-                </Link>
-              </Button>
-            </div>
-          </div>
-        </section>
-      )}
-
-      {/* SERVICE AREAS */}
-      <section className="mx-auto max-w-7xl px-4 pb-20 pt-8">
-        <h2 className="font-display text-2xl font-black tracking-tight">Serving the Fredericksburg region</h2>
-        <div className="mt-6 grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          {(areas ?? []).map((a) => (
-            <Link
-              key={a.id}
-              to="/locations/$slug"
-              params={{ slug: a.slug }}
-              className="group rounded-2xl border border-border bg-card p-5 transition hover:border-accent"
-            >
-              <div className="flex items-center gap-2 font-semibold">
-                <MapPin className="size-4 text-accent" /> Used cars in {a.name}, {a.state}
-              </div>
-              <p className="mt-2 line-clamp-2 text-sm text-muted-foreground">{a.intro}</p>
-            </Link>
-          ))}
-        </div>
-      </section>
+      <DealershipMap phone={(settings as { phone?: string | null } | null | undefined)?.phone ?? null} />
 
       <Dialog open={carFinderOpen} onOpenChange={setCarFinderOpen}>
         <DialogContent className="max-h-[92vh] overflow-y-auto p-0 sm:max-w-3xl">

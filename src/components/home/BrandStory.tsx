@@ -45,8 +45,8 @@ export function BrandStory() {
         <div className="brand-story-text relative z-10 text-center">
           <p className="text-xs font-bold uppercase tracking-[0.3em] text-accent">The My Car promise</p>
           <h2 className="mt-4 font-display text-[clamp(2.6rem,8vw,6.5rem)] font-black leading-[0.95] tracking-[-0.045em] text-primary">
-            Your next car.
-            <span className="block">Your next chapter.</span>
+            We’ll make every drive
+            <span className="block">feel like a dream come true.</span>
           </h2>
         </div>
         <div className="brand-story-image relative mt-8 w-full max-w-6xl overflow-hidden rounded-3xl shadow-[var(--shadow-lift)]">
