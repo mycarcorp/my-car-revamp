@@ -977,12 +977,13 @@ function AdminVehicleDetailsDialog({
               </section>
             )}
 
-            {vehicle.description && (
-              <section className="mt-8">
+            {descriptionToSafeHtml(vehicle.description) && (
+              <section className="mt-8 rounded-xl border border-border bg-card p-5 sm:p-6">
                 <h3 className="font-display text-lg font-bold text-foreground">About this vehicle</h3>
-                <p className="mt-3 whitespace-pre-line text-sm leading-relaxed text-muted-foreground">
-                  {vehicle.description}
-                </p>
+                <div
+                  className="vehicle-description mt-3 text-sm text-muted-foreground"
+                  dangerouslySetInnerHTML={{ __html: descriptionToSafeHtml(vehicle.description) }}
+                />
               </section>
             )}
           </div>
