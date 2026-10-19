@@ -37,3 +37,14 @@ export type ProspectInput = z.infer<typeof prospectSchema>;
 export type Prospect = ProspectInput & { id: string; updatedAt: string; updatedBy: string };
 export const inspectionSchema = z.object({ url: z.string().url().max(2048).refine((value) => { const u = new URL(value); return u.origin === "https://mycarcorp.com"; }, "Choose a page on https://mycarcorp.com." ) });
 export type Inspection = { url: string; inspectedAt: string; lastCrawlTime: string | null; verdict: string | null; coverageState: string | null; indexingState: string | null; googleCanonical: string | null };
+export type LeadAttributionReport = {
+  startDate: string;
+  endDate: string;
+  scanned: number;
+  total: number | null;
+  complete: boolean;
+  bySource: Array<{ source: string; count: number }>;
+  byMedium: Array<{ medium: string; count: number }>;
+  byCampaign: Array<{ campaign: string; count: number }>;
+  byLeadType: Array<{ leadType: string; count: number }>;
+};
