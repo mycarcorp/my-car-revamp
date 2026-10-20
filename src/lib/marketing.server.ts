@@ -2,6 +2,7 @@ import { unzipSync } from "fflate";
 import { getRequest } from "@tanstack/react-start/server";
 import { appAdminCreds } from "./app-admin.server";
 import { emptySnapshot, mergeArticles, resolveProperty, type MarketingSnapshot, type ServiceReport, type SearchReport, type SearchRow, type ResearchReport, type SemrushTable, type LighthouseReport, type SiteHealth, type Prospect, type ProspectInput, type Inspection, type LeadAttributionReport } from "./marketing";
+import { aggregateLeadAttribution, ATTRIBUTION_PAGE_SIZE, MAX_ATTRIBUTION_ROWS, resolveAttributionRange, type AttributionRangeInput } from "./marketing-attribution";
 
 const BUCKET = "marketing-private";
 const ORIGIN = "https://mycarcorp.com";
@@ -15,54 +16,37 @@ export async function requireMarketingStaff() {
   const { requireStaff } = await import("./legacy-blog.server");
   return requireStaff(token);
 }
-export async function readLeadAttribution(days: 30 | 90): Promise<LeadAttributionReport> {
-  const end = new Date();
-  const start = new Date(end.getTime() - days * 86400000);
-  const endDate = end.toISOString().slice(0, 10);
-  const startDate = start.toISOString().slice(0, 10);
+export async function readLeadAttribution(input: AttributionRangeInput): Promise<LeadAttributionReport> {
+  const range = resolveAttributionRange(input);
   const { url, key } = appAdminCreds();
   const headers: Record<string, string> = {
     apikey: key,
     Accept: "application/json",
     "Accept-Profile": "public",
     Prefer: "count=exact",
-    Range: "0-9999",
+    "Range-Unit": "items",
   };
   if (key.split(".").length === 3) headers.Authorization = `Bearer ${key}`;
   const endpoint = new URL("/rest/v1/leads", url);
   endpoint.searchParams.set("select", "lead_type,details,created_at");
-  endpoint.searchParams.set("created_at", `gte.${start.toISOString()}`);
+  endpoint.searchParams.set("and", `(created_at.gte.${range.startInclusive},created_at.lt.${range.endExclusive})`);
   endpoint.searchParams.set("order", "created_at.desc");
-  const response = await fetch(endpoint, { headers, cache: "no-store" });
-  if (!response.ok) throw new Error(`Could not load lead attribution (${response.status}).`);
-  const rows = (await response.json()) as Array<{
-    lead_type?: string | null;
-    details?: Record<string, unknown> | null;
-    created_at?: string | null;
-  }>;
-  const range = response.headers.get("content-range")?.split("/")[1];
-  const parsedTotal = range && range !== "*" ? Number(range) : NaN;
-  const total = Number.isFinite(parsedTotal) ? parsedTotal : null;
-  const countBy = (values: string[]) => {
-    const counts = new Map<string, number>();
-    for (const value of values) counts.set(value, (counts.get(value) ?? 0) + 1);
-    return [...counts.entries()].map(([label, count]) => ({ label, count })).sort((a, b) => b.count - a.count || a.label.localeCompare(b.label));
-  };
-  const sources = countBy(rows.map((row) => String(row.details?.["lead_source"] ?? "Unattributed").trim() || "Unattributed"));
-  const mediums = countBy(rows.map((row) => String(row.details?.["lead_medium"] ?? "Unattributed").trim() || "Unattributed"));
-  const campaigns = countBy(rows.map((row) => String(row.details?.["utm_campaign"] ?? "Unattributed").trim() || "Unattributed"));
-  const leadTypes = countBy(rows.map((row) => String(row.lead_type ?? "Unknown").trim() || "Unknown"));
-  return {
-    startDate,
-    endDate,
-    scanned: rows.length,
-    total,
-    complete: total !== null && total <= rows.length,
-    bySource: sources.map(({ label: source, count }) => ({ source, count })),
-    byMedium: mediums.map(({ label: medium, count }) => ({ medium, count })),
-    byCampaign: campaigns.map(({ label: campaign, count }) => ({ campaign, count })),
-    byLeadType: leadTypes.map(({ label: leadType, count }) => ({ leadType, count })),
-  };
+  const rows: Array<{ lead_type?: string | null; details?: Record<string, unknown> | null; created_at?: string | null }> = [];
+  let total: number | null = null;
+  for (let offset = 0; offset < MAX_ATTRIBUTION_ROWS; offset += ATTRIBUTION_PAGE_SIZE) {
+    const pageHeaders = { ...headers, Range: `${offset}-${offset + ATTRIBUTION_PAGE_SIZE - 1}` };
+    const response = await fetch(endpoint, { headers: pageHeaders, cache: "no-store" });
+    if (!response.ok) throw new Error(`Could not load lead attribution (${response.status}).`);
+    const page = (await response.json()) as typeof rows;
+    rows.push(...page.slice(0, MAX_ATTRIBUTION_ROWS - rows.length));
+    if (total === null) {
+      const contentRange = response.headers.get("content-range")?.split("/")[1];
+      const parsedTotal = contentRange && contentRange !== "*" ? Number(contentRange) : NaN;
+      total = Number.isFinite(parsedTotal) ? parsedTotal : null;
+    }
+    if (page.length < ATTRIBUTION_PAGE_SIZE || (total !== null && rows.length >= total)) break;
+  }
+  return aggregateLeadAttribution(rows, range, total);
 }
 function storageHeaders() { const { key } = appAdminCreds(); return { apikey: key, ...(key.split(".").length === 3 ? { Authorization: `Bearer ${key}` } : {}), "Content-Type": "application/json" }; }
 async function storage(path: string, init: RequestInit = {}) { const { url } = appAdminCreds(); return fetch(`${url}/storage/v1/${path}`, { ...init, headers: { ...storageHeaders(), ...init.headers }, signal: AbortSignal.timeout(25000) }); }

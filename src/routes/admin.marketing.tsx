@@ -20,7 +20,9 @@ import {
   Users,
   Settings2,
   ClipboardList,
+  Download,
 } from "lucide-react";
+import { CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
@@ -29,6 +31,7 @@ import { Badge } from "@/components/ui/badge";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
+import { ChartContainer, ChartTooltipContent } from "@/components/ui/chart";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import {
   Select,
@@ -62,6 +65,7 @@ import {
   type Prospect,
   type LeadAttributionReport,
 } from "@/lib/marketing";
+import { buildAttributionCsv, type AttributionRangeInput } from "@/lib/marketing-attribution";
 
 export const Route = createFileRoute("/admin/marketing")({
   head: () => ({
@@ -291,10 +295,16 @@ function Marketing() {
     staleTime: 60000,
     retry: false,
   });
-  const [attributionDays, setAttributionDays] = useState<30 | 90>(30);
+  const [attributionRange, setAttributionRange] = useState<AttributionRangeInput>({ preset: 30 });
+  const [customStartDate, setCustomStartDate] = useState(() => {
+    const date = new Date();
+    date.setUTCDate(date.getUTCDate() - 29);
+    return date.toISOString().slice(0, 10);
+  });
+  const [customEndDate, setCustomEndDate] = useState(() => new Date().toISOString().slice(0, 10));
   const attributionQuery = useQuery({
-    queryKey: ["marketing", "lead-attribution", user?.id, attributionDays],
-    queryFn: () => getAttribution({ data: { days: attributionDays } }),
+    queryKey: ["marketing", "lead-attribution", user?.id, attributionRange],
+    queryFn: () => getAttribution({ data: attributionRange }),
     enabled: Boolean(session && isStaff),
     staleTime: 60000,
     retry: false,
@@ -382,6 +392,15 @@ function Marketing() {
     } finally {
       setBusy(null);
     }
+  }
+  function exportAttributionCsv(report: LeadAttributionReport) {
+    const blob = new Blob([buildAttributionCsv(report)], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `lead-attribution-${report.startDate}-to-${report.endDate}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
   }
   const refreshButton = (service: keyof MarketingSnapshot, label = "Refresh report") => (
     <Button
@@ -543,8 +562,8 @@ function Marketing() {
                 <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
                   {attributionQuery.data.bySource.slice(0, 4).map((row) => (
                     <Metric
-                      key={row.source}
-                      label={row.source}
+                      key={`${row.source}-${row.evidence}`}
+                      label={`${row.source} · ${row.evidence}`}
                       value={number(row.count)}
                       detail={`${attributionQuery.data!.startDate} – ${attributionQuery.data!.endDate} · recorded leads`}
                       icon={Users}
@@ -1027,43 +1046,58 @@ function Marketing() {
           <TabsContent value="attribution">
             <Section
               title="Lead attribution"
-              subtitle="Aggregated from saved lead records. These are lead counts, not ad-platform conversion counts."
+              subtitle="Observed MyCar lead records only. Inferred attribution is labeled; counts are not ad-platform conversions."
+              actions={
+                attributionQuery.data && (
+                  <Button variant="outline" size="sm" onClick={() => exportAttributionCsv(attributionQuery.data!)}>
+                    <Download className="size-3.5" />
+                    Export CSV
+                  </Button>
+                )
+              }
             >
-              <div className="flex flex-wrap items-center justify-between gap-3 border-y border-border py-3">
-                <p className="text-sm text-muted-foreground">
-                  Window:{" "}
-                  {attributionQuery.data
-                    ? `${attributionQuery.data.startDate} – ${attributionQuery.data.endDate}`
-                    : `${attributionDays} days`}
-                </p>
-                <div className="flex gap-2">
-                  <Button
-                    size="sm"
-                    variant={attributionDays === 30 ? "default" : "outline"}
-                    onClick={() => setAttributionDays(30)}
-                  >
-                    30 days
-                  </Button>
-                  <Button
-                    size="sm"
-                    variant={attributionDays === 90 ? "default" : "outline"}
-                    onClick={() => setAttributionDays(90)}
-                  >
-                    90 days
-                  </Button>
-                  <Button
-                    size="icon"
-                    variant="outline"
-                    aria-label="Refresh attribution report"
-                    disabled={attributionQuery.isFetching}
-                    onClick={() => void attributionQuery.refetch()}
-                  >
-                    <RefreshCw
-                      className={`size-4 ${attributionQuery.isFetching ? "animate-spin" : ""}`}
-                    />
-                  </Button>
+              <form
+                className="flex flex-wrap items-end gap-3 border-y border-border py-4"
+                onSubmit={(event) => {
+                  event.preventDefault();
+                  setAttributionRange({ preset: "custom", startDate: customStartDate, endDate: customEndDate });
+                }}
+              >
+                <div className="flex gap-2" role="group" aria-label="Attribution date preset">
+                  {([7, 30, 90] as const).map((days) => (
+                    <Button
+                      key={days}
+                      type="button"
+                      size="sm"
+                      variant={attributionRange.preset === days ? "default" : "outline"}
+                      onClick={() => setAttributionRange({ preset: days })}
+                    >
+                      {days} days
+                    </Button>
+                  ))}
                 </div>
-              </div>
+                <div className="flex flex-wrap items-end gap-2">
+                  <div className="space-y-1">
+                    <Label htmlFor="attribution-start">Start date (UTC)</Label>
+                    <Input id="attribution-start" type="date" value={customStartDate} onChange={(event) => setCustomStartDate(event.target.value)} required />
+                  </div>
+                  <div className="space-y-1">
+                    <Label htmlFor="attribution-end">End date (UTC)</Label>
+                    <Input id="attribution-end" type="date" value={customEndDate} onChange={(event) => setCustomEndDate(event.target.value)} required />
+                  </div>
+                  <Button type="submit" size="sm" variant={attributionRange.preset === "custom" ? "default" : "outline"}>Apply dates</Button>
+                </div>
+                <Button
+                  type="button"
+                  size="icon"
+                  variant="outline"
+                  aria-label="Refresh attribution report"
+                  disabled={attributionQuery.isFetching}
+                  onClick={() => void attributionQuery.refetch()}
+                >
+                  <RefreshCw className={`size-4 ${attributionQuery.isFetching ? "animate-spin" : ""}`} />
+                </Button>
+              </form>
               {attributionQuery.isPending ? (
                 <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground">
                   <Loader2 className="size-4 animate-spin" />
@@ -1078,6 +1112,12 @@ function Marketing() {
                 </div>
               ) : attributionQuery.data ? (
                 <>
+                  <div className="flex flex-wrap justify-between gap-2 py-3 text-xs text-muted-foreground">
+                    <span>
+                      {attributionQuery.data.startDate} – {attributionQuery.data.endDate} UTC · {number(attributionQuery.data.total ?? attributionQuery.data.scanned)} total leads · {number(attributionQuery.data.scanned)} scanned
+                    </span>
+                    <span>Updated {date(attributionQuery.data.generatedAt)} · source labels from saved lead details</span>
+                  </div>
                   {!attributionQuery.data.complete && (
                     <div
                       role="status"
@@ -1085,7 +1125,7 @@ function Marketing() {
                     >
                       Showing {number(attributionQuery.data.scanned)} of{" "}
                       {number(attributionQuery.data.total)} matching leads. This report is partial;
-                      use the customer records for a complete view.
+                      all breakdowns and exports cover scanned records only and must not be treated as totals.
                     </div>
                   )}
                   <div className="grid gap-3 py-4 sm:grid-cols-2 xl:grid-cols-4">
@@ -1105,7 +1145,7 @@ function Marketing() {
                         attributionQuery.data.bySource.find((row) => row.source === "Unattributed")
                           ?.count ?? 0,
                       )}
-                      detail="No source label saved with the lead"
+                      detail="No normalized source label saved with the lead"
                       icon={Activity}
                     />
                     <Metric
@@ -1127,35 +1167,62 @@ function Marketing() {
                   </div>
                   <div className="grid gap-6 xl:grid-cols-2">
                     <Section
-                      title="Source"
-                      subtitle="Captured first/last-touch source summarized by the saved lead_source value."
+                      title="Latest recorded source"
+                      subtitle="Normalized source with saved evidence level and original utm_source values."
                     >
-                      <CountTable
-                        rows={attributionQuery.data.bySource}
-                        label="Source"
-                        field="source"
-                      />
+                      {attributionQuery.data.bySource.length ? (
+                        <div className="overflow-x-auto">
+                          <table className="w-full text-left text-sm">
+                            <thead className="border-y border-border bg-muted/40 text-xs text-muted-foreground"><tr><th className="px-3 py-3">Source</th><th className="px-3 py-3">Evidence</th><th className="px-3 py-3">Raw utm_source</th><th className="px-3 py-3">Raw utm_medium</th><th className="px-3 py-3">Raw utm_campaign</th><th className="px-3 py-3">Leads</th></tr></thead>
+                            <tbody>{attributionQuery.data.bySource.map((row, index) => (
+                              <tr key={`${row.source}-${row.evidence}-${index}`} className="border-b border-border">
+                                <td className="px-3 py-3 font-medium">{row.source}</td>
+                                <td className="px-3"><Badge variant={row.evidence === "confirmed" ? "default" : "outline"}>{row.evidence}</Badge></td>
+                                <td className="px-3 py-3 text-xs">{row.rawUtmSources.map((raw) => `${raw.label} (${raw.count})`).join(", ")}</td>
+                                <td className="px-3 py-3 text-xs">{row.rawUtmMediums.map((raw) => `${raw.label} (${raw.count})`).join(", ")}</td>
+                                <td className="px-3 py-3 text-xs">{row.rawUtmCampaigns.map((raw) => `${raw.label} (${raw.count})`).join(", ")}</td>
+                                <td className="px-3">{number(row.count)}</td>
+                              </tr>
+                            ))}</tbody>
+                          </table>
+                        </div>
+                      ) : <Empty>No leads were recorded in this date range.</Empty>}
                     </Section>
-                    <Section title="Medium">
-                      <CountTable
-                        rows={attributionQuery.data.byMedium}
-                        label="Medium"
-                        field="medium"
-                      />
+                    <Section title="Daily lead trend" subtitle="Buckets use actual lead creation timestamps grouped by UTC calendar date.">
+                      {attributionQuery.data.daily.length ? (
+                        <ChartContainer config={{ leads: { label: "Leads", color: "var(--color-primary)" } }} className="h-64 w-full aspect-auto">
+                          <LineChart data={attributionQuery.data.daily} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}>
+                            <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                            <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={24} />
+                            <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={32} />
+                            <Tooltip content={<ChartTooltipContent />} />
+                            <Line type="monotone" dataKey="count" name="leads" stroke="var(--color-leads)" strokeWidth={2} dot={false} />
+                          </LineChart>
+                        </ChartContainer>
+                      ) : <Empty>No dated lead records in this range.</Empty>}
                     </Section>
-                    <Section title="Campaign">
-                      <CountTable
-                        rows={attributionQuery.data.byCampaign}
-                        label="Campaign"
-                        field="campaign"
-                      />
+                    <Section title="First touch" subtitle={`${number(attributionQuery.data.firstTouch.missing)} leads have no saved first-touch record.`}>
+                      <CountTable rows={attributionQuery.data.firstTouch.bySource} label="Source · evidence" field="source" />
+                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        <CountTable rows={attributionQuery.data.firstTouch.byMedium} label="Medium" field="label" />
+                        <CountTable rows={attributionQuery.data.firstTouch.byCampaign} label="Campaign" field="label" />
+                      </div>
                     </Section>
-                    <Section title="Lead type">
-                      <CountTable
-                        rows={attributionQuery.data.byLeadType}
-                        label="Lead type"
-                        field="leadType"
-                      />
+                    <Section title="Last touch" subtitle={`${number(attributionQuery.data.lastTouch.missing)} leads have no saved last-touch record.`}>
+                      <CountTable rows={attributionQuery.data.lastTouch.bySource} label="Source · evidence" field="source" />
+                      <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                        <CountTable rows={attributionQuery.data.lastTouch.byMedium} label="Medium" field="label" />
+                        <CountTable rows={attributionQuery.data.lastTouch.byCampaign} label="Campaign" field="label" />
+                      </div>
+                    </Section>
+                    <Section title="Lead form type">
+                      <CountTable rows={attributionQuery.data.byLeadType} label="Database lead type" field="leadType" />
+                    </Section>
+                    <Section title="Business intent">
+                      <CountTable rows={attributionQuery.data.byIntent} label="Intent" field="intent" />
+                    </Section>
+                    <Section title="Purchase request kind">
+                      <CountTable rows={attributionQuery.data.byRequestKind} label="Request kind" field="requestKind" />
                     </Section>
                   </div>
                   <p className="mt-3 text-xs text-muted-foreground">
