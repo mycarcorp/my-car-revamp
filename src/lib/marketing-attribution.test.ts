@@ -1,7 +1,9 @@
 import { describe, expect, it } from "vitest";
 import {
   aggregateLeadAttribution,
+  aggregateLeadOutcomes,
   buildAttributionCsv,
+  filterLeadsByCreatedRange,
   resolveAttributionRange,
   type AttributionLeadRow,
 } from "./marketing-attribution";
@@ -154,5 +156,171 @@ describe("marketing attribution aggregation", () => {
     expect(csv.split("\r\n").every((line) => (line.match(/","/g) ?? []).length === columns - 1)).toBe(true);
     expect(csv).toContain('"coverage"');
     expect(csv).toContain('"generated_at_utc"');
+  });
+});
+
+describe("verified marketing outcomes", () => {
+  const leads: AttributionLeadRow[] = [
+    {
+      id: "lead-appointment",
+      lead_type: "appointment",
+      created_at: "2026-10-20T23:59:59.999Z",
+      details: {
+        first_touch_source: "Google Organic",
+        first_touch_source_evidence: "inferred",
+        last_touch_source: "TikTok",
+        last_touch_source_evidence: "confirmed",
+      },
+    },
+    {
+      id: "lead-purchase",
+      lead_type: "purchase",
+      created_at: "2026-10-21T00:00:00.000Z",
+      details: { lead_source: "Direct Traffic", source_evidence: "unknown" },
+    },
+    { id: "lead-no-attribution", lead_type: "appointment", details: null },
+  ];
+
+  it("separates appointment requests from confirmed linked appointment rows", () => {
+    const report = aggregateLeadOutcomes({
+      leads,
+      appointmentRequestsTotal: 2,
+      appointmentRequestsAvailable: true,
+      appointmentRequestsComplete: true,
+      appointments: [
+        { id: "appt-1", lead_id: "lead-appointment", confirmed: true },
+        { id: "appt-1", lead_id: "lead-appointment", confirmed: true },
+        { id: "appt-pending", lead_id: "lead-appointment", confirmed: false },
+        { id: "appt-wrong-lead", lead_id: "lead-purchase", confirmed: true },
+      ],
+      confirmedAppointmentMissingRelationship: 1,
+      appointmentsComplete: true,
+      purchases: [],
+      unlinkedCompletedPurchases: 0,
+      completedPurchaseMissingRelationship: 0,
+      purchasesComplete: true,
+      leadCohortComplete: true,
+    });
+
+    expect(report.appointmentRequests.count).toBe(2);
+    expect(report.appointmentRequestsWithoutRecord).toMatchObject({ count: 1, status: "available" });
+    expect(report.confirmedAppointments.count).toBe(1);
+    expect(report.confirmedAppointments.missingRelationship).toBe(2);
+    expect(report.confirmedAppointments.byFirstTouchSource).toMatchObject([
+      { source: "Google Organic", evidence: "inferred", count: 1 },
+    ]);
+    expect(report.confirmedAppointments.byLastTouchSource).toMatchObject([
+      { source: "TikTok", evidence: "confirmed", count: 1 },
+    ]);
+  });
+
+  it("counts completed linked purchases once, excludes pending and isolates unlinked completed", () => {
+    const report = aggregateLeadOutcomes({
+      leads: [...leads,
+        { id: "purchase-fallback", lead_type: "availability", details: { request_kind: "purchase", lead_source: "TikTok", source_evidence: "inferred" } },
+        { id: "ordinary-availability", lead_type: "availability", details: { request_kind: "vehicle_availability", lead_source: "Reddit" } },
+      ],
+      appointmentRequestsTotal: 2,
+      appointmentRequestsAvailable: true,
+      appointmentRequestsComplete: true,
+      appointments: [],
+      confirmedAppointmentMissingRelationship: 0,
+      appointmentsComplete: true,
+      purchases: [
+        { id: 5, lead_id: "lead-purchase", status: "completed" },
+        { id: 5, lead_id: "lead-purchase", status: "completed" },
+        { id: 6, lead_id: "lead-purchase", status: "submitted" },
+        { id: 7, lead_id: null, status: "completed" },
+        { id: 8, lead_id: "lead-appointment", status: "completed" },
+        { id: 9, lead_id: "lead-no-attribution", status: "completed" },
+        { id: 10, lead_id: "purchase-fallback", status: "completed" },
+        { id: 11, lead_id: "ordinary-availability", status: "completed" },
+      ],
+      unlinkedCompletedPurchases: 1,
+      completedPurchaseMissingRelationship: 1,
+      purchasesComplete: true,
+      leadCohortComplete: true,
+    });
+
+    expect(report.completedPurchases.count).toBe(2);
+    expect(report.completedPurchases.unlinkedCompleted).toBe(1);
+    expect(report.completedPurchases.missingRelationship).toBe(5);
+    expect(report.completedPurchases.unknownAttribution).toBe(1);
+    expect(report.completedPurchases.byLastTouchSource).toMatchObject([
+      { source: "Direct Traffic", evidence: "unknown", count: 1 },
+      { source: "TikTok", evidence: "inferred", count: 1 },
+    ]);
+  });
+
+  it("returns unavailable rather than zero when outcome schema access is missing", () => {
+    const report = aggregateLeadOutcomes({
+      leads,
+      appointmentRequestsTotal: 2,
+      appointmentRequestsAvailable: true,
+      appointmentRequestsComplete: true,
+      appointments: null,
+      confirmedAppointmentMissingRelationship: null,
+      appointmentsComplete: false,
+      purchases: null,
+      unlinkedCompletedPurchases: null,
+      completedPurchaseMissingRelationship: null,
+      purchasesComplete: false,
+      leadCohortComplete: true,
+    });
+
+    expect(report.confirmedAppointments).toMatchObject({ status: "unavailable", count: null });
+    expect(report.appointmentRequestsWithoutRecord).toMatchObject({ status: "unavailable", count: null });
+    expect(report.completedPurchases).toMatchObject({ status: "unavailable", count: null, unlinkedStatus: "unavailable", unlinkedCompleted: null });
+  });
+
+  it("reports request totals unavailable when the exact lead count cannot be read", () => {
+    const report = aggregateLeadOutcomes({
+      leads,
+      appointmentRequestsTotal: null,
+      appointmentRequestsAvailable: false,
+      appointmentRequestsComplete: false,
+      appointments: [],
+      confirmedAppointmentMissingRelationship: 0,
+      appointmentsComplete: true,
+      purchases: [],
+      unlinkedCompletedPurchases: 0,
+      completedPurchaseMissingRelationship: 0,
+      purchasesComplete: true,
+      leadCohortComplete: false,
+    });
+    expect(report.appointmentRequests).toMatchObject({ status: "unavailable", count: null, complete: false });
+  });
+
+  it("uses inclusive lead-created start and exclusive end for the outcome cohort", () => {
+    const range = resolveAttributionRange(
+      { preset: "custom", startDate: "2026-10-20", endDate: "2026-10-20" },
+      new Date("2026-10-21T12:00:00Z"),
+    );
+    const cohort = filterLeadsByCreatedRange([
+      { id: "before", created_at: "2026-10-19T23:59:59.999Z" },
+      { id: "start", created_at: "2026-10-20T00:00:00.000Z" },
+      { id: "end", created_at: "2026-10-20T23:59:59.999Z" },
+      { id: "after", created_at: "2026-10-21T00:00:00.000Z" },
+    ], range);
+    expect(cohort.map((lead) => lead.id)).toEqual(["start", "end"]);
+  });
+
+  it("keeps appointment availability independent from purchase-schema availability", () => {
+    const report = aggregateLeadOutcomes({
+      leads,
+      appointmentRequestsTotal: 2,
+      appointmentRequestsAvailable: true,
+      appointmentRequestsComplete: true,
+      appointments: [],
+      confirmedAppointmentMissingRelationship: 0,
+      appointmentsComplete: true,
+      purchases: null,
+      unlinkedCompletedPurchases: null,
+      completedPurchaseMissingRelationship: null,
+      purchasesComplete: false,
+      leadCohortComplete: true,
+    });
+    expect(report.confirmedAppointments).toMatchObject({ status: "available", count: 0, complete: true });
+    expect(report.completedPurchases).toMatchObject({ status: "unavailable", count: null, complete: false });
   });
 });
