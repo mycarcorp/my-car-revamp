@@ -2,7 +2,7 @@ import { unzipSync } from "fflate";
 import { getRequest } from "@tanstack/react-start/server";
 import { appAdminCreds } from "./app-admin.server";
 import { emptySnapshot, mergeArticles, resolveProperty, type MarketingSnapshot, type ServiceReport, type SearchReport, type SearchRow, type ResearchReport, type SemrushTable, type LighthouseReport, type SiteHealth, type Prospect, type ProspectInput, type Inspection, type LeadAttributionReport } from "./marketing";
-import { aggregateLeadAttribution, ATTRIBUTION_PAGE_SIZE, MAX_ATTRIBUTION_ROWS, resolveAttributionRange, type AttributionRangeInput } from "./marketing-attribution";
+import { aggregateLeadAttribution, aggregateLeadOutcomes, ATTRIBUTION_PAGE_SIZE, MAX_ATTRIBUTION_ROWS, resolveAttributionRange, type AttributionRangeInput } from "./marketing-attribution";
 
 const BUCKET = "marketing-private";
 const ORIGIN = "https://mycarcorp.com";
@@ -28,7 +28,7 @@ export async function readLeadAttribution(input: AttributionRangeInput): Promise
   };
   if (key.split(".").length === 3) headers.Authorization = `Bearer ${key}`;
   const endpoint = new URL("/rest/v1/leads", url);
-  endpoint.searchParams.set("select", "lead_type,details,created_at");
+  endpoint.searchParams.set("select", "id,lead_type,details,created_at");
   endpoint.searchParams.set("and", `(created_at.gte.${range.startInclusive},created_at.lt.${range.endExclusive})`);
   endpoint.searchParams.set("order", "created_at.desc");
   const rows: Array<{ lead_type?: string | null; details?: Record<string, unknown> | null; created_at?: string | null }> = [];
@@ -46,7 +46,148 @@ export async function readLeadAttribution(input: AttributionRangeInput): Promise
     }
     if (page.length < ATTRIBUTION_PAGE_SIZE || (total !== null && rows.length >= total)) break;
   }
-  return aggregateLeadAttribution(rows, range, total);
+  const leadRows = rows as Array<{ id?: string; lead_type?: string | null; details?: Record<string, unknown> | null; created_at?: string | null }>;
+  const requestCount = await readExactCount("leads", "public", {
+    select: "id",
+    and: `(created_at.gte.${range.startInclusive},created_at.lt.${range.endExclusive})`,
+    lead_type: "eq.appointment",
+  });
+  const leadIds = [...new Set(leadRows.map((lead) => lead.id).filter((id): id is string => Boolean(id)))];
+  const leadCohortComplete = total !== null && total <= rows.length;
+  const appointmentRequestsComplete = requestCount !== null && requestCount <= leadRows.filter((lead) => lead.lead_type === "appointment").length && leadCohortComplete;
+
+  let appointments: Array<{ id: string; lead_id: string | null; confirmed: boolean }> | null = null;
+  let missingAppointmentLinks: number | null = null;
+  let appointmentsComplete = false;
+  try {
+    const linked = await readRowsByLeadIds("appointments", "public", "id,lead_id,confirmed", leadIds);
+    const orphan = await readRows("appointments", "public", "id", {
+      and: `(created_at.gte.${range.startInclusive},created_at.lt.${range.endExclusive})`,
+      confirmed: "eq.true",
+      lead_id: "is.null",
+    });
+    appointments = linked.rows.map((row) => ({ id: String(row.id), lead_id: row.lead_id, confirmed: Boolean(row.confirmed) }));
+    missingAppointmentLinks = orphan.total;
+    appointmentsComplete = linked.complete && orphan.complete;
+  } catch {
+    appointments = null;
+  }
+
+  let purchases: Array<{ id: string | number; lead_id: string | null; status: string }> | null = null;
+  let unlinkedCompletedPurchases: number | null = null;
+  let purchasesComplete = false;
+  try {
+    const linked = await readRowsByLeadIds("mc_purchases", "mycarco_db", "id,lead_id,status", leadIds);
+    const orphan = await readRows("mc_purchases", "mycarco_db", "id", {
+      and: `(created_at.gte.${range.startInclusive},created_at.lt.${range.endExclusive})`,
+      status: "eq.completed",
+      lead_id: "is.null",
+    });
+    purchases = linked.rows.map((row) => ({ id: row.id, lead_id: row.lead_id, status: row.status ?? "" }));
+    unlinkedCompletedPurchases = orphan.total;
+    purchasesComplete = linked.complete && orphan.complete;
+  } catch {
+    purchases = null;
+  }
+
+  const outcomes = aggregateLeadOutcomes({
+    leads: leadRows,
+    appointmentRequestsTotal: requestCount,
+    appointmentRequestsAvailable: requestCount !== null,
+    appointmentRequestsComplete,
+    appointments,
+    confirmedAppointmentMissingRelationship: missingAppointmentLinks,
+    appointmentsComplete,
+    purchases,
+    unlinkedCompletedPurchases,
+    completedPurchaseMissingRelationship: unlinkedCompletedPurchases,
+    purchasesComplete,
+    leadCohortComplete,
+  });
+  return aggregateLeadAttribution(rows, range, total, new Date().toISOString(), outcomes);
+}
+
+type OutcomeDbRow = { id: string | number; lead_id: string | null; confirmed?: boolean; status?: string };
+
+function reportHeaders(profile: "public" | "mycarco_db"): Record<string, string> {
+  const { key } = appAdminCreds();
+  const headers: Record<string, string> = {
+    apikey: key,
+    Accept: "application/json",
+    "Accept-Profile": profile,
+    Prefer: "count=exact",
+    "Range-Unit": "items",
+  };
+  if (key.split(".").length === 3) headers.Authorization = `Bearer ${key}`;
+  return headers;
+}
+
+async function readRows(
+  table: string,
+  profile: "public" | "mycarco_db",
+  select: string,
+  filters: Record<string, string>,
+): Promise<{ rows: OutcomeDbRow[]; total: number | null; complete: boolean }> {
+  const { url } = appAdminCreds();
+  const endpoint = new URL(`/rest/v1/${table}`, url);
+  endpoint.searchParams.set("select", select);
+  for (const [key, value] of Object.entries(filters)) endpoint.searchParams.set(key, value);
+  const rows: OutcomeDbRow[] = [];
+  let total: number | null = null;
+  for (let offset = 0; offset < MAX_ATTRIBUTION_ROWS; offset += ATTRIBUTION_PAGE_SIZE) {
+    const response = await fetch(endpoint, {
+      headers: { ...reportHeaders(profile), Range: `${offset}-${offset + ATTRIBUTION_PAGE_SIZE - 1}` },
+      cache: "no-store",
+    });
+    if (!response.ok) throw new Error(`Outcome source unavailable (${response.status}).`);
+    const page = (await response.json()) as OutcomeDbRow[];
+    rows.push(...page.slice(0, MAX_ATTRIBUTION_ROWS - rows.length));
+    if (total === null) total = parseCount(response.headers.get("content-range"));
+    if (page.length < ATTRIBUTION_PAGE_SIZE || (total !== null && rows.length >= total)) break;
+  }
+  return { rows, total, complete: total !== null && rows.length >= total };
+}
+
+async function readExactCount(
+  table: string,
+  profile: "public" | "mycarco_db",
+  filters: Record<string, string>,
+): Promise<number | null> {
+  const { url } = appAdminCreds();
+  const endpoint = new URL(`/rest/v1/${table}`, url);
+  endpoint.searchParams.set("select", filters.select ?? "id");
+  for (const [key, value] of Object.entries(filters)) if (key !== "select") endpoint.searchParams.set(key, value);
+  const response = await fetch(endpoint, { method: "HEAD", headers: reportHeaders(profile), cache: "no-store" });
+  if (!response.ok) return null;
+  return parseCount(response.headers.get("content-range"));
+}
+
+function parseCount(contentRange: string | null): number | null {
+  const value = contentRange?.split("/")[1];
+  if (!value || value === "*") return null;
+  const parsed = Number(value);
+  return Number.isSafeInteger(parsed) && parsed >= 0 ? parsed : null;
+}
+
+async function readRowsByLeadIds(
+  table: string,
+  profile: "public" | "mycarco_db",
+  select: string,
+  leadIds: string[],
+): Promise<{ rows: OutcomeDbRow[]; complete: boolean }> {
+  const rows: OutcomeDbRow[] = [];
+  let complete = true;
+  for (let offset = 0; offset < leadIds.length; offset += 75) {
+    const batch = leadIds.slice(offset, offset + 75);
+    const result = await readRows(table, profile, select, { lead_id: `in.(${batch.join(",")})` });
+    rows.push(...result.rows.slice(0, MAX_ATTRIBUTION_ROWS - rows.length));
+    complete &&= result.complete;
+    if (rows.length >= MAX_ATTRIBUTION_ROWS) {
+      if (offset + 75 < leadIds.length || !result.complete) complete = false;
+      break;
+    }
+  }
+  return { rows, complete };
 }
 function storageHeaders() { const { key } = appAdminCreds(); return { apikey: key, ...(key.split(".").length === 3 ? { Authorization: `Bearer ${key}` } : {}), "Content-Type": "application/json" }; }
 async function storage(path: string, init: RequestInit = {}) { const { url } = appAdminCreds(); return fetch(`${url}/storage/v1/${path}`, { ...init, headers: { ...storageHeaders(), ...init.headers }, signal: AbortSignal.timeout(25000) }); }

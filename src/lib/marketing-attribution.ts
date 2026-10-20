@@ -41,17 +41,204 @@ export type LeadAttributionReport = {
   firstTouch: AttributionTouchSummary;
   lastTouch: AttributionTouchSummary;
   daily: Array<{ date: string; count: number }>;
+  outcomes: LeadOutcomeReport;
 };
 
 export type AttributionLeadRow = {
+  id?: string;
   lead_type?: string | null;
   details?: Record<string, unknown> | null;
   created_at?: string | null;
 };
 
+export type OutcomeSourceCount = AttributionCount & {
+  source: string;
+  evidence: AttributionEvidence;
+};
+
+export type OutcomeBreakdown = {
+  status: "available" | "unavailable";
+  message: string | null;
+  count: number | null;
+  scanned: number;
+  complete: boolean;
+  missingRelationship: number | null;
+  unknownAttribution: number;
+  byFirstTouchSource: OutcomeSourceCount[];
+  byLastTouchSource: OutcomeSourceCount[];
+};
+
+export type LeadOutcomeReport = {
+  periodBasis: "lead_created_at";
+  appointmentRequests: {
+    count: number | null;
+    status: "available" | "unavailable";
+    scanned: number;
+    complete: boolean;
+    byFirstTouchSource: OutcomeSourceCount[];
+    byLastTouchSource: OutcomeSourceCount[];
+  };
+  appointmentRequestsWithoutRecord: { count: number | null; status: "available" | "unavailable" };
+  confirmedAppointments: OutcomeBreakdown;
+  completedPurchases: OutcomeBreakdown & { unlinkedCompleted: number | null; unlinkedStatus: "available" | "unavailable" };
+};
+
 export const MAX_ATTRIBUTION_DAYS = 366;
 export const MAX_ATTRIBUTION_ROWS = 10000;
 export const ATTRIBUTION_PAGE_SIZE = 1000;
+
+export function filterLeadsByCreatedRange<T extends AttributionLeadRow>(
+  rows: T[],
+  range: Pick<ResolvedAttributionRange, "startInclusive" | "endExclusive">,
+): T[] {
+  const start = Date.parse(range.startInclusive);
+  const end = Date.parse(range.endExclusive);
+  return rows.filter((row) => {
+    const created = row.created_at ? Date.parse(row.created_at) : NaN;
+    return Number.isFinite(created) && created >= start && created < end;
+  });
+}
+
+function sourceOf(details: Record<string, unknown>, prefix: "first_touch" | "last_touch"): OutcomeSourceCount {
+  const raw = prefix === "last_touch"
+    ? valueOf(details["last_touch_source"], valueOf(details["lead_source"], ""))
+    : valueOf(details["first_touch_source"], "");
+  const source = normalizedSource(raw);
+  const storedEvidence = details[`${prefix}_source_evidence`] ?? (prefix === "last_touch" ? details["source_evidence"] : undefined);
+  const evidence = evidenceOf(storedEvidence, Boolean(raw));
+  return { label: `${source} · ${evidence}`, source, evidence, count: 1 };
+}
+
+function countOutcomeSources(rows: OutcomeSourceCount[]): OutcomeSourceCount[] {
+  const counts = new Map<string, OutcomeSourceCount>();
+  for (const row of rows) {
+    const key = `${row.source}\u0000${row.evidence}`;
+    const existing = counts.get(key);
+    if (existing) existing.count += 1;
+    else counts.set(key, { ...row });
+  }
+  return [...counts.values()].sort((a, b) => b.count - a.count || a.source.localeCompare(b.source) || a.evidence.localeCompare(b.evidence));
+}
+
+export function aggregateLeadOutcomes(input: {
+  leads: AttributionLeadRow[];
+  appointmentRequestsTotal: number | null;
+  appointmentRequestsAvailable: boolean;
+  appointmentRequestsComplete: boolean;
+  appointments: Array<{ id: string; lead_id: string | null; confirmed: boolean }> | null;
+  confirmedAppointmentMissingRelationship: number | null;
+  appointmentsComplete: boolean;
+  purchases: Array<{ id: string | number; lead_id: string | null; status: string }> | null;
+  unlinkedCompletedPurchases: number | null;
+  completedPurchaseMissingRelationship: number | null;
+  purchasesComplete: boolean;
+  leadCohortComplete: boolean;
+}): LeadOutcomeReport {
+  const leadsById = new Map<string, AttributionLeadRow>();
+  const appointmentRequests: AttributionLeadRow[] = [];
+  for (const lead of input.leads) {
+    if (lead.id) leadsById.set(lead.id, lead);
+    if (lead.lead_type === "appointment") appointmentRequests.push(lead);
+  }
+  const requestSource = (prefix: "first_touch" | "last_touch") =>
+    countOutcomeSources(appointmentRequests.map((lead) => sourceOf(lead.details ?? {}, prefix)));
+  const appointmentsUnavailable = input.appointments === null;
+  const requestLeadIds = new Set(appointmentRequests.map((lead) => lead.id).filter((id): id is string => Boolean(id)));
+  const appointmentLeadIds = new Set((input.appointments ?? []).map((appointment) => appointment.lead_id).filter((id): id is string => Boolean(id)));
+  const requestsWithoutRecord = [...requestLeadIds].filter((id) => !appointmentLeadIds.has(id)).length;
+  const confirmedAppointments = new Map<string, AttributionLeadRow>();
+  let invalidAppointmentRelationships = 0;
+  for (const appointment of input.appointments ?? []) {
+    if (!appointment.confirmed) continue;
+    const lead = appointment.lead_id ? leadsById.get(appointment.lead_id) : undefined;
+    if (!lead || lead.lead_type !== "appointment") {
+      invalidAppointmentRelationships += 1;
+      continue;
+    }
+    confirmedAppointments.set(appointment.id, lead);
+  }
+  const purchasesUnavailable = input.purchases === null;
+  const completedPurchases = new Map<string, AttributionLeadRow>();
+  let invalidPurchaseRelationships = 0;
+  for (const purchase of input.purchases ?? []) {
+    if (purchase.status !== "completed") continue;
+    const lead = purchase.lead_id ? leadsById.get(purchase.lead_id) : undefined;
+    const isPurchaseLead = lead?.lead_type === "purchase" ||
+      (lead?.lead_type === "availability" && lead.details?.["request_kind"] === "purchase");
+    if (!lead || !isPurchaseLead) {
+      invalidPurchaseRelationships += 1;
+      continue;
+    }
+    completedPurchases.set(String(purchase.id), lead);
+  }
+  const outcome = (
+    items: Map<string, AttributionLeadRow>,
+    unavailable: boolean,
+    count: number | null = null,
+    missingRelationship: number | null = 0,
+  ): OutcomeBreakdown => {
+    const rows = [...items.values()];
+    const first = rows.map((lead) => sourceOf(lead.details ?? {}, "first_touch"));
+    const last = rows.map((lead) => sourceOf(lead.details ?? {}, "last_touch"));
+    const unknownAttribution = rows.filter((lead) => {
+      const details = lead.details ?? {};
+      const firstSource = valueOf(details["first_touch_source"], "");
+      const lastSource = valueOf(details["last_touch_source"], valueOf(details["lead_source"], ""));
+      const firstEvidence = evidenceOf(details["first_touch_source_evidence"], Boolean(firstSource));
+      const lastEvidence = evidenceOf(details["last_touch_source_evidence"] ?? details["source_evidence"], Boolean(lastSource));
+      return (!firstSource || firstEvidence === "unknown") && (!lastSource || lastEvidence === "unknown");
+    }).length;
+    return {
+      status: unavailable ? "unavailable" : "available",
+      message: unavailable ? "Outcome records are unavailable; no count is inferred." : null,
+      count: unavailable || !input.leadCohortComplete || (items === confirmedAppointments ? !input.appointmentsComplete : !input.purchasesComplete)
+        ? null
+        : (count ?? rows.length),
+      scanned: unavailable ? 0 : rows.length,
+      complete: !unavailable && input.leadCohortComplete && (items === confirmedAppointments ? input.appointmentsComplete : input.purchasesComplete),
+      missingRelationship: unavailable ? null : missingRelationship,
+      unknownAttribution: unavailable ? 0 : unknownAttribution,
+      byFirstTouchSource: unavailable ? [] : countOutcomeSources(first),
+      byLastTouchSource: unavailable ? [] : countOutcomeSources(last),
+    };
+  };
+  const requestUnavailable = !input.appointmentRequestsAvailable;
+  return {
+    periodBasis: "lead_created_at",
+    appointmentRequests: {
+      count: requestUnavailable ? null : input.appointmentRequestsTotal,
+      status: requestUnavailable ? "unavailable" : "available",
+      scanned: appointmentRequests.length,
+      complete: !requestUnavailable && input.appointmentRequestsComplete,
+      byFirstTouchSource: requestUnavailable ? [] : requestSource("first_touch"),
+      byLastTouchSource: requestUnavailable ? [] : requestSource("last_touch"),
+    },
+    appointmentRequestsWithoutRecord: {
+      count: appointmentsUnavailable || !input.leadCohortComplete || !input.appointmentsComplete ? null : requestsWithoutRecord,
+      status: appointmentsUnavailable ? "unavailable" : "available",
+    },
+    confirmedAppointments: outcome(
+      confirmedAppointments,
+      appointmentsUnavailable,
+      null,
+      input.confirmedAppointmentMissingRelationship === null
+        ? null
+        : input.confirmedAppointmentMissingRelationship + invalidAppointmentRelationships,
+    ),
+    completedPurchases: {
+      ...outcome(
+        completedPurchases,
+        purchasesUnavailable,
+        null,
+        input.completedPurchaseMissingRelationship === null
+          ? null
+          : invalidPurchaseRelationships + input.completedPurchaseMissingRelationship,
+      ),
+      unlinkedCompleted: purchasesUnavailable ? null : input.unlinkedCompletedPurchases,
+      unlinkedStatus: purchasesUnavailable ? "unavailable" : "available",
+    },
+  };
+}
 
 function parseUtcDate(value: string): Date | null {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return null;
@@ -178,6 +365,13 @@ export function aggregateLeadAttribution(
   range: Pick<ResolvedAttributionRange, "startDate" | "endDate">,
   total: number | null,
   generatedAt = new Date().toISOString(),
+  outcomes: LeadOutcomeReport = {
+    periodBasis: "lead_created_at",
+    appointmentRequests: { count: null, status: "unavailable", scanned: 0, complete: false, byFirstTouchSource: [], byLastTouchSource: [] },
+    appointmentRequestsWithoutRecord: { count: null, status: "unavailable" },
+    confirmedAppointments: { status: "unavailable", message: "Outcome data has not been loaded.", count: null, scanned: 0, complete: false, missingRelationship: 0, unknownAttribution: 0, byFirstTouchSource: [], byLastTouchSource: [] },
+    completedPurchases: { status: "unavailable", message: "Outcome data has not been loaded.", count: null, scanned: 0, complete: false, missingRelationship: 0, unknownAttribution: 0, byFirstTouchSource: [], byLastTouchSource: [], unlinkedCompleted: null, unlinkedStatus: "unavailable" },
+  },
 ): LeadAttributionReport {
   const sources = new Map<string, {
     source: string;
@@ -264,6 +458,7 @@ export function aggregateLeadAttribution(
     firstTouch,
     lastTouch,
     daily: [...dailyCounts.entries()].sort(([a], [b]) => a.localeCompare(b)).map(([date, count]) => ({ date, count })),
+    outcomes,
   };
 }
 
@@ -301,6 +496,30 @@ export function buildAttributionCsv(report: LeadAttributionReport): string {
   for (const row of report.byLeadType) add({ ...base, section: "form", lead_type: row.leadType, count: row.count });
   for (const row of report.byIntent) add({ ...base, section: "intent", intent: row.intent, count: row.count });
   for (const row of report.byRequestKind) add({ ...base, section: "request_kind", request_kind: row.requestKind, count: row.count });
+  const outcomes = report.outcomes;
+  if (outcomes.appointmentRequests.status === "available") {
+    add({ ...base, section: "appointment_request", touch: "first", count: outcomes.appointmentRequests.count });
+    add({ ...base, section: "appointment_request_without_record", count: outcomes.appointmentRequestsWithoutRecord.count });
+    add({ ...base, section: "appointment_request_coverage", coverage: outcomes.appointmentRequests.complete ? "complete" : "partial", count: outcomes.appointmentRequests.scanned });
+    for (const row of outcomes.appointmentRequests.byFirstTouchSource) add({ ...base, section: "appointment_request_source", touch: "first", source: row.source, evidence: row.evidence, count: row.count });
+    for (const row of outcomes.appointmentRequests.byLastTouchSource) add({ ...base, section: "appointment_request_source", touch: "last", source: row.source, evidence: row.evidence, count: row.count });
+  }
+  for (const [section, outcome] of [
+    ["confirmed_appointment", outcomes.confirmedAppointments],
+    ["completed_purchase", outcomes.completedPurchases],
+  ] as const) {
+    if (outcome.status !== "available") continue;
+    add({ ...base, section, count: outcome.count });
+    add({ ...base, section: `${section}_coverage`, coverage: outcome.complete ? "complete" : "partial", count: outcome.scanned });
+    add({ ...base, section: `${section}_unattributed`, evidence: "unknown", count: outcome.unknownAttribution });
+    add({ ...base, section: `${section}_missing_relationship`, count: outcome.missingRelationship });
+    for (const [touch, rows] of [["first", outcome.byFirstTouchSource], ["last", outcome.byLastTouchSource]] as const) {
+      for (const row of rows) add({ ...base, section: `${section}_source`, touch, source: row.source, evidence: row.evidence, count: row.count });
+    }
+  }
+  if (outcomes.completedPurchases.unlinkedStatus === "available") {
+    add({ ...base, section: "completed_purchase_unlinked", count: outcomes.completedPurchases.unlinkedCompleted });
+  }
   add({
     ...base,
     section: "coverage",

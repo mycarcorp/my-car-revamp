@@ -1165,6 +1165,74 @@ function Marketing() {
                       icon={FileText}
                     />
                   </div>
+                  <Section
+                    title="Verified outcomes"
+                    subtitle="Linked outcomes are grouped by the related lead's creation date in this UTC window, not by the later confirmation or completion date. Attribution describes recorded touch data, not causation."
+                  >
+                    <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-3">
+                      <Metric
+                        label="Appointment requests"
+                        value={attributionQuery.data.outcomes.appointmentRequests.status === "available"
+                          ? number(attributionQuery.data.outcomes.appointmentRequests.count)
+                          : "Not available"}
+                        detail="Leads recorded with database type appointment"
+                        icon={Users}
+                      />
+                      <Metric
+                        label="Confirmed appointments"
+                        value={attributionQuery.data.outcomes.confirmedAppointments.status === "available"
+                          ? attributionQuery.data.outcomes.confirmedAppointments.complete
+                            ? number(attributionQuery.data.outcomes.confirmedAppointments.count)
+                            : `At least ${number(attributionQuery.data.outcomes.confirmedAppointments.scanned)} (partial)`
+                          : "Not available"}
+                        detail="Distinct confirmed appointment records joined by lead_id"
+                        icon={CheckCircle2}
+                      />
+                      <Metric
+                        label="Completed purchases"
+                        value={attributionQuery.data.outcomes.completedPurchases.status === "available"
+                          ? attributionQuery.data.outcomes.completedPurchases.complete
+                            ? number(attributionQuery.data.outcomes.completedPurchases.count)
+                            : `At least ${number(attributionQuery.data.outcomes.completedPurchases.scanned)} (partial)`
+                          : "Not available"}
+                        detail="Distinct completed purchases linked to a lead_id"
+                        icon={Activity}
+                      />
+                    </div>
+                    <div className="mt-4 grid gap-6 xl:grid-cols-2">
+                      <Section title="Appointment request and booking coverage" subtitle="Request totals follow lead created_at; unlinked confirmed appointment counts follow appointment created_at for this orphan-record check.">
+                        <div className="divide-y divide-border border-y border-border text-sm">
+                          <div className="flex justify-between gap-3 py-3"><span>Appointment-request leads</span><strong>{attributionQuery.data.outcomes.appointmentRequests.status === "available" ? number(attributionQuery.data.outcomes.appointmentRequests.count) : "Not available"}</strong></div>
+                          <div className="flex justify-between gap-3 py-3"><span>Request leads without an appointment record</span><strong>{attributionQuery.data.outcomes.appointmentRequestsWithoutRecord.status === "unavailable" ? "Not available" : attributionQuery.data.outcomes.appointmentRequestsWithoutRecord.count === null ? "Partial" : number(attributionQuery.data.outcomes.appointmentRequestsWithoutRecord.count)}</strong></div>
+                          <div className="flex justify-between gap-3 py-3"><span>Confirmed records with missing/invalid lead link</span><strong>{attributionQuery.data.outcomes.confirmedAppointments.status === "unavailable" ? "Not available" : attributionQuery.data.outcomes.confirmedAppointments.missingRelationship === null ? "Partial" : number(attributionQuery.data.outcomes.confirmedAppointments.missingRelationship)}</strong></div>
+                          <div className="flex justify-between gap-3 py-3"><span>Confirmed bookings with unknown attribution</span><strong>{attributionQuery.data.outcomes.confirmedAppointments.status === "available" ? number(attributionQuery.data.outcomes.confirmedAppointments.unknownAttribution) : "Not available"}</strong></div>
+                          <div className="flex justify-between gap-3 py-3"><span>Outcome data coverage</span><strong>{attributionQuery.data.outcomes.confirmedAppointments.status === "available" ? attributionQuery.data.outcomes.confirmedAppointments.complete ? "Complete for scanned lead cohort" : "Partial" : "Not available"}</strong></div>
+                        </div>
+                        {attributionQuery.data.outcomes.confirmedAppointments.status === "unavailable" && <p className="mt-3 text-sm text-muted-foreground">{attributionQuery.data.outcomes.confirmedAppointments.message ?? "Appointment records could not be read."}</p>}
+                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                          <CountTable rows={attributionQuery.data.outcomes.appointmentRequests.byFirstTouchSource} label="Requests · first-touch source" field="label" />
+                          <CountTable rows={attributionQuery.data.outcomes.appointmentRequests.byLastTouchSource} label="Requests · last-touch source" field="label" />
+                          <CountTable rows={attributionQuery.data.outcomes.confirmedAppointments.byFirstTouchSource} label="Confirmed · first-touch source" field="label" />
+                          <CountTable rows={attributionQuery.data.outcomes.confirmedAppointments.byLastTouchSource} label="Confirmed · last-touch source" field="label" />
+                        </div>
+                      </Section>
+                      <Section title="Completed-purchase coverage" subtitle="Unlinked completed purchases use purchase created_at for this separate orphan count; the schema has no completed_at field.">
+                        <div className="divide-y divide-border border-y border-border text-sm">
+                          <div className="flex justify-between gap-3 py-3"><span>Linked completed purchases</span><strong>{attributionQuery.data.outcomes.completedPurchases.status === "available" ? number(attributionQuery.data.outcomes.completedPurchases.count) : "Not available"}</strong></div>
+                          <div className="flex justify-between gap-3 py-3"><span>Unlinked completed purchases</span><strong>{attributionQuery.data.outcomes.completedPurchases.unlinkedStatus === "available" ? number(attributionQuery.data.outcomes.completedPurchases.unlinkedCompleted) : "Not available"}</strong></div>
+                          <div className="flex justify-between gap-3 py-3"><span>Completed purchases with missing/invalid lead link</span><strong>{attributionQuery.data.outcomes.completedPurchases.status === "unavailable" ? "Not available" : attributionQuery.data.outcomes.completedPurchases.missingRelationship === null ? "Partial" : number(attributionQuery.data.outcomes.completedPurchases.missingRelationship)}</strong></div>
+                          <div className="flex justify-between gap-3 py-3"><span>Linked completed purchases with unknown attribution</span><strong>{attributionQuery.data.outcomes.completedPurchases.status === "available" ? number(attributionQuery.data.outcomes.completedPurchases.unknownAttribution) : "Not available"}</strong></div>
+                          <div className="flex justify-between gap-3 py-3"><span>Outcome data coverage</span><strong>{attributionQuery.data.outcomes.completedPurchases.status === "available" ? attributionQuery.data.outcomes.completedPurchases.complete ? "Complete for scanned lead cohort" : "Partial" : "Not available"}</strong></div>
+                        </div>
+                        {attributionQuery.data.outcomes.completedPurchases.status === "unavailable" && <p className="mt-3 text-sm text-muted-foreground">{attributionQuery.data.outcomes.completedPurchases.message ?? "Purchase records could not be read."}</p>}
+                        <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                          <CountTable rows={attributionQuery.data.outcomes.completedPurchases.byFirstTouchSource} label="Sales · first-touch source" field="label" />
+                          <CountTable rows={attributionQuery.data.outcomes.completedPurchases.byLastTouchSource} label="Sales · last-touch source" field="label" />
+                        </div>
+                      </Section>
+                    </div>
+                    {(!attributionQuery.data.outcomes.appointmentRequests.complete || !attributionQuery.data.outcomes.confirmedAppointments.complete || !attributionQuery.data.outcomes.completedPurchases.complete) && <p role="status" className="mt-3 border-l-2 border-amber-500 p-3 text-xs text-muted-foreground">Outcome breakdowns are partial when their linked lead cohort or bounded result scan is incomplete. No appointment or purchase causation is implied.</p>}
+                  </Section>
                   <div className="grid gap-6 xl:grid-cols-2">
                     <Section
                       title="Latest recorded source"
