@@ -10,7 +10,7 @@ import { ctaButtonClass } from "@/lib/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { mirrorLeadToLegacy } from "@/lib/legacy-mirror.functions";
 import { sendLeadToGhl } from "@/lib/ghl-webhook.functions";
-import { getAttributionDetails } from "@/lib/attribution";
+import { getAttributionDetails, mergeAttributionDetails } from "@/lib/attribution";
 import type { Database } from "@/integrations/supabase/types";
 
 type LeadType = Database["public"]["Enums"]["lead_type"];
@@ -72,11 +72,7 @@ export function LeadForm({
     setSubmitting(true);
     const phone = (contact ? contact.phone ?? "" : String(form.get("phone") ?? "")) || null;
     const message = String(form.get("message") ?? "") || null;
-    const details: Record<string, unknown> = { ...(collectDetails?.() ?? {}) };
-    // Attribution never overrides form-provided fields.
-    for (const [k, v] of Object.entries(getAttributionDetails())) {
-      if (details[k] === undefined) details[k] = v;
-    }
+    const details = mergeAttributionDetails(collectDetails?.() ?? {}, getAttributionDetails());
     if (vehicle) {
       const title = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ");
       if (title && !details["vehicle_of_interest"]) details["vehicle_of_interest"] = title;

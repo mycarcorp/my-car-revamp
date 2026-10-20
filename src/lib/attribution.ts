@@ -13,6 +13,8 @@ const CLICK_KEYS = ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "li_fat_id"
 export type Touch = {
   source: string;
   medium: string;
+  source_evidence?: AttributionEvidence;
+  source_reason?: string;
   utm_source: string;
   utm_medium: string;
   utm_campaign: string;
@@ -30,6 +32,32 @@ export type Touch = {
   timestamp: string;
 };
 
+export type AttributionEvidence = "confirmed" | "inferred" | "unknown";
+
+export type SourceClassification = {
+  source: string;
+  medium: string;
+  evidence: AttributionEvidence;
+  reason: string;
+};
+
+type AttributionInput = Pick<
+  Touch,
+  | "utm_source"
+  | "utm_medium"
+  | "utm_campaign"
+  | "utm_content"
+  | "utm_term"
+  | "fbclid"
+  | "gclid"
+  | "gbraid"
+  | "wbraid"
+  | "ttclid"
+  | "li_fat_id"
+  | "rdt_cid"
+  | "referrer"
+>;
+
 function hostOf(url: string): string {
   try {
     return new URL(url).hostname.toLowerCase().replace(/^www\./, "");
@@ -38,64 +66,125 @@ function hostOf(url: string): string {
   }
 }
 
-/** Classify a touch into a channel label. */
-export function classifySource(t: Omit<Touch, "source" | "medium" | "timestamp">): {
-  source: string;
-  medium: string;
-} {
-  const src = t.utm_source.toLowerCase();
-  const med = t.utm_medium.toLowerCase();
-  const camp = t.utm_campaign.toLowerCase();
-  const ref = hostOf(t.referrer);
-  const paidMedium = /(cpc|ppc|paid|ads?|display|cpm|social_paid|paid_social)/.test(med);
-  const isVla =
-    /(vla|vehicle[_ -]?ads?|vehicle[_ -]?listing)/.test(`${src} ${med} ${camp}`);
+/** Normalize one touch without discarding its original UTM or click-ID fields. */
+export function classifyAttribution(t: AttributionInput): SourceClassification {
+  const source = t.utm_source.trim().toLowerCase();
+  const medium = t.utm_medium.trim().toLowerCase();
+  const campaign = t.utm_campaign.trim().toLowerCase();
+  const content = t.utm_content.trim().toLowerCase();
+  const referrer = hostOf(t.referrer);
+  const paidMedium = /(cpc|ppc|paid|ads?|display|cpm|social_paid|paid_social)/.test(medium);
+  const paidGoogleClick = Boolean(t.gclid || t.gbraid || t.wbraid);
+  const vehicleAd = /(vla|vehicle[_ -]?ads?|vehicle[_ -]?listing)/.test(
+    `${source} ${medium} ${campaign} ${content}`,
+  );
+  const result = (
+    normalizedSource: string,
+    normalizedMedium: string,
+    evidence: AttributionEvidence,
+    reason: string,
+  ): SourceClassification => ({
+    source: normalizedSource,
+    medium: normalizedMedium,
+    evidence,
+    reason,
+  });
+  const namedMetaSource = (value: string) => {
+    const instagram = /instagram|(^|[^a-z])ig([^a-z]|$)/.test(value);
+    const facebook = /facebook|(^|[^a-z])fb([^a-z]|$)/.test(value);
+    if (instagram !== facebook) return instagram ? "Instagram" : "Facebook";
+    return null;
+  };
 
-  const all = `${src} ${med} ${camp} ${t.utm_content.toLowerCase()}`;
-  const mentionsInstagram = /(instagram|(^|[^a-z])ig([^a-z]|$))/.test(all);
-  const mentionsFacebook = /(facebook|(^|[^a-z])fb([^a-z]|$))/.test(all);
-  const META_UNKNOWN = "Meta (Facebook/Instagram)";
-
-  // UTMs win — they distinguish Facebook vs Instagram and Vehicle Ads.
-  if (src) {
-    if (/(instagram|^ig$)/.test(src)) return { source: "Instagram", medium: med || "social" };
-    if (/(facebook|^fb$)/.test(src)) return { source: "Facebook", medium: med || "social" };
-    if (/meta/.test(src)) {
-      if (mentionsInstagram && !mentionsFacebook) return { source: "Instagram", medium: med || "social" };
-      if (mentionsFacebook && !mentionsInstagram) return { source: "Facebook", medium: med || "social" };
-      return { source: META_UNKNOWN, medium: med || "social" };
-    }
-    if (/google/.test(src)) {
-      if (isVla) return { source: "Google Vehicle Ads", medium: med || "cpc" };
-      if (paidMedium || t.gclid || t.gbraid || t.wbraid) return { source: "Google Ads", medium: med || "cpc" };
-      return { source: "Google Organic", medium: med || "organic" };
-    }
-    if (/tiktok/.test(src)) return { source: "TikTok", medium: med || "social" };
-    if (/linkedin/.test(src)) return { source: "LinkedIn", medium: med || "social" };
-    if (/reddit/.test(src)) return { source: "Reddit", medium: med || "social" };
-    return { source: t.utm_source, medium: med || "referral" };
+  if (/^(facebook|fb)$/.test(source)) {
+    return result("Facebook", medium || "social", "confirmed", "Explicit utm_source identifies Facebook.");
   }
-
-  // Click IDs without UTMs (Vehicle Ads need explicit campaign tags, so never here).
-  if (t.gclid || t.gbraid || t.wbraid) return { source: "Google Ads", medium: "cpc" };
-  if (t.ttclid) return { source: "TikTok", medium: "paid" };
-  if (t.li_fat_id) return { source: "LinkedIn", medium: "paid" };
-  if (t.rdt_cid) return { source: "Reddit", medium: "paid" };
-
-  // Referrer-based (also resolves Meta click IDs to the right app).
-  if (ref) {
-    if (/instagram\.com$/.test(ref)) return { source: "Instagram", medium: "social" };
-    if (/(facebook\.com|fb\.com|fb\.me|messenger\.com)$/.test(ref)) return { source: "Facebook", medium: "social" };
-    if (/(^|\.)google\./.test(ref)) return { source: "Google Organic", medium: "organic" };
-    if (/tiktok\.com$/.test(ref)) return { source: "TikTok", medium: "social" };
-    if (/(linkedin\.com|lnkd\.in)$/.test(ref)) return { source: "LinkedIn", medium: "social" };
-    if (/reddit\.com$/.test(ref)) return { source: "Reddit", medium: "social" };
-    if (t.fbclid) return { source: META_UNKNOWN, medium: "social" };
-    return { source: "Referral", medium: "referral" };
+  if (/^(instagram|ig)$/.test(source)) {
+    return result("Instagram", medium || "social", "confirmed", "Explicit utm_source identifies Instagram.");
   }
-  // fbclid is used by both Facebook and Instagram — don't guess.
-  if (t.fbclid) return { source: META_UNKNOWN, medium: "social" };
-  return { source: "Direct", medium: "none" };
+  if (source === "meta") {
+    const platform = namedMetaSource(`${campaign} ${content}`);
+    return platform
+      ? result(platform, medium || "social", "inferred", "Meta source is disambiguated by campaign or content text.")
+      : result("Other / Unknown", medium || "unknown", "unknown", "Meta source does not distinguish Facebook from Instagram.");
+  }
+  if (source === "google") {
+    if (vehicleAd && (paidGoogleClick || paidMedium)) {
+      return result(
+        "Google Vehicle Ads",
+        medium || "cpc",
+        paidGoogleClick ? "confirmed" : "inferred",
+        paidGoogleClick
+          ? "Google Ads click ID and vehicle-ad campaign evidence are present."
+          : "Google source has a paid medium and vehicle-ad campaign evidence.",
+      );
+    }
+    if (paidGoogleClick) return result("Google Ads", medium || "cpc", "confirmed", "Google Ads click ID is present.");
+    if (paidMedium) return result("Google Ads", medium, "inferred", "Google source has a paid medium tag.");
+    if (/^(organic|seo)$/.test(medium)) return result("Google Organic", medium, "confirmed", "Google source has an explicit organic medium.");
+    if (/(^|\.)google\./.test(referrer)) return result("Google Organic", "organic", "inferred", "External Google referrer without paid-click evidence.");
+    return result("Other / Unknown", medium || "unknown", "unknown", "Google source lacks evidence to distinguish paid from organic.");
+  }
+  if (source === "tiktok") return result("TikTok", medium || "social", "confirmed", "Explicit utm_source identifies TikTok.");
+  if (source === "linkedin") return result("LinkedIn", medium || "social", "confirmed", "Explicit utm_source identifies LinkedIn.");
+  if (source === "reddit") return result("Reddit", medium || "social", "confirmed", "Explicit utm_source identifies Reddit.");
+  if (source) return result("Other / Unknown", medium || "unknown", "unknown", "Unrecognized utm_source; the original value remains available in utm_source.");
+
+  if (paidGoogleClick) return result("Google Ads", "cpc", "confirmed", "Google Ads click ID is present.");
+  if (t.ttclid) return result("TikTok", "paid", "confirmed", "TikTok click ID is present.");
+  if (t.li_fat_id) return result("LinkedIn", "paid", "confirmed", "LinkedIn click ID is present.");
+  if (t.rdt_cid) return result("Reddit", "paid", "confirmed", "Reddit click ID is present.");
+  const referrerMeta = namedMetaSource(referrer);
+  if (referrerMeta) return result(referrerMeta, "social", "inferred", "External referrer identifies a social platform.");
+  if (/^tiktok\.com$/.test(referrer)) return result("TikTok", "social", "inferred", "External referrer identifies TikTok.");
+  if (/(^|\.)google\./.test(referrer)) return result("Google Organic", "organic", "inferred", "Google referrer without paid-click evidence.");
+  if (referrer) return result("Referral Websites", "referral", "inferred", "An external referrer was recorded.");
+  if (t.fbclid) return result("Other / Unknown", "unknown", "unknown", "fbclid is shared by Facebook and Instagram.");
+  if (t.utm_medium || t.utm_campaign || t.utm_content || t.utm_term) {
+    return result("Other / Unknown", medium || "unknown", "unknown", "UTM values are present without a source.");
+  }
+  return result("Direct Traffic", "none", "unknown", "No campaign, click ID, or external referrer was recorded.");
+}
+
+/** Backward-compatible source/medium helper for existing callers. */
+export function classifySource(t: AttributionInput): Pick<SourceClassification, "source" | "medium"> {
+  const { source, medium } = classifyAttribution(t);
+  return { source, medium };
+}
+
+export function buildAttributionDetails(
+  first: Touch | null,
+  last: Touch | null,
+  conversionPage: string,
+): Record<string, string> {
+  const out: Record<string, string> = {};
+  const add = (prefix: string, touch: Touch | null) => {
+    if (!touch) return;
+    for (const [key, value] of Object.entries(touch)) out[`${prefix}_${key}`] = String(value ?? "");
+  };
+  add("first_touch", first);
+  add("last_touch", last);
+  const current = last ?? first;
+  out["lead_source"] = current?.source ?? "Direct Traffic";
+  out["lead_medium"] = current?.medium ?? "none";
+  out["source_evidence"] = current?.source_evidence ?? "unknown";
+  out["source_reason"] = current?.source_reason ?? "No saved attribution touch was available.";
+  for (const key of [...UTM_KEYS, ...CLICK_KEYS]) out[key] = current?.[key] ?? "";
+  out["referrer"] = current?.referrer ?? "";
+  out["landing_page"] = first?.landing_page ?? current?.landing_page ?? "";
+  out["conversion_page"] = conversionPage;
+  return out;
+}
+
+export function mergeAttributionDetails<T extends Record<string, unknown>>(
+  details: T,
+  attribution: Record<string, string>,
+): T & Record<string, unknown> {
+  const merged: Record<string, unknown> = { ...details };
+  for (const [key, value] of Object.entries(attribution)) {
+    if (merged[key] === undefined) merged[key] = value;
+  }
+  return merged as T & Record<string, unknown>;
 }
 
 function read(key: string): Touch | null {
@@ -145,7 +234,15 @@ export function captureAttribution(): void {
   // New touch when campaign signals appear, or a fresh session starts.
   if (!hasSignal && first && last) return; // internal navigation / direct return visit
 
-  const touch: Touch = { ...base, ...classifySource(base), timestamp: new Date().toISOString() };
+  const classification = classifyAttribution(base);
+  const touch: Touch = {
+    ...base,
+    source: classification.source,
+    medium: classification.medium,
+    source_evidence: classification.evidence,
+    source_reason: classification.reason,
+    timestamp: new Date().toISOString(),
+  };
   if (!first) write(FIRST_KEY, touch);
   // A Direct visit never overwrites a known campaign last touch.
   if (!last || hasSignal) write(LAST_KEY, touch);
@@ -158,19 +255,5 @@ export function getAttributionDetails(): Record<string, string> {
   captureAttribution();
   const first = read(FIRST_KEY);
   const last = read(LAST_KEY) ?? first;
-  const out: Record<string, string> = {};
-  const add = (prefix: string, t: Touch | null) => {
-    if (!t) return;
-    for (const [k, v] of Object.entries(t)) out[`${prefix}_${k}`] = String(v ?? "");
-  };
-  add("first_touch", first);
-  add("last_touch", last);
-  // Convenience top-level fields (last touch).
-  out["lead_source"] = last?.source ?? "Direct";
-  out["lead_medium"] = last?.medium ?? "none";
-  for (const k of [...UTM_KEYS, ...CLICK_KEYS]) out[k] = last?.[k] ?? "";
-  out["referrer"] = last?.referrer ?? "";
-  out["landing_page"] = first?.landing_page ?? "";
-  out["conversion_page"] = window.location.href;
-  return out;
+  return buildAttributionDetails(first, last, window.location.href);
 }
