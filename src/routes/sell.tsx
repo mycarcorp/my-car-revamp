@@ -600,7 +600,6 @@ function SellPage() {
                         )
                       : "",
                   vehicle_photo_names: photoNames.join(","),
-                  lead_source: "mycarcorp.com",
                   lead_page: "/sell",
                 })}
               >
