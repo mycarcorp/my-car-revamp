@@ -28,7 +28,7 @@ function createClient(): BetaAnalyticsDataClient {
 }
 
 export async function readGa4Report(input: Ga4RangeInput): Promise<Ga4Report> {
-	const range = resolveGa4Range(input);
+	const range = resolveGa4Range(input, new Date(), process.env["GA4_PROPERTY_TIME_ZONE"]);
 	const fetchedAt = new Date().toISOString();
 	const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 	try {
@@ -37,13 +37,16 @@ export async function readGa4Report(input: Ga4RangeInput): Promise<Ga4Report> {
 		const period = { startDate: range.startDate, endDate: range.endDate };
 		const report = (metrics: string[], dimensions: string[] = [], extra: Record<string, unknown> = {}) =>
 			client.runReport({ property, dateRanges: [period], metrics: metrics.map((name) => ({ name })), dimensions: dimensions.map((name) => ({ name })), ...extra }, { otherArgs: { timeout: REQUEST_TIMEOUT_MS, signal: timeout } });
-		const [totals, trafficChannels, landingPages, deviceCategories, daily, generateLeadEvents] = await Promise.all([
+		const [totals, trafficChannels, trafficSources, landingPages, vehiclePages, deviceCategories, daily, generateLeadEvents, generateLeadDaily] = await Promise.all([
 			report(["activeUsers", "totalUsers", "sessions", "engagedSessions", "engagementRate", "screenPageViews"]),
 			report(["sessions", "activeUsers"], ["sessionDefaultChannelGroup"], { limit: 25 }),
-			report(["sessions", "activeUsers"], ["landingPagePlusQueryString"], { limit: 25 }),
+			report(["sessions", "activeUsers"], ["sessionSourceMedium"], { limit: 15 }),
+			report(["sessions", "activeUsers", "screenPageViews", "engagedSessions", "engagementRate"], ["landingPage"], { limit: 25 }),
+			report(["sessions", "activeUsers", "screenPageViews", "engagedSessions", "engagementRate"], ["pagePath"], { limit: 25, dimensionFilter: { filter: { fieldName: "pagePath", stringFilter: { matchType: "BEGINS_WITH", value: "/inventory/" } } } }),
 			report(["sessions", "activeUsers"], ["deviceCategory"], { limit: 10 }),
 			report(["activeUsers", "sessions", "screenPageViews"], ["date"], { orderBys: [{ dimension: { dimensionName: "date" } }], limit: 90 }),
 			report(["eventCount"], [], { dimensionFilter: { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "generate_lead" } } } }),
+			report(["eventCount"], ["date"], { dimensionFilter: { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "generate_lead" } } }, orderBys: [{ dimension: { dimensionName: "date" } }], limit: 90 }),
 		]);
 		return mapGa4Reports({
 			startDate: range.startDate,
@@ -51,9 +54,12 @@ export async function readGa4Report(input: Ga4RangeInput): Promise<Ga4Report> {
 			fetchedAt,
 			metrics: totals[0],
 			trafficChannels: trafficChannels[0],
+			trafficSources: trafficSources[0],
 			landingPages: landingPages[0],
+			vehiclePages: vehiclePages[0],
 			deviceCategories: deviceCategories[0],
 			daily: daily[0],
+			generateLeadDaily: generateLeadDaily[0],
 			generateLeadEvents: generateLeadEvents[0],
 		});
 	} catch (error) {

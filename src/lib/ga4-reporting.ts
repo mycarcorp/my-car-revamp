@@ -15,7 +15,7 @@ export const ga4RangeSchema = z.object({
 export type Ga4RangeInput = z.infer<typeof ga4RangeSchema>;
 export type Ga4ResolvedRange = { startDate: string; endDate: string };
 export type Ga4Metric = { activeUsers: number; totalUsers: number; sessions: number; engagedSessions: number; engagementRate: number; screenPageViews: number };
-export type Ga4Breakdown = { label: string; sessions: number; activeUsers: number };
+export type Ga4Breakdown = { label: string; sessions: number; activeUsers: number; pageViews: number; engagedSessions: number; engagementRate: number };
 export type Ga4Daily = { date: string; activeUsers: number; sessions: number; screenPageViews: number };
 export type Ga4Report = {
 	status: "available" | "unavailable";
@@ -27,22 +27,50 @@ export type Ga4Report = {
 	fetchedAt: string;
 	metrics: Ga4Metric | null;
 	trafficChannels: Ga4Breakdown[] | null;
+	trafficSources: Ga4Breakdown[] | null;
 	landingPages: Ga4Breakdown[] | null;
+	vehiclePages: Ga4Breakdown[] | null;
 	deviceCategories: Ga4Breakdown[] | null;
 	daily: Ga4Daily[] | null;
+	generateLeadDaily: Array<{ date: string; eventCount: number }> | null;
 	generateLeadEvents: number | null;
 };
+export type Ga4IntegrationStatus = "Connected" | "Not Configured" | "Missing Credentials" | "Permission Denied" | "No Data Yet" | "Temporary API Error" | "Quota Exceeded";
+
+export function resolveGa4IntegrationStatus(report?: Ga4Report | null, requestError?: unknown): Ga4IntegrationStatus {
+	const message = report?.message ?? (requestError instanceof Error ? requestError.message : "");
+	if (report?.status === "available") {
+		const metrics = report.metrics;
+		return metrics && (metrics.totalUsers || metrics.sessions || metrics.screenPageViews || report.generateLeadEvents || report.daily?.some((row) => row.sessions || row.screenPageViews))
+			? "Connected"
+			: "No Data Yet";
+	}
+	if (/credential/i.test(message)) return "Missing Credentials";
+	if (/invalid_credentials_config/i.test(message)) return "Missing Credentials";
+	if (/not configured/i.test(message)) return "Not Configured";
+	if (/not authorized|permission|access/i.test(message)) return "Permission Denied";
+	if (/quota|exhausted/i.test(message)) return "Quota Exceeded";
+	if (/temporarily unavailable|timed? ?out/i.test(message)) return "Temporary API Error";
+	if (requestError) return "Temporary API Error";
+	return "Not Configured";
+}
 
 function parseDate(value: string): Date | null {
 	const date = new Date(`${value}T00:00:00.000Z`);
 	return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? date : null;
 }
 
-export function resolveGa4Range(input: Ga4RangeInput, now = new Date()): Ga4ResolvedRange {
+function dateInTimeZone(now: Date, timeZone?: string): string {
+	const parts = new Intl.DateTimeFormat("en-CA", { timeZone: timeZone ?? "UTC", year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(now);
+	const values = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+	return `${values.year}-${values.month}-${values.day}`;
+}
+
+export function resolveGa4Range(input: Ga4RangeInput, now = new Date(), timeZone?: string): Ga4ResolvedRange {
 	let startDate: string;
 	let endDate: string;
 	if (input.preset !== undefined) {
-		const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+		const end = new Date(`${dateInTimeZone(now, timeZone)}T00:00:00.000Z`);
 		const start = new Date(end);
 		start.setUTCDate(start.getUTCDate() - input.preset + 1);
 		startDate = start.toISOString().slice(0, 10);
@@ -53,7 +81,7 @@ export function resolveGa4Range(input: Ga4RangeInput, now = new Date()): Ga4Reso
 	}
 	const start = parseDate(startDate);
 	const end = parseDate(endDate);
-	const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+	const today = Date.parse(`${dateInTimeZone(now, timeZone)}T00:00:00.000Z`);
 	if (!start || !end || start.getTime() > end.getTime() || end.getTime() > today) {
 		throw new Error("Choose a valid date range ending today or earlier.");
 	}
@@ -70,24 +98,52 @@ function numeric(value: string | null | undefined): number {
 	return Number.isFinite(parsed) ? parsed : 0;
 }
 
+export function sanitizeGa4PagePath(value: string): string {
+	let path: string;
+	try {
+		path = new URL(value, "https://mycarcorp.com").pathname;
+	} catch {
+		path = value.split(/[?#]/, 1)[0] ?? "/";
+	}
+	try {
+		path = decodeURIComponent(path);
+	} catch {
+		path = path;
+	}
+	return path.split("/").map((segment) =>
+		/^[A-HJ-NPR-Z0-9]{17}$/i.test(segment) ? "[vehicle]"
+			: /@|^[^/\s]+@[^/\s]+\.[^/\s]+$|^[+\d().-]{7,}$|^[\da-f]{8}-(?:[\da-f]{4}-){3}[\da-f]{12}$/i.test(segment) ? "[redacted]"
+				: segment,
+	).join("/").slice(0, 500) || "/";
+}
+
 export function mapGa4Reports(input: {
 	startDate: string;
 	endDate: string;
 	fetchedAt: string;
 	metrics: ApiReport;
 	trafficChannels: ApiReport;
+	trafficSources?: ApiReport;
 	landingPages: ApiReport;
+	vehiclePages?: ApiReport;
 	deviceCategories: ApiReport;
 	daily: ApiReport;
+	generateLeadDaily?: ApiReport;
 	generateLeadEvents: ApiReport;
 }): Ga4Report {
 	const totals = input.metrics.rows?.[0]?.metricValues ?? [];
-	const breakdown = (report: ApiReport): Ga4Breakdown[] => (report.rows ?? []).map((row) => ({
-		label: row.dimensionValues?.[0]?.value || "(not set)",
+	const breakdown = (report: ApiReport, sanitizePath = false): Ga4Breakdown[] => (report.rows ?? []).map((row) => ({
+		label: sanitizePath ? sanitizeGa4PagePath(row.dimensionValues?.[0]?.value || "/") : row.dimensionValues?.[0]?.value || "(not set)",
 		sessions: numeric(row.metricValues?.[0]?.value),
 		activeUsers: numeric(row.metricValues?.[1]?.value),
+		pageViews: numeric(row.metricValues?.[2]?.value),
+		engagedSessions: numeric(row.metricValues?.[3]?.value),
+		engagementRate: numeric(row.metricValues?.[4]?.value),
 	}));
-	const metadata = [input.metrics, input.daily, input.trafficChannels, input.landingPages, input.deviceCategories, input.generateLeadEvents]
+	const vehiclePages = input.vehiclePages ?? {};
+	const generateLeadDaily = input.generateLeadDaily ?? {};
+	const trafficSources = input.trafficSources ?? {};
+	const metadata = [input.metrics, input.daily, input.trafficChannels, trafficSources, input.landingPages, vehiclePages, input.deviceCategories, generateLeadDaily, input.generateLeadEvents]
 		.map((report) => report.metadata?.timeZone).find((value): value is string => Boolean(value)) ?? null;
 	return {
 		status: "available",
@@ -106,13 +162,19 @@ export function mapGa4Reports(input: {
 			screenPageViews: numeric(totals[5]?.value),
 		},
 		trafficChannels: breakdown(input.trafficChannels),
-		landingPages: breakdown(input.landingPages),
+		trafficSources: breakdown(trafficSources),
+		landingPages: breakdown(input.landingPages, true),
+		vehiclePages: breakdown(vehiclePages, true),
 		deviceCategories: breakdown(input.deviceCategories),
 		daily: (input.daily.rows ?? []).map((row) => ({
 			date: row.dimensionValues?.[0]?.value ?? "",
 			activeUsers: numeric(row.metricValues?.[0]?.value),
 			sessions: numeric(row.metricValues?.[1]?.value),
 			screenPageViews: numeric(row.metricValues?.[2]?.value),
+		})),
+		generateLeadDaily: (generateLeadDaily.rows ?? []).map((row) => ({
+			date: row.dimensionValues?.[0]?.value ?? "",
+			eventCount: numeric(row.metricValues?.[0]?.value),
 		})),
 		generateLeadEvents: numeric(input.generateLeadEvents.rows?.[0]?.metricValues?.[0]?.value),
 	};
@@ -122,7 +184,7 @@ export function unavailableGa4Report(range: Ga4ResolvedRange, message: string, f
 	return {
 		status: "unavailable", message, propertyId: GA4_PROPERTY_ID, timeZone: null,
 		startDate: range.startDate, endDate: range.endDate, fetchedAt,
-		metrics: null, trafficChannels: null, landingPages: null, deviceCategories: null, daily: null,
+		metrics: null, trafficChannels: null, trafficSources: null, landingPages: null, vehiclePages: null, deviceCategories: null, daily: null, generateLeadDaily: null,
 		generateLeadEvents: null,
 	};
 }

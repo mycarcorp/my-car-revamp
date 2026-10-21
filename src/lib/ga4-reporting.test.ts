@@ -2,7 +2,9 @@ import { describe, expect, it } from "vitest";
 import {
 	ga4RangeSchema,
 	mapGa4Reports,
+	resolveGa4IntegrationStatus,
 	resolveGa4Range,
+	sanitizeGa4PagePath,
 	safeGa4ErrorMessage,
 	unavailableGa4Report,
 } from "./ga4-reporting";
@@ -13,18 +15,24 @@ describe("GA4 report mapping", () => {
 			startDate: "2026-10-01", endDate: "2026-10-07", fetchedAt: "2026-10-08T00:00:00.000Z",
 			metrics: { rows: [{ metricValues: ["10", "12", "15", "8", "0.5333", "40"].map((value) => ({ value })) }], metadata: { timeZone: "America/New_York" } },
 			trafficChannels: { rows: [{ dimensionValues: [{ value: "Organic Search" }], metricValues: [{ value: "7" }, { value: "6" }] }] },
-			landingPages: { rows: [{ dimensionValues: [{ value: "/inventory" }], metricValues: [{ value: "5" }, { value: "4" }] }] },
+			trafficSources: { rows: [{ dimensionValues: [{ value: "google / organic" }], metricValues: [{ value: "6" }, { value: "5" }] }] },
+			landingPages: { rows: [{ dimensionValues: [{ value: "/inventory?email=private@example.com" }], metricValues: ["5", "4", "12", "3", "0.6"].map((value) => ({ value })) }] },
+			vehiclePages: { rows: [{ dimensionValues: [{ value: "/inventory/used-car" }], metricValues: ["3", "2", "7", "1", "0.33"].map((value) => ({ value })) }] },
 			deviceCategories: { rows: [{ dimensionValues: [{ value: "mobile" }], metricValues: [{ value: "9" }, { value: "8" }] }] },
 			daily: { rows: [{ dimensionValues: [{ value: "20261001" }], metricValues: [{ value: "10" }, { value: "15" }, { value: "40" }] }] },
+			generateLeadDaily: { rows: [{ dimensionValues: [{ value: "20261001" }], metricValues: [{ value: "2" }] }] },
 			generateLeadEvents: { rows: [{ metricValues: [{ value: "3" }] }] },
 		});
 		expect(report).toMatchObject({
 			status: "available", propertyId: "559909149", timeZone: "America/New_York",
 			metrics: { activeUsers: 10, totalUsers: 12, sessions: 15, engagedSessions: 8, engagementRate: 0.5333, screenPageViews: 40 },
 			trafficChannels: [{ label: "Organic Search", sessions: 7, activeUsers: 6 }],
-			landingPages: [{ label: "/inventory", sessions: 5, activeUsers: 4 }],
+			trafficSources: [{ label: "google / organic", sessions: 6, activeUsers: 5 }],
+			landingPages: [{ label: "/inventory", sessions: 5, activeUsers: 4, pageViews: 12, engagedSessions: 3, engagementRate: 0.6 }],
+			vehiclePages: [{ label: "/inventory/used-car", sessions: 3, activeUsers: 2, pageViews: 7, engagedSessions: 1, engagementRate: 0.33 }],
 			deviceCategories: [{ label: "mobile", sessions: 9, activeUsers: 8 }],
 			daily: [{ date: "20261001", activeUsers: 10, sessions: 15, screenPageViews: 40 }],
+			generateLeadDaily: [{ date: "20261001", eventCount: 2 }],
 			generateLeadEvents: 3,
 			startDate: "2026-10-01", endDate: "2026-10-07", fetchedAt: "2026-10-08T00:00:00.000Z",
 		});
@@ -48,10 +56,43 @@ describe("GA4 report mapping", () => {
 		expect(empty.metrics?.sessions).toBe(0);
 		expect(empty.trafficChannels).toEqual([]);
 		expect(empty.generateLeadEvents).toBe(0);
+		expect(empty.vehiclePages).toEqual([]);
+		expect(empty.generateLeadDaily).toEqual([]);
+		expect(resolveGa4IntegrationStatus(empty)).toBe("No Data Yet");
 		const failed = unavailableGa4Report({ startDate: "2026-10-01", endDate: "2026-10-07" }, "Google Analytics is temporarily unavailable.");
 		expect(failed.status).toBe("unavailable");
 		expect(failed.metrics).toBeNull();
 		expect(failed.generateLeadEvents).toBeNull();
+	});
+
+	it("removes query strings and redacts VIN-like path segments", () => {
+		expect(sanitizeGa4PagePath("https://mycarcorp.com/inventory/1HGCM82633A004352?email=private%40example.com&token=secret#details"))
+			.toBe("/inventory/[vehicle]");
+		expect(sanitizeGa4PagePath("/inventory/search?q=customer name&vin=1HGCM82633A004352"))
+			.toBe("/inventory/search");
+		expect(sanitizeGa4PagePath("/account/private@example.com/555-123-4567/550e8400-e29b-41d4-a716-446655440000"))
+			.toBe("/account/[redacted]/[redacted]/[redacted]");
+	});
+
+	it("classifies connected, empty, unavailable, and request-error states", () => {
+		const available = mapGa4Reports({
+			startDate: "2026-10-01", endDate: "2026-10-07", fetchedAt: "2026-10-08T00:00:00.000Z",
+			metrics: { rows: [{ metricValues: ["1", "2", "3", "1", "0.3", "5"].map((value) => ({ value })) }] },
+			trafficChannels: {}, landingPages: {}, deviceCategories: {}, daily: {}, generateLeadEvents: {},
+		});
+		expect(resolveGa4IntegrationStatus(available)).toBe("Connected");
+		expect(resolveGa4IntegrationStatus(unavailableGa4Report({ startDate: "2026-10-01", endDate: "2026-10-07" }, "GA4 access is not authorized."))).toBe("Permission Denied");
+		expect(resolveGa4IntegrationStatus(unavailableGa4Report({ startDate: "2026-10-01", endDate: "2026-10-07" }, "Google credentials are not configured."))).toBe("Missing Credentials");
+		expect(resolveGa4IntegrationStatus(unavailableGa4Report({ startDate: "2026-10-01", endDate: "2026-10-07" }, "quota is temporarily exhausted"))).toBe("Quota Exceeded");
+		expect(resolveGa4IntegrationStatus(unavailableGa4Report({ startDate: "2026-10-01", endDate: "2026-10-07" }, "Google Analytics is temporarily unavailable."))).toBe("Temporary API Error");
+		expect(resolveGa4IntegrationStatus(unavailableGa4Report({ startDate: "2026-10-01", endDate: "2026-10-07" }, "GA4 is not configured."))).toBe("Not Configured");
+		expect(resolveGa4IntegrationStatus(null, new Error("network error"))).toBe("Temporary API Error");
+	});
+
+	it("uses the configured property timezone for preset calendar days", () => {
+		const now = new Date("2026-10-22T02:00:00.000Z");
+		expect(resolveGa4Range({ preset: 7 }, now, "America/Los_Angeles"))
+			.toEqual({ startDate: "2026-10-15", endDate: "2026-10-21" });
 	});
 
 	it("sanitizes authentication, permission, quota, property, timeout, and provider failures", () => {
