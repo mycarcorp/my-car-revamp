@@ -1,4 +1,5 @@
 import { BetaAnalyticsDataClient } from "@google-analytics/data";
+import { fallback as googleGaxFallback } from "google-gax/fallback";
 import {
 	GA4_PROPERTY_ID,
 	mapGa4Reports,
@@ -14,7 +15,7 @@ const REQUEST_TIMEOUT_MS = 20000;
 
 function createClient(): BetaAnalyticsDataClient {
 	const rawCredentials = process.env["GA4_SERVICE_ACCOUNT_JSON"];
-	if (!rawCredentials) return new BetaAnalyticsDataClient({ scopes: [SCOPE] });
+	if (!rawCredentials) return new BetaAnalyticsDataClient({ scopes: [SCOPE], fallback: true }, googleGaxFallback);
 	let credentials: { client_email?: string; private_key?: string; type?: string };
 	try {
 		credentials = JSON.parse(rawCredentials) as typeof credentials;
@@ -24,7 +25,7 @@ function createClient(): BetaAnalyticsDataClient {
 	if (credentials.type !== "service_account" || !credentials.client_email || !credentials.private_key) {
 		throw new Error("invalid_credentials_config");
 	}
-	return new BetaAnalyticsDataClient({ credentials, scopes: [SCOPE] });
+	return new BetaAnalyticsDataClient({ credentials, scopes: [SCOPE], fallback: true }, googleGaxFallback);
 }
 
 export async function readGa4Report(input: Ga4RangeInput): Promise<Ga4Report> {
