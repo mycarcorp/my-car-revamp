@@ -22,6 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LeadForm } from "@/components/LeadForm";
 import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
+import { recordFormStart, trackAnalyticsEvent } from "@/lib/analytics";
 import { allVehiclesQuery, siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
 
 type AppointmentType = "test_drive" | "trade_appraisal" | "financing" | "general";
@@ -127,28 +128,6 @@ const APPOINTMENT_OPTIONS: {
   },
 ];
 
-type ScheduleTrackingEvent =
-  "schedule_page_view" | "appointment_type_selected" | "appointment_form_started" | "appointment_vehicle_selected";
-
-function trackScheduleEvent(event: ScheduleTrackingEvent, properties: Record<string, unknown> = {}) {
-  if (typeof window === "undefined") return;
-
-  const payload = {
-    event,
-    page_path: window.location.pathname,
-    page_url: window.location.href,
-    ...properties,
-  };
-
-  window.dispatchEvent(new CustomEvent("mycar:analytics", { detail: payload }));
-
-  const analyticsWindow = window as Window & {
-    dataLayer?: Array<Record<string, unknown>>;
-  };
-
-  analyticsWindow.dataLayer?.push(payload);
-}
-
 function displayHours(value: unknown) {
   const text = String(value ?? "").trim();
 
@@ -217,7 +196,6 @@ function SchedulePage() {
   const [vehicleSearch, setVehicleSearch] = useState("");
   const autoScrolledVehicleRef = useRef(false);
   const formStartedRef = useRef(false);
-  const pageTrackedRef = useRef(false);
 
   const selectedVehicle = useMemo(
     () => inventory.find((item) => item.id === selectedVehicleId),
@@ -243,16 +221,6 @@ function SchedulePage() {
   useEffect(() => {
     if (params.type) setType(params.type);
   }, [params.type]);
-
-  useEffect(() => {
-    if (pageTrackedRef.current) return;
-
-    pageTrackedRef.current = true;
-    trackScheduleEvent("schedule_page_view", {
-      appointment_type: params.type ?? "test_drive",
-      has_vehicle_parameter: Boolean(params.vehicle || params.stock || params.vin),
-    });
-  }, [params.stock, params.type, params.vehicle, params.vin]);
 
   useEffect(() => {
     const requestedVehicle = params.vehicle?.trim().toLowerCase();
@@ -335,8 +303,9 @@ function SchedulePage() {
 
   const chooseAppointment = (appointmentType: AppointmentType) => {
     setType(appointmentType);
-    trackScheduleEvent("appointment_type_selected", {
-      appointment_type: appointmentType,
+    trackAnalyticsEvent({
+      name: "appointment_type_selected",
+      params: { appointment_type: appointmentType },
     });
 
     window.setTimeout(() => {
@@ -348,11 +317,9 @@ function SchedulePage() {
     setSelectedVehicleId(item.id);
     setVehiclePickerOpen(false);
     setVehicleSearch("");
-    trackScheduleEvent("appointment_vehicle_selected", {
-      vehicle_id: item.id,
-      vehicle_vin: item.vin ?? "",
-      vehicle_stock_number: item.stock_number ?? "",
-      appointment_type: type,
+    trackAnalyticsEvent({
+      name: "appointment_vehicle_selected",
+      params: { appointment_type: type },
     });
   };
 
@@ -360,11 +327,7 @@ function SchedulePage() {
     if (formStartedRef.current) return;
 
     formStartedRef.current = true;
-    trackScheduleEvent("appointment_form_started", {
-      appointment_type: type,
-      vehicle_id: selectedVehicle?.id ?? "",
-      vehicle_stock_number: selectedVehicle?.stock_number ?? "",
-    });
+    recordFormStart("appointment");
   };
 
   const openVehiclePicker = () => {
@@ -906,9 +869,9 @@ function SchedulePage() {
                           onValueChange={(value) => {
                             const nextType = value as AppointmentType;
                             setType(nextType);
-                            trackScheduleEvent("appointment_type_selected", {
-                              appointment_type: nextType,
-                              source: "appointment_form",
+                            trackAnalyticsEvent({
+                              name: "appointment_type_selected",
+                              params: { appointment_type: nextType },
                             });
                           }}
                         >

@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from "vitest";
 import {
   createAnalyticsController,
+  getTrackingConsentPreferences,
   getLeadFormType,
   isAnalyticsRoutePublic,
   publicCatalogItemId,
@@ -8,6 +9,8 @@ import {
   recordLeadSubmission,
   sanitizeEvent,
   sanitizePageLocation,
+  setTrackingConsentPreferences,
+  trackMetaPageView,
 } from "./analytics";
 
 function mockAdapter() {
@@ -83,10 +86,97 @@ describe("central GA4 analytics gate", () => {
     expect(adapter.updateConsent).toHaveBeenCalledWith("granted");
     analytics.configure({ measurementId: "G-CFXQ8JPE21", consent: "denied", isPublicRoute: true });
     expect(adapter.updateConsent).toHaveBeenLastCalledWith("denied");
+    expect(analytics.track({ name: "form_start", params: { form_type: "contact" } })).toBe(false);
+    expect(adapter.send).not.toHaveBeenCalled();
   });
 });
 
 describe("GA4 event allowlists", () => {
+  it("keeps appointment events consent-aware and strips all fields except appointment type", () => {
+    expect(sanitizeEvent({
+      name: "appointment_vehicle_selected",
+      params: {
+        appointment_type: "test_drive",
+        vehicle_id: "internal-id",
+        vehicle_vin: "1HGCM82633A004352",
+        stock_number: "MC-123",
+        page_url: "https://mycarcorp.com/schedule?vin=1HGCM82633A004352",
+      },
+    } as never)).toEqual({ name: "appointment_vehicle_selected", params: { appointment_type: "test_drive" } });
+    expect(sanitizeEvent({
+      name: "appointment_type_selected",
+      params: { appointment_type: "customer supplied type", email: "private@example.com" },
+    } as never)).toBeNull();
+  });
+
+  it("stores independent analytics and Meta decisions without enabling either by default", () => {
+    const data = new Map<string, string>();
+    const localStorage = {
+      getItem: (key: string) => data.get(key) ?? null,
+      setItem: (key: string, value: string) => { data.set(key, value); },
+    };
+    vi.stubGlobal("window", { localStorage, location: { origin: "https://mycarcorp.com", href: "https://mycarcorp.com/" } });
+    try {
+      data.set("mycar.analyticsConsent", "granted");
+      expect(getTrackingConsentPreferences()).toEqual({ analytics: "unknown", meta: "unknown" });
+      expect(trackMetaPageView("/")).toBe(false);
+      setTrackingConsentPreferences({ analytics: "granted", meta: "denied" }, "/");
+      expect(getTrackingConsentPreferences()).toEqual({ analytics: "granted", meta: "denied" });
+      expect(JSON.parse(data.get("mycar.trackingConsent.v1") ?? "{}")).toEqual({ analytics: "granted", meta: "denied" });
+      setTrackingConsentPreferences({ analytics: "denied", meta: "denied" }, "/");
+      expect(getTrackingConsentPreferences()).toEqual({ analytics: "denied", meta: "denied" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("applies denials in memory when persistent storage is blocked", () => {
+    let blocked = true;
+    const data = new Map<string, string>();
+    const localStorage = {
+      getItem: (key: string) => {
+        if (blocked) throw new Error("storage blocked");
+        return data.get(key) ?? null;
+      },
+      setItem: (key: string, value: string) => {
+        if (blocked) throw new Error("storage blocked");
+        data.set(key, value);
+      },
+    };
+    vi.stubGlobal("window", { localStorage, location: { origin: "https://mycarcorp.com", href: "https://mycarcorp.com/" } });
+    try {
+      setTrackingConsentPreferences({ analytics: "denied", meta: "denied" }, "/");
+      expect(getTrackingConsentPreferences()).toEqual({ analytics: "denied", meta: "denied" });
+      blocked = false;
+      setTrackingConsentPreferences({ analytics: "denied", meta: "denied" }, "/");
+      expect(getTrackingConsentPreferences()).toEqual({ analytics: "denied", meta: "denied" });
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not initialize Meta Pixel on query-bearing URLs even after Meta consent", () => {
+    const data = new Map([["mycar.trackingConsent.v1", JSON.stringify({ analytics: "denied", meta: "granted" })]]);
+    const createElement = vi.fn(() => ({ async: false, src: "", dataset: {} }));
+    const appendChild = vi.fn();
+    vi.stubGlobal("window", {
+      localStorage: { getItem: (key: string) => data.get(key) ?? null },
+      location: { origin: "https://mycarcorp.com", href: "https://mycarcorp.com/schedule?type=test_drive" },
+    });
+    vi.stubGlobal("document", {
+      querySelector: vi.fn(() => null),
+      createElement,
+      head: { appendChild },
+    });
+    try {
+      expect(trackMetaPageView("/schedule")).toBe(false);
+      expect(createElement).not.toHaveBeenCalled();
+      expect(appendChild).not.toHaveBeenCalled();
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("keeps only whitelisted form fields and strips caller-supplied identifiers", () => {
     expect(sanitizeEvent({
       name: "generate_lead",
