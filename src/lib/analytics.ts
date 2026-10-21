@@ -1,10 +1,13 @@
 export type ConsentState = "unknown" | "denied" | "granted";
+export type TrackingConsentPreferences = { analytics: ConsentState; meta: ConsentState };
 export type AnalyticsEvent =
   | { name: "page_view"; params: { page_path: string; page_location: string } }
   | { name: "view_item"; params: { item_id: string; item_name: string; item_category?: string; price?: number; currency?: "USD" } }
   | { name: "view_item_list"; params: { item_list_name: string; items: AnalyticsItem[] } }
   | { name: "select_item"; params: { item_list_name: string; items: AnalyticsItem[] } }
   | { name: "search"; params: { search_type: "inventory"; filter_count: number } }
+  | { name: "appointment_type_selected"; params: { appointment_type: "test_drive" | "trade_appraisal" | "financing" | "general" } }
+  | { name: "appointment_vehicle_selected"; params: { appointment_type: "test_drive" | "trade_appraisal" | "financing" | "general" } }
   | { name: "form_start"; params: { form_type: string } }
   | { name: "generate_lead"; params: { form_type: string; lead_intent?: "sell" | "trade" } };
 
@@ -34,6 +37,29 @@ const SAFE_LIST_NAMES = new Set(["vehicle_inventory", "related_vehicles", "searc
 const SAFE_ITEM_CATEGORIES = new Set(["suv", "sedan", "truck", "coupe", "hatchback", "convertible", "minivan", "wagon", "van"]);
 const MAX_LIST_ITEMS = 10;
 const SENSITIVE_VALUE_PATTERN = /@|\b\d{3}[- .]?\d{3}[- .]?\d{4}\b|\b[A-HJ-NPR-Z0-9]{17}\b/i;
+const CONSENT_PREFERENCES_KEY = "mycar.trackingConsent.v1";
+const LEGACY_ANALYTICS_CONSENT_KEY = "mycar.analyticsConsent";
+const META_PIXEL_ID = "913977571315979";
+let storageFallbackPreferences: TrackingConsentPreferences | null = null;
+
+const unknownConsent: TrackingConsentPreferences = { analytics: "unknown", meta: "unknown" };
+
+export function getTrackingConsentPreferences(): TrackingConsentPreferences {
+  if (storageFallbackPreferences) return { ...storageFallbackPreferences };
+  if (typeof window === "undefined") return { ...unknownConsent };
+  try {
+    const raw = window.localStorage.getItem(CONSENT_PREFERENCES_KEY);
+    if (raw) {
+      const value = JSON.parse(raw) as Partial<TrackingConsentPreferences>;
+      const valid = (choice: unknown): choice is ConsentState => choice === "granted" || choice === "denied" || choice === "unknown";
+      if (valid(value.analytics) && valid(value.meta)) return { analytics: value.analytics, meta: value.meta };
+    }
+    const legacy = window.localStorage.getItem(LEGACY_ANALYTICS_CONSENT_KEY);
+    return { analytics: legacy === "denied" ? "denied" : "unknown", meta: "unknown" };
+  } catch {
+    return { ...unknownConsent };
+  }
+}
 
 export function sanitizePagePath(pathname: string): string {
   if (!pathname.startsWith("/") || pathname.startsWith("//")) return "/";
@@ -134,6 +160,13 @@ export function createAnalyticsController(adapter: AnalyticsAdapter) {
 
 export function sanitizeEvent(event: AnalyticsEvent): AnalyticsEvent | null {
   if (event.name === "page_view") return null;
+  if (event.name === "appointment_type_selected" || event.name === "appointment_vehicle_selected") {
+    const types = new Set(["test_drive", "trade_appraisal", "financing", "general"]);
+    const appointmentType = (event.params as { appointment_type?: unknown }).appointment_type;
+    return typeof appointmentType === "string" && types.has(appointmentType as "test_drive" | "trade_appraisal" | "financing" | "general")
+      ? { name: event.name, params: { appointment_type: appointmentType as "test_drive" | "trade_appraisal" | "financing" | "general" } }
+      : null;
+  }
   if (event.name === "form_start" || event.name === "generate_lead") {
     if (!SAFE_FORM_TYPES.has(event.params.form_type)) return null;
     if (event.name === "generate_lead") {
@@ -208,7 +241,7 @@ function browserAdapter(): AnalyticsAdapter {
       gtagFunction = w.gtag;
       w.gtag("js", new Date());
       w.gtag("consent", "default", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
-      w.gtag("consent", "update", { analytics_storage: "granted", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
+      w.gtag("consent", "update", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
       w.gtag("config", measurementId, { send_page_view: false, allow_google_signals: false });
       const script = document.createElement("script");
       script.async = true;
@@ -237,13 +270,7 @@ function runtime() {
 }
 
 function storedConsent(): ConsentState {
-  if (typeof window === "undefined") return "unknown";
-  try {
-    const value = window.localStorage.getItem("mycar.analyticsConsent");
-    return value === "granted" || value === "denied" ? value : "unknown";
-  } catch {
-    return "unknown";
-  }
+  return getTrackingConsentPreferences().analytics;
 }
 
 export function configureAnalytics(pathname: string, enabled = true): void {
@@ -267,16 +294,93 @@ export function getAnalyticsStatus() {
   return runtime().getStatus();
 }
 
-/** Call only from an approved analytics-consent interface. No consent UI currently invokes this. */
+/** Backward-compatible GA4-only choice setter; Meta remains independently decided. */
 export function setAnalyticsConsent(consent: "granted" | "denied", pathname: string): void {
+  const current = getTrackingConsentPreferences();
+  setTrackingConsentPreferences({ analytics: consent, meta: current.meta === "unknown" ? "denied" : current.meta }, pathname);
+}
+
+export function setTrackingConsentPreferences(
+  preferences: { analytics: "granted" | "denied"; meta: "granted" | "denied" },
+  pathname: string,
+): void {
   if (typeof window === "undefined") return;
+  const safePreferences: TrackingConsentPreferences = {
+    analytics: preferences.analytics === "granted" ? "granted" : "denied",
+    meta: preferences.meta === "granted" ? "granted" : "denied",
+  };
+  let stored = false;
   try {
-    window.localStorage.setItem("mycar.analyticsConsent", consent);
+    window.localStorage.setItem(CONSENT_PREFERENCES_KEY, JSON.stringify(safePreferences));
+    stored = true;
   } catch {
-    return;
+    storageFallbackPreferences = safePreferences;
+  }
+  if (stored) {
+    storageFallbackPreferences = null;
+    try {
+      window.localStorage.setItem(LEGACY_ANALYTICS_CONSENT_KEY, preferences.analytics);
+    } catch {
+      // The versioned preference remains authoritative if a legacy write fails.
+    }
   }
   configureAnalytics(pathname);
-  if (consent === "granted") trackPageView(pathname);
+  if (preferences.analytics === "granted") trackPageView(pathname);
+  trackMetaPageView(pathname);
+}
+
+type MetaPixel = (...args: unknown[]) => void;
+let metaPixel: MetaPixel | null = null;
+let metaPixelLoaded = false;
+
+function pageLocationHasSensitiveQuery(): boolean {
+  if (typeof window === "undefined") return true;
+  const url = new URL(window.location.href);
+  return url.search.length > 0;
+}
+
+function loadMetaPixel(): MetaPixel | null {
+  if (typeof window === "undefined" || typeof document === "undefined") return null;
+  const w = window as Window & { fbq?: MetaPixel; _fbq?: MetaPixel };
+  if (!w.fbq) {
+    const queue: MetaPixel & { callMethod?: MetaPixel; queue?: unknown[]; loaded?: boolean; version?: string } = function (...args: unknown[]) {
+      if (queue.callMethod) queue.callMethod(...args);
+      else queue.queue?.push(args);
+    };
+    queue.queue = [];
+    queue.loaded = true;
+    queue.version = "2.0";
+    w.fbq = queue;
+    w._fbq = queue;
+  }
+  metaPixel = w.fbq;
+  if (!metaPixelLoaded) {
+    if (!document.querySelector('script[data-mycar-meta="true"]')) {
+      const script = document.createElement("script");
+      script.async = true;
+      script.src = "https://connect.facebook.net/en_US/fbevents.js";
+      script.dataset["mycarMeta"] = "true";
+      document.head.appendChild(script);
+    }
+    metaPixel("init", META_PIXEL_ID);
+    metaPixelLoaded = true;
+  }
+  return metaPixel;
+}
+
+export function trackMetaPageView(pathname: string): boolean {
+  if (typeof window === "undefined") return false;
+  const consent = getTrackingConsentPreferences().meta;
+  if (consent !== "granted" || !isAnalyticsRoutePublic(pathname)) {
+    if (metaPixelLoaded) metaPixel?.("consent", "revoke");
+    return false;
+  }
+  if (pageLocationHasSensitiveQuery() || sanitizePagePath(pathname) !== pathname) return false;
+  const pixel = loadMetaPixel();
+  if (!pixel) return false;
+  pixel("consent", "grant");
+  pixel("track", "PageView");
+  return true;
 }
 
 export function publicCatalogItemId(

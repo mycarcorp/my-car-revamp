@@ -17,8 +17,9 @@ import { AuthProvider } from "@/hooks/useAuth";
 import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
+import { AnalyticsConsentManager } from "@/components/AnalyticsConsentManager";
 import { captureAttribution } from "@/lib/attribution";
-import { configureAnalytics, trackPageView } from "@/lib/analytics";
+import { configureAnalytics, trackMetaPageView, trackPageView } from "@/lib/analytics";
 import { beginVisit, trackPath } from "@/lib/visitor-personalization";
 
 function NotFoundComponent() {
@@ -125,15 +126,6 @@ function RootShell({ children }: { children: ReactNode }) {
         <HeadContent />
       </head>
       <body>
-        <noscript>
-          <img
-            height="1"
-            width="1"
-            style={{ display: "none" }}
-            alt=""
-            src="https://www.facebook.com/tr?id=913977571315979&ev=PageView&noscript=1"
-          />
-        </noscript>
         {children}
         <Scripts />
       </body>
@@ -164,34 +156,7 @@ function RootComponent() {
   }, [pathname, skipTracking]);
 
   useEffect(() => {
-    if (skipTracking) return;
-    const w = window as unknown as { fbq?: (...args: unknown[]) => void };
-    if (!w.fbq) {
-      /* eslint-disable */
-      // Meta Pixel base code
-      (function (f: any, b: Document, e: string, v: string) {
-        if (f.fbq) return;
-        const n: any = (f.fbq = function (...args: unknown[]) {
-          n.callMethod ? n.callMethod.apply(n, args) : n.queue.push(args);
-        });
-        if (!f._fbq) f._fbq = n;
-        n.push = n;
-        n.loaded = true;
-        n.version = "2.0";
-        n.queue = [];
-        const t = b.createElement(e) as HTMLScriptElement;
-        t.async = true;
-        t.src = v;
-        const s = b.getElementsByTagName(e)[0];
-        s?.parentNode?.insertBefore(t, s);
-      })(window, document, "script", "https://connect.facebook.net/en_US/fbevents.js");
-      /* eslint-enable */
-      const fbq = (window as unknown as Record<string, unknown>)["fbq"] as
-        | ((...args: unknown[]) => void)
-        | undefined;
-      fbq?.("init", "913977571315979");
-    }
-    w.fbq?.("track", "PageView");
+    if (!skipTracking) trackMetaPageView(pathname);
   }, [pathname, skipTracking]);
 
   useEffect(() => {
@@ -246,6 +211,7 @@ function RootComponent() {
         </div>
         <Toaster />
       </AuthProvider>
+      <AnalyticsConsentManager pathname={pathname} />
     </QueryClientProvider>
   );
 }
