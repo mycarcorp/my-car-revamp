@@ -1,6 +1,6 @@
 import { createFileRoute, Link, useNavigate } from "@tanstack/react-router";
 import { useSuspenseQuery } from "@tanstack/react-query";
-import { memo, useCallback, useEffect, useMemo, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import {
   ArrowDown,
   ArrowRight,
@@ -21,6 +21,7 @@ import { Slider } from "@/components/ui/slider";
 import { allVehiclesQuery, type VehicleWithPhotos } from "@/lib/queries";
 import { isVideoUrl } from "@/lib/vehicle-media";
 import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
+import { publicCatalogItemId, trackAnalyticsEvent } from "@/lib/analytics";
 
 /**
  * My Car inventory page: replace the file currently registering /search.
@@ -236,6 +237,18 @@ const InventoryListingCard = memo(function InventoryListingCard({ vehicle, prior
           to="/inventory/$slug"
           params={{ slug }}
           aria-label={`View vehicle details for ${title}`}
+          onClick={() => trackAnalyticsEvent({
+            name: "select_item",
+            params: {
+              item_list_name: "search_results",
+              items: [{
+                item_id: publicCatalogItemId(vehicle.year, vehicle.make, vehicle.model),
+                item_name: title,
+                ...(vehicle.body_style ? { item_category: vehicle.body_style } : {}),
+                ...(Number.isFinite(Number(vehicle.price_cents)) ? { price: Number(vehicle.price_cents) / 100, currency: "USD" as const } : {}),
+              }],
+            },
+          })}
           className="absolute inset-0 z-10 rounded-xl focus-visible:outline-none"
         />
       )}
@@ -916,6 +929,8 @@ function SearchPage() {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [savedIds, setSavedIds] = useState<string[]>([]);
   const [onlySaved, setOnlySaved] = useState(false);
+  const lastTrackedList = useRef("");
+  const lastTrackedSearch = useRef("");
   useEffect(() => {
     const sync = () => {
       try {
@@ -1020,6 +1035,35 @@ function SearchPage() {
   const displayed = filtered.slice((page - 1) * PAGE_SIZE, page * PAGE_SIZE);
   const count =
     FILTER_KEYS.filter((key) => filters[key] !== undefined && filters[key] !== "").length + Number(onlySaved);
+  useEffect(() => {
+    if (isLoading || displayed.length === 0) return;
+    const signature = `${page}:${displayed.map((vehicle) => vehicle.slug).join("|")}`;
+    if (signature === lastTrackedList.current) return;
+    const sent = trackAnalyticsEvent({
+      name: "view_item_list",
+      params: {
+        item_list_name: "search_results",
+        items: displayed.map((vehicle) => ({
+          item_id: publicCatalogItemId(vehicle.year, vehicle.make, vehicle.model),
+          item_name: vehicleTitle(vehicle),
+          ...(vehicle.body_style ? { item_category: vehicle.body_style } : {}),
+          ...(Number.isFinite(Number(vehicle.price_cents)) ? { price: Number(vehicle.price_cents) / 100, currency: "USD" as const } : {}),
+        })),
+      },
+    });
+    if (sent) lastTrackedList.current = signature;
+  }, [displayed, isLoading, page]);
+  useEffect(() => {
+    if (count === 0) return;
+    const signature = JSON.stringify(FILTER_KEYS.map((key) => filters[key] ?? null)) + `|${onlySaved}`;
+    if (signature === lastTrackedSearch.current) return;
+    const timer = window.setTimeout(() => {
+      if (trackAnalyticsEvent({ name: "search", params: { search_type: "inventory", filter_count: count } })) {
+        lastTrackedSearch.current = signature;
+      }
+    }, 700);
+    return () => window.clearTimeout(timer);
+  }, [filters, onlySaved, count]);
   const pageTo = (newPage: number) => {
     const next = compact({ ...filters, page: newPage });
     setFilters(next);

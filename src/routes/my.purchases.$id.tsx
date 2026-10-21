@@ -11,6 +11,7 @@ import { getMyPurchase, saveMyPurchase, submitMyPurchase } from "@/lib/purchases
 import { canSubmit, paymentLabel, type Purchase, type PurchaseStep } from "@/lib/purchase-flow";
 import { formatDate, formatMiles, formatUsd } from "@/lib/format";
 import { getAttributionDetails } from "@/lib/attribution";
+import { recordLeadSubmission } from "@/lib/analytics";
 import { isSetupPending, SetupPending, StatusBadge } from "@/components/purchase/PurchaseBits";
 
 export const Route = createFileRoute("/my/purchases/$id")({
@@ -115,6 +116,7 @@ function PurchaseWorkspace() {
       const result = await submitMyPurchase({ data: { accessToken: token, id: Number(id), attribution: getAttributionDetails() } });
       setDraft(result);
       setStep("schedule");
+      recordLeadSubmission(true, "purchase_request");
       toast.success("Purchase request submitted for dealership review.");
       void qc.invalidateQueries({ queryKey: ["my-purchase", id] });
       void qc.invalidateQueries({ queryKey: ["my-purchases"] });
