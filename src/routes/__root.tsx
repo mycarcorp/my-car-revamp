@@ -18,6 +18,7 @@ import { SiteHeader } from "@/components/SiteHeader";
 import { SiteFooter } from "@/components/SiteFooter";
 import { Toaster } from "@/components/ui/sonner";
 import { captureAttribution } from "@/lib/attribution";
+import { configureAnalytics, trackPageView } from "@/lib/analytics";
 import { beginVisit, trackPath } from "@/lib/visitor-personalization";
 
 function NotFoundComponent() {
@@ -149,7 +150,11 @@ function RootComponent() {
   // Admin hero-editor preview frame loads "/" — never count it as a visit.
   const skipTracking = isAdmin || searchStr.includes("heroPreview=1");
   useEffect(() => {
-    if (!skipTracking) captureAttribution();
+    configureAnalytics(pathname, !skipTracking);
+    if (!skipTracking) {
+      captureAttribution();
+      trackPageView(pathname);
+    }
   }, [pathname, searchStr, skipTracking]);
 
   useEffect(() => {

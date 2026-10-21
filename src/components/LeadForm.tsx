@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from "react";
+import { useRef, useState, type ReactNode } from "react";
 import { toast } from "sonner";
 import { CheckCircle2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
@@ -11,6 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { mirrorLeadToLegacy } from "@/lib/legacy-mirror.functions";
 import { sendLeadToGhl } from "@/lib/ghl-webhook.functions";
 import { getAttributionDetails, mergeAttributionDetails } from "@/lib/attribution";
+import { getLeadFormType, recordFormStart, recordLeadSubmission } from "@/lib/analytics";
 import type { Database } from "@/integrations/supabase/types";
 
 type LeadType = Database["public"]["Enums"]["lead_type"];
@@ -59,6 +60,14 @@ export function LeadForm({
   const { user } = useAuth();
   const [submitting, setSubmitting] = useState(false);
   const [done, setDone] = useState(false);
+  const formStarted = useRef(false);
+
+  function markFormStarted() {
+    if (formStarted.current) return;
+    formStarted.current = true;
+    const formType = getLeadFormType(leadType, collectDetails?.() ?? {});
+    if (formType) recordFormStart(formType);
+  }
 
   async function onSubmit(e: React.FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -100,6 +109,7 @@ export function LeadForm({
       toast.error("We couldn't send that. Please call us at (540) 426-3322.");
       return;
     }
+    recordLeadSubmission(true, leadType, details);
     // Mirror into the legacy tables. Never blocks or fails the submission.
     void mirrorLeadToLegacy({
       data: {
@@ -142,7 +152,7 @@ export function LeadForm({
   }
 
   return (
-    <form onSubmit={onSubmit} className="space-y-4">
+    <form onSubmit={onSubmit} onInputCapture={markFormStarted} className="space-y-4">
       {children}
       {!contact && (<>
       <div className="grid gap-4 sm:grid-cols-2">
