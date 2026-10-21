@@ -1,5 +1,4 @@
-import { BetaAnalyticsDataClient } from "@google-analytics/data";
-import { fallback as googleGaxFallback } from "google-gax/fallback";
+import { importPKCS8, SignJWT } from "jose";
 import {
 	GA4_PROPERTY_ID,
 	mapGa4Reports,
@@ -11,57 +10,182 @@ import {
 } from "./ga4-reporting";
 
 const SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
+const TOKEN_URL = "https://oauth2.googleapis.com/token";
+const REPORT_URL = `https://analyticsdata.googleapis.com/v1beta/properties/${GA4_PROPERTY_ID}:runReport`;
 const REQUEST_TIMEOUT_MS = 20000;
+const TOKEN_REFRESH_SKEW_MS = 60000;
 
-function createClient(): BetaAnalyticsDataClient {
+type ServiceAccountCredentials = {
+	type?: string;
+	client_email?: string;
+	private_key?: string;
+};
+
+type Ga4ApiReport = Parameters<typeof mapGa4Reports>[0]["metrics"];
+type GoogleErrorResponse = { error?: { code?: number; status?: string; message?: string } };
+
+let cachedToken: { email: string; accessToken: string; expiresAt: number } | undefined;
+
+function configuredCredentials(): ServiceAccountCredentials | null {
 	const rawCredentials = process.env["GA4_SERVICE_ACCOUNT_JSON"];
-	if (!rawCredentials) return new BetaAnalyticsDataClient({ scopes: [SCOPE], fallback: true }, googleGaxFallback);
-	let credentials: { client_email?: string; private_key?: string; type?: string };
+	if (!rawCredentials) return null;
 	try {
-		credentials = JSON.parse(rawCredentials) as typeof credentials;
+		const credentials = JSON.parse(rawCredentials) as ServiceAccountCredentials;
+		if (credentials.type !== "service_account" || !credentials.client_email || !credentials.private_key) {
+			throw new Error("invalid_credentials_config");
+		}
+		return credentials;
 	} catch {
 		throw new Error("invalid_credentials_config");
 	}
-	if (credentials.type !== "service_account" || !credentials.client_email || !credentials.private_key) {
+}
+
+function errorWithCode(code: number, message = "Google Analytics reporting is unavailable."): Error & { code: number } {
+	return Object.assign(new Error(message), { code });
+}
+
+function providerErrorCode(status: number, body: GoogleErrorResponse): number | undefined {
+	if (status === 401 || body.error?.status === "UNAUTHENTICATED") return 16;
+	if (status === 403 || body.error?.status === "PERMISSION_DENIED") return 7;
+	if (status === 429 || body.error?.status === "RESOURCE_EXHAUSTED") return 8;
+	if (status >= 500 || body.error?.status === "UNAVAILABLE") return 14;
+	if (body.error?.status === "INVALID_ARGUMENT" || body.error?.status === "NOT_FOUND") return 3;
+	return undefined;
+}
+
+async function responseBody(response: Response): Promise<GoogleErrorResponse & Record<string, unknown>> {
+	try {
+		const body: unknown = await response.json();
+		return body && typeof body === "object" ? body as GoogleErrorResponse & Record<string, unknown> : {};
+	} catch {
+		return {};
+	}
+}
+
+async function getAccessToken(credentials: ServiceAccountCredentials, signal: AbortSignal): Promise<string> {
+	const email = credentials.client_email!;
+	if (cachedToken?.email === email && cachedToken.expiresAt > Date.now()) return cachedToken.accessToken;
+
+	let assertion: string;
+	try {
+		const key = await importPKCS8(credentials.private_key!, "RS256");
+		const now = Math.floor(Date.now() / 1000);
+		assertion = await new SignJWT({ scope: SCOPE })
+			.setProtectedHeader({ alg: "RS256", typ: "JWT" })
+			.setIssuer(email)
+			.setAudience(TOKEN_URL)
+			.setIssuedAt(now)
+			.setExpirationTime(now + 3600)
+			.sign(key);
+	} catch {
 		throw new Error("invalid_credentials_config");
 	}
-	return new BetaAnalyticsDataClient({ credentials, scopes: [SCOPE], fallback: true }, googleGaxFallback);
+
+	const response = await fetch(TOKEN_URL, {
+		method: "POST",
+		headers: { "content-type": "application/x-www-form-urlencoded" },
+		body: new URLSearchParams({
+			grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+			assertion,
+		}),
+		signal,
+	});
+	const body = await responseBody(response);
+	if (!response.ok) {
+		const code = providerErrorCode(response.status, body);
+		throw code ? errorWithCode(code) : new Error("Google authentication is unavailable.");
+	}
+
+	const accessToken = body.access_token;
+	const expiresIn = Number(body.expires_in);
+	if (typeof accessToken !== "string" || !accessToken || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+		throw new Error("Google authentication is unavailable.");
+	}
+	cachedToken = {
+		email,
+		accessToken,
+		expiresAt: Date.now() + Math.max(0, expiresIn * 1000 - TOKEN_REFRESH_SKEW_MS),
+	};
+	return accessToken;
+}
+
+async function runReport(
+	accessToken: string,
+	range: { startDate: string; endDate: string },
+	signal: AbortSignal,
+	metrics: string[],
+	dimensions: string[] = [],
+	extra: Record<string, unknown> = {},
+): Promise<Ga4ApiReport> {
+	const response = await fetch(REPORT_URL, {
+		method: "POST",
+		headers: {
+			authorization: `Bearer ${accessToken}`,
+			"content-type": "application/json",
+		},
+		body: JSON.stringify({
+			dateRanges: [range],
+			metrics: metrics.map((name) => ({ name })),
+			dimensions: dimensions.map((name) => ({ name })),
+			...extra,
+		}),
+		signal,
+	});
+	const body = await responseBody(response);
+	if (!response.ok) {
+		const code = providerErrorCode(response.status, body);
+		throw code ? errorWithCode(code) : new Error("Google Analytics reporting is unavailable.");
+	}
+	return body as Ga4ApiReport;
 }
 
 export async function readGa4Report(input: Ga4RangeInput): Promise<Ga4Report> {
 	const range = resolveGa4Range(input, new Date(), process.env["GA4_PROPERTY_TIME_ZONE"]);
 	const fetchedAt = new Date().toISOString();
-	const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 	try {
-		const client = createClient();
-		const property = `properties/${GA4_PROPERTY_ID}`;
+		const credentials = configuredCredentials();
+		if (!credentials) {
+			return unavailableGa4Report(range, "Google credentials are not configured for this server. Configure GA4_SERVICE_ACCOUNT_JSON.", fetchedAt);
+		}
+		const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+		const accessToken = await getAccessToken(credentials, timeout);
 		const period = { startDate: range.startDate, endDate: range.endDate };
-		const report = (metrics: string[], dimensions: string[] = [], extra: Record<string, unknown> = {}) =>
-			client.runReport({ property, dateRanges: [period], metrics: metrics.map((name) => ({ name })), dimensions: dimensions.map((name) => ({ name })), ...extra }, { otherArgs: { timeout: REQUEST_TIMEOUT_MS, signal: timeout } });
 		const [totals, trafficChannels, trafficSources, landingPages, vehiclePages, deviceCategories, daily, generateLeadEvents, generateLeadDaily] = await Promise.all([
-			report(["activeUsers", "totalUsers", "sessions", "engagedSessions", "engagementRate", "screenPageViews"]),
-			report(["sessions", "activeUsers"], ["sessionDefaultChannelGroup"], { limit: 25 }),
-			report(["sessions", "activeUsers"], ["sessionSourceMedium"], { limit: 15 }),
-			report(["sessions", "activeUsers", "screenPageViews", "engagedSessions", "engagementRate"], ["landingPage"], { limit: 25 }),
-			report(["sessions", "activeUsers", "screenPageViews", "engagedSessions", "engagementRate"], ["pagePath"], { limit: 25, dimensionFilter: { filter: { fieldName: "pagePath", stringFilter: { matchType: "BEGINS_WITH", value: "/inventory/" } } } }),
-			report(["sessions", "activeUsers"], ["deviceCategory"], { limit: 10 }),
-			report(["activeUsers", "sessions", "screenPageViews"], ["date"], { orderBys: [{ dimension: { dimensionName: "date" } }], limit: 90 }),
-			report(["eventCount"], [], { dimensionFilter: { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "generate_lead" } } } }),
-			report(["eventCount"], ["date"], { dimensionFilter: { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "generate_lead" } } }, orderBys: [{ dimension: { dimensionName: "date" } }], limit: 90 }),
+			runReport(accessToken, period, timeout, ["activeUsers", "totalUsers", "sessions", "engagedSessions", "engagementRate", "screenPageViews"]),
+			runReport(accessToken, period, timeout, ["sessions", "activeUsers"], ["sessionDefaultChannelGroup"], { limit: 25 }),
+			runReport(accessToken, period, timeout, ["sessions", "activeUsers"], ["sessionSourceMedium"], { limit: 15 }),
+			runReport(accessToken, period, timeout, ["sessions", "activeUsers", "screenPageViews", "engagedSessions", "engagementRate"], ["landingPage"], { limit: 25 }),
+			runReport(accessToken, period, timeout, ["sessions", "activeUsers", "screenPageViews", "engagedSessions", "engagementRate"], ["pagePath"], {
+				limit: 25,
+				dimensionFilter: { filter: { fieldName: "pagePath", stringFilter: { matchType: "BEGINS_WITH", value: "/inventory/" } } },
+			}),
+			runReport(accessToken, period, timeout, ["sessions", "activeUsers"], ["deviceCategory"], { limit: 10 }),
+			runReport(accessToken, period, timeout, ["activeUsers", "sessions", "screenPageViews"], ["date"], {
+				orderBys: [{ dimension: { dimensionName: "date" } }],
+				limit: 90,
+			}),
+			runReport(accessToken, period, timeout, ["eventCount"], [], {
+				dimensionFilter: { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "generate_lead" } } },
+			}),
+			runReport(accessToken, period, timeout, ["eventCount"], ["date"], {
+				dimensionFilter: { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "generate_lead" } } },
+				orderBys: [{ dimension: { dimensionName: "date" } }],
+				limit: 90,
+			}),
 		]);
 		return mapGa4Reports({
 			startDate: range.startDate,
 			endDate: range.endDate,
 			fetchedAt,
-			metrics: totals[0],
-			trafficChannels: trafficChannels[0],
-			trafficSources: trafficSources[0],
-			landingPages: landingPages[0],
-			vehiclePages: vehiclePages[0],
-			deviceCategories: deviceCategories[0],
-			daily: daily[0],
-			generateLeadDaily: generateLeadDaily[0],
-			generateLeadEvents: generateLeadEvents[0],
+			metrics: totals,
+			trafficChannels,
+			trafficSources,
+			landingPages,
+			vehiclePages,
+			deviceCategories,
+			daily,
+			generateLeadDaily,
+			generateLeadEvents,
 		});
 	} catch (error) {
 		return unavailableGa4Report(range, safeGa4ErrorMessage(error), fetchedAt);
