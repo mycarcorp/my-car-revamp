@@ -1,0 +1,150 @@
+import { z } from "zod";
+
+export const GA4_PROPERTY_ID = "559909149";
+export const MAX_GA4_REPORT_DAYS = 90;
+
+export const ga4RangeSchema = z.object({
+	preset: z.union([z.literal(7), z.literal(30), z.literal(90)]).optional(),
+	startDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+	endDate: z.string().regex(/^\d{4}-\d{2}-\d{2}$/).optional(),
+}).refine((value) => value.preset !== undefined
+	? value.startDate === undefined && value.endDate === undefined
+	: value.startDate !== undefined && value.endDate !== undefined,
+"Choose a preset or provide both custom dates.");
+
+export type Ga4RangeInput = z.infer<typeof ga4RangeSchema>;
+export type Ga4ResolvedRange = { startDate: string; endDate: string };
+export type Ga4Metric = { activeUsers: number; totalUsers: number; sessions: number; engagedSessions: number; engagementRate: number; screenPageViews: number };
+export type Ga4Breakdown = { label: string; sessions: number; activeUsers: number };
+export type Ga4Daily = { date: string; activeUsers: number; sessions: number; screenPageViews: number };
+export type Ga4Report = {
+	status: "available" | "unavailable";
+	message: string | null;
+	propertyId: string;
+	timeZone: string | null;
+	startDate: string;
+	endDate: string;
+	fetchedAt: string;
+	metrics: Ga4Metric | null;
+	trafficChannels: Ga4Breakdown[] | null;
+	landingPages: Ga4Breakdown[] | null;
+	deviceCategories: Ga4Breakdown[] | null;
+	daily: Ga4Daily[] | null;
+	generateLeadEvents: number | null;
+};
+
+function parseDate(value: string): Date | null {
+	const date = new Date(`${value}T00:00:00.000Z`);
+	return Number.isFinite(date.getTime()) && date.toISOString().slice(0, 10) === value ? date : null;
+}
+
+export function resolveGa4Range(input: Ga4RangeInput, now = new Date()): Ga4ResolvedRange {
+	let startDate: string;
+	let endDate: string;
+	if (input.preset !== undefined) {
+		const end = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate()));
+		const start = new Date(end);
+		start.setUTCDate(start.getUTCDate() - input.preset + 1);
+		startDate = start.toISOString().slice(0, 10);
+		endDate = end.toISOString().slice(0, 10);
+	} else {
+		startDate = input.startDate!;
+		endDate = input.endDate!;
+	}
+	const start = parseDate(startDate);
+	const end = parseDate(endDate);
+	const today = Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), now.getUTCDate());
+	if (!start || !end || start.getTime() > end.getTime() || end.getTime() > today) {
+		throw new Error("Choose a valid date range ending today or earlier.");
+	}
+	const days = Math.floor((end.getTime() - start.getTime()) / 86400000) + 1;
+	if (days > MAX_GA4_REPORT_DAYS) throw new Error(`Choose a range of ${MAX_GA4_REPORT_DAYS} days or fewer.`);
+	return { startDate, endDate };
+}
+
+type ApiRow = { dimensionValues?: Array<{ value?: string | null } | null> | null; metricValues?: Array<{ value?: string | null } | null> | null };
+type ApiReport = { rows?: ApiRow[] | null; rowCount?: number | null; metadata?: { timeZone?: string | null } | null };
+
+function numeric(value: string | null | undefined): number {
+	const parsed = Number(value ?? 0);
+	return Number.isFinite(parsed) ? parsed : 0;
+}
+
+export function mapGa4Reports(input: {
+	startDate: string;
+	endDate: string;
+	fetchedAt: string;
+	metrics: ApiReport;
+	trafficChannels: ApiReport;
+	landingPages: ApiReport;
+	deviceCategories: ApiReport;
+	daily: ApiReport;
+	generateLeadEvents: ApiReport;
+}): Ga4Report {
+	const totals = input.metrics.rows?.[0]?.metricValues ?? [];
+	const breakdown = (report: ApiReport): Ga4Breakdown[] => (report.rows ?? []).map((row) => ({
+		label: row.dimensionValues?.[0]?.value || "(not set)",
+		sessions: numeric(row.metricValues?.[0]?.value),
+		activeUsers: numeric(row.metricValues?.[1]?.value),
+	}));
+	const metadata = [input.metrics, input.daily, input.trafficChannels, input.landingPages, input.deviceCategories, input.generateLeadEvents]
+		.map((report) => report.metadata?.timeZone).find((value): value is string => Boolean(value)) ?? null;
+	return {
+		status: "available",
+		message: null,
+		propertyId: GA4_PROPERTY_ID,
+		timeZone: metadata,
+		startDate: input.startDate,
+		endDate: input.endDate,
+		fetchedAt: input.fetchedAt,
+		metrics: {
+			activeUsers: numeric(totals[0]?.value),
+			totalUsers: numeric(totals[1]?.value),
+			sessions: numeric(totals[2]?.value),
+			engagedSessions: numeric(totals[3]?.value),
+			engagementRate: numeric(totals[4]?.value),
+			screenPageViews: numeric(totals[5]?.value),
+		},
+		trafficChannels: breakdown(input.trafficChannels),
+		landingPages: breakdown(input.landingPages),
+		deviceCategories: breakdown(input.deviceCategories),
+		daily: (input.daily.rows ?? []).map((row) => ({
+			date: row.dimensionValues?.[0]?.value ?? "",
+			activeUsers: numeric(row.metricValues?.[0]?.value),
+			sessions: numeric(row.metricValues?.[1]?.value),
+			screenPageViews: numeric(row.metricValues?.[2]?.value),
+		})),
+		generateLeadEvents: numeric(input.generateLeadEvents.rows?.[0]?.metricValues?.[0]?.value),
+	};
+}
+
+export function unavailableGa4Report(range: Ga4ResolvedRange, message: string, fetchedAt = new Date().toISOString()): Ga4Report {
+	return {
+		status: "unavailable", message, propertyId: GA4_PROPERTY_ID, timeZone: null,
+		startDate: range.startDate, endDate: range.endDate, fetchedAt,
+		metrics: null, trafficChannels: null, landingPages: null, deviceCategories: null, daily: null,
+		generateLeadEvents: null,
+	};
+}
+
+export function safeGa4ErrorMessage(error: unknown): string {
+	const candidate = error as { code?: number | string; message?: string; name?: string };
+	const code = String(candidate?.code ?? "");
+	const detail = candidate?.message ?? "";
+	if (detail === "invalid_credentials_config") {
+		return "GA4 service-account credentials are invalid. Check the server-side credential configuration.";
+	}
+	if (/default credentials|credentials.*not found|could not load.*credential/i.test(detail)) {
+		return "Google credentials are not configured for the server. Configure Application Default Credentials or GA4_SERVICE_ACCOUNT_JSON.";
+	}
+	if (code === "16" || code === "UNAUTHENTICATED") return "Google authentication failed. Check server credentials.";
+	if (code === "7" || code === "PERMISSION_DENIED") return "GA4 access is not authorized. Grant the service account Viewer access to the Analytics property.";
+	if (code === "8" || code === "RESOURCE_EXHAUSTED") return "The Google Analytics reporting quota is temporarily exhausted. Try again later.";
+	if (code === "5" || code === "NOT_FOUND" || code === "3" || code === "INVALID_ARGUMENT") {
+		return "The configured GA4 property was not found or is invalid for this account.";
+	}
+	if (code === "4" || code === "DEADLINE_EXCEEDED" || code === "14" || code === "UNAVAILABLE" || candidate?.name === "TimeoutError" || /timed? ?out|deadline exceeded/i.test(detail)) {
+		return "Google Analytics is temporarily unavailable. Try again shortly.";
+	}
+	return "Google Analytics reporting is unavailable. Check server configuration and try again.";
+}
