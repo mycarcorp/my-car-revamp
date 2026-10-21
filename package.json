@@ -16,7 +16,6 @@
     "rolldown": "1.2.1"
   },
   "dependencies": {
-    "@google-analytics/data": "^7.3.0",
     "@hookform/resolvers": "^5.2.2",
     "@lovable.dev/cloud-auth-js": "^1.1.2",
     "@radix-ui/react-accordion": "^1.2.12",
@@ -64,6 +63,7 @@
     "embla-carousel-react": "^8.6.0",
     "fflate": "^0.8.3",
     "input-otp": "^1.4.2",
+    "jose": "6.2.13",
     "lucide-react": "^0.575.0",
     "parse5": "^8.0.1",
     "react": "^19.2.0",

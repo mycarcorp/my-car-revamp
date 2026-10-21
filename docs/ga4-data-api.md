@@ -5,12 +5,11 @@ The Marketing Hub reads property `559909149` through the Google Analytics Data A
 ## Required setup
 
 - Enable **Google Analytics Data API** in Google Cloud project `mycarcorp-marketing-analytics`.
-- In Google Analytics Admin for property `559909149`, add `mycarcorp-ga4-reporting@mycarcorp-marketing-analytics.iam.gserviceaccount.com` with the **Viewer** role. The Data API client requests only `https://www.googleapis.com/auth/analytics.readonly`.
-- Configure credentials in the production server runtime using either:
-  - **Application Default Credentials (recommended):** attach/workload-identity-bind the service account or provide a host-managed ADC identity. Ensure the runtime identity can impersonate/use the reporting service account as required by the host.
-  - **Server-only service-account JSON:** set `GA4_SERVICE_ACCOUNT_JSON` to the complete service-account JSON as a protected server secret. Never prefix it with `VITE_`, expose it in client configuration, commit it, or place it in a repository file.
-- If using service-account JSON, limit access to production operators, use the least-privilege secret store available, and rotate/revoke the key according to the hosting provider's policy. Prefer workload identity/ADC when available to avoid long-lived keys.
-- Redeploy/restart the server after setting credentials. No credential is assumed to exist in the hosting environment.
+- In Google Analytics Admin for property `559909149`, add the reporting service account with the **Viewer** role. OAuth requests only `https://www.googleapis.com/auth/analytics.readonly`.
+- Configure `GA4_SERVICE_ACCOUNT_JSON` as a protected server secret containing the complete service-account JSON. The Worker signs a short-lived RS256 assertion with Web Crypto via `jose`, exchanges it at Google's OAuth token endpoint, and calls the GA4 Data API with native HTTPS `fetch`.
+- Never prefix credentials with `VITE_`, expose them in client configuration, log them, commit them, or place them in a repository file. Do not configure credentials in local development.
+- Limit secret access to production operators and rotate/revoke the key according to hosting policy. The Worker caches access tokens in memory only until one minute before the returned expiry.
+- Restart/redeploy the server after setting credentials. No credential is assumed to exist in the hosting environment.
 - Set the server-only `GA4_PROPERTY_TIME_ZONE` to the reporting time zone shown in GA4 Admin (for example, `America/Los_Angeles`) so preset date windows align with the property calendar. Custom dates are interpreted as property-local calendar dates.
 - Sign in as authorized Marketing Hub staff and request a report in the Google Analytics tab. A missing credential or property permission returns an unavailable message; it is not reported as zero traffic.
 
