@@ -32,6 +32,7 @@ export type AnalyticsAdapter = {
 };
 
 const GA_ID_PATTERN = /^G-[A-Z0-9]{6,}$/;
+const DEFAULT_GA4_MEASUREMENT_ID = "G-CFXQ8JPE21";
 const SAFE_FORM_TYPES = new Set(["contact", "car_finder", "sell", "trade", "finance", "appointment", "availability", "purchase_request"]);
 const SAFE_LIST_NAMES = new Set(["vehicle_inventory", "related_vehicles", "search_results"]);
 const SAFE_ITEM_CATEGORIES = new Set(["suv", "sedan", "truck", "coupe", "hatchback", "convertible", "minivan", "wagon", "van"]);
@@ -231,7 +232,14 @@ type Gtag = (...args: unknown[]) => void;
 let gtagFunction: Gtag | null = null;
 let runtimeController: ReturnType<typeof createAnalyticsController> | null = null;
 
-function browserAdapter(): AnalyticsAdapter {
+export function getGa4MeasurementId(): string {
+  const configured = import.meta.env["VITE_GA4_MEASUREMENT_ID"];
+  return typeof configured === "string" && GA_ID_PATTERN.test(configured)
+    ? configured
+    : DEFAULT_GA4_MEASUREMENT_ID;
+}
+
+export function createBrowserAnalyticsAdapter(): AnalyticsAdapter {
   return {
     load(measurementId) {
       if (typeof window === "undefined" || document.querySelector('script[data-mycar-ga="true"]')) return;
@@ -265,7 +273,7 @@ function browserAdapter(): AnalyticsAdapter {
 }
 
 function runtime() {
-  runtimeController ??= createAnalyticsController(browserAdapter());
+  runtimeController ??= createAnalyticsController(createBrowserAnalyticsAdapter());
   return runtimeController;
 }
 
@@ -276,7 +284,7 @@ function storedConsent(): ConsentState {
 export function configureAnalytics(pathname: string, enabled = true): void {
   const isPublicRoute = enabled && isAnalyticsRoutePublic(pathname);
   runtime().configure({
-    measurementId: import.meta.env["VITE_GA4_MEASUREMENT_ID"],
+    measurementId: getGa4MeasurementId(),
     consent: typeof window === "undefined" ? "unknown" : storedConsent(),
     isPublicRoute,
   });
