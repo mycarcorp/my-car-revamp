@@ -54,9 +54,15 @@ describe("central GA4 analytics gate", () => {
       expect(analytics.pageView("/", "https://mycarcorp.com")).toBe(false);
       expect(analytics.pageView("/search", "https://mycarcorp.com")).toBe(true);
       expect(calls.filter((call) => call[0] === "event" && call[1] === "page_view")).toHaveLength(2);
+      expect(analytics.track({
+        name: "view_item",
+        params: { item_id: "2019-honda-civic", item_name: "2019 Honda Civic" },
+      })).toBe(true);
+      expect(calls.some((call) => call[0] === "event" && call[1] === "view_item")).toBe(true);
 
       analytics.configure({ ...environment, consent: "denied" });
       expect(analytics.pageView("/inventory", "https://mycarcorp.com")).toBe(false);
+      expect(analytics.track({ name: "view_item", params: { item_id: "2019-honda-civic", item_name: "2019 Honda Civic" } })).toBe(false);
       expect(analytics.track({ name: "form_start", params: { form_type: "contact" } })).toBe(false);
       expect(calls.filter((call) => call[0] === "event" && call[1] === "page_view")).toHaveLength(2);
       expect(calls.some((call) => call[0] === "consent" && call[1] === "update" && (call[2] as { analytics_storage?: string }).analytics_storage === "denied")).toBe(true);
