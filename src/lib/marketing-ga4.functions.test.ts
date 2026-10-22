@@ -16,4 +16,12 @@ describe("GA4 Marketing Hub endpoint authorization", () => {
 		await expect(runGa4ReportForStaff({ preset: 30 }, authorize, loadReport)).rejects.toThrow("Not signed in.");
 		expect(loadReport).not.toHaveBeenCalled();
 	});
+
+	it("does not inspect credentials or attempt diagnostics when staff authorization rejects", async () => {
+		const authorize = vi.fn(async () => { throw new Error("Not signed in."); });
+		const inspectCredentials = vi.fn();
+		await expect(runGa4ReportForStaff(undefined, authorize, inspectCredentials)).rejects.toThrow("Not signed in.");
+		expect(authorize).toHaveBeenCalledOnce();
+		expect(inspectCredentials).not.toHaveBeenCalled();
+	});
 });

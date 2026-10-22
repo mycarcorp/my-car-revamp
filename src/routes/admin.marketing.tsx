@@ -52,6 +52,7 @@ import {
   getMarketing,
   getLeadAttribution,
   getMarketingGa4,
+  getMarketingGa4Diagnostics,
   inspectMarketingUrl,
   refreshMarketingFn,
   saveMarketingProspect,
@@ -67,7 +68,7 @@ import {
   type Prospect,
   type LeadAttributionReport,
 } from "@/lib/marketing";
-import { resolveGa4IntegrationStatus, type Ga4RangeInput, type Ga4Report } from "@/lib/ga4-reporting";
+import { resolveGa4IntegrationStatus, type Ga4RangeInput, type Ga4Report, type Ga4RuntimeDiagnostics } from "@/lib/ga4-reporting";
 import { buildAttributionCsv, type AttributionRangeInput } from "@/lib/marketing-attribution";
 
 export const Route = createFileRoute("/admin/marketing")({
@@ -292,6 +293,7 @@ function Marketing() {
     inspect = useServerFn(inspectMarketingUrl);
   const getAttribution = useServerFn(getLeadAttribution);
   const getGa4 = useServerFn(getMarketingGa4);
+  const getGa4Diagnostics = useServerFn(getMarketingGa4Diagnostics);
   const queryKey = ["marketing", user?.id];
   const query = useQuery({
     queryKey,
@@ -328,6 +330,8 @@ function Marketing() {
     staleTime: 60000,
     retry: false,
   });
+  const [ga4Diagnostics, setGa4Diagnostics] = useState<Ga4RuntimeDiagnostics | null>(null);
+  const [ga4DiagnosticsBusy, setGa4DiagnosticsBusy] = useState(false);
   const ga4: Ga4Report | undefined = ga4Query.data;
   const snapshot = query.data?.snapshot ?? emptySnapshot();
   const prospects = query.data?.prospects ?? [];
@@ -368,6 +372,16 @@ function Marketing() {
       toast.error(e instanceof Error ? e.message : "Could not refresh the report.");
     } finally {
       setBusy(null);
+    }
+  }
+  async function checkGa4Connection() {
+    setGa4DiagnosticsBusy(true);
+    try {
+      setGa4Diagnostics(await getGa4Diagnostics());
+    } catch (error) {
+      toast.error(error instanceof Error ? error.message : "Could not check Google Analytics credentials.");
+    } finally {
+      setGa4DiagnosticsBusy(false);
     }
   }
   async function submitProspect(event: React.FormEvent) {
@@ -1108,6 +1122,10 @@ function Marketing() {
                   <RefreshCw className={`size-3.5 ${ga4Query.isFetching ? "animate-spin" : ""}`} />
                   Refresh report
                   </Button>
+                  <Button variant="outline" size="sm" disabled={ga4DiagnosticsBusy} onClick={() => void checkGa4Connection()}>
+                    <ShieldCheck className={`size-3.5 ${ga4DiagnosticsBusy ? "animate-pulse" : ""}`} />
+                    Connection check
+                  </Button>
                 </div>
               }
             >
@@ -1131,6 +1149,22 @@ function Marketing() {
               <p className="py-3 text-xs text-muted-foreground" aria-live="polite">
                 {ga4 ? `${rangeLabel} · ${ga4.startDate} – ${ga4.endDate} · ${ga4.timeZone ?? "Property time zone unavailable"} · Reported ${date(ga4.fetchedAt)}` : `${rangeLabel} · GA4 report freshness and property time zone appear when available`}
               </p>
+              {ga4Diagnostics && (
+                <div className="mb-4 border-y border-border py-3 text-xs" aria-live="polite">
+                  <p className="mb-2 font-semibold">Server connection diagnostics</p>
+                  <div className="grid gap-x-6 gap-y-1 sm:grid-cols-2 xl:grid-cols-4">
+                    <p>Auth mode: <span className="font-medium">{ga4Diagnostics.authenticationMode}</span></p>
+                    <p>OAuth client ID: <span className="font-medium">{ga4Diagnostics.oauthCredentialsPresent.clientId ? "Present" : "Missing"}</span></p>
+                    <p>OAuth client secret: <span className="font-medium">{ga4Diagnostics.oauthCredentialsPresent.clientSecret ? "Present" : "Missing"}</span></p>
+                    <p>OAuth refresh token: <span className="font-medium">{ga4Diagnostics.oauthCredentialsPresent.refreshToken ? "Present" : "Missing"}</span></p>
+                    <p>Service account: <span className="font-medium">{ga4Diagnostics.serviceAccountConfigured ? "Present" : "Missing"}</span></p>
+                    <p>Token exchange attempted: <span className="font-medium">{ga4Diagnostics.tokenExchangeAttempted ? "Yes" : "No"}</span></p>
+                    <p>Google HTTP status: <span className="font-medium">{ga4Diagnostics.googleHttpStatus ?? "Not available"}</span></p>
+                    <p>Sanitized error category: <span className="font-medium">{ga4Diagnostics.errorCategory ?? "None"}</span></p>
+                    <p>Property time zone setting: <span className="font-medium">{ga4Diagnostics.propertyTimeZoneAvailable ? "Present" : "Missing"}</span></p>
+                  </div>
+                </div>
+              )}
               {ga4Query.isPending ? (
                 <div className="flex items-center gap-2 py-8 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading GA4 report…</div>
               ) : ga4Query.error ? (

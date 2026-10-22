@@ -24,7 +24,11 @@ type OAuthCredentials = { type: "oauth"; clientId: string; clientSecret: string;
 type ConfiguredCredentials = { type: "service_account"; credentials: ServiceAccountCredentials } | OAuthCredentials;
 
 type Ga4ApiReport = Parameters<typeof mapGa4Reports>[0]["metrics"];
-type GoogleErrorResponse = { error?: { code?: number; status?: string; message?: string } };
+type GoogleErrorResponse = {
+	error?: string | { code?: number; status?: string; message?: string };
+	error_description?: string;
+};
+type TokenDiagnosticState = { tokenExchangeAttempted: boolean; googleHttpStatus: number | null; errorCategory: string | null };
 
 let cachedToken: { identity: string; accessToken: string; expiresAt: number } | undefined;
 
@@ -57,12 +61,22 @@ function errorWithCode(code: number, message = "Google Analytics reporting is un
 }
 
 function providerErrorCode(status: number, body: GoogleErrorResponse): number | undefined {
-	if (status === 401 || body.error?.status === "UNAUTHENTICATED") return 16;
-	if (status === 403 || body.error?.status === "PERMISSION_DENIED") return 7;
-	if (status === 429 || body.error?.status === "RESOURCE_EXHAUSTED") return 8;
-	if (status >= 500 || body.error?.status === "UNAVAILABLE") return 14;
-	if (body.error?.status === "INVALID_ARGUMENT" || body.error?.status === "NOT_FOUND") return 3;
+	const providerStatus = typeof body.error === "object" ? body.error.status : undefined;
+	if (status === 401 || providerStatus === "UNAUTHENTICATED") return 16;
+	if (status === 403 || providerStatus === "PERMISSION_DENIED") return 7;
+	if (status === 429 || providerStatus === "RESOURCE_EXHAUSTED") return 8;
+	if (status >= 500 || providerStatus === "UNAVAILABLE") return 14;
+	if (providerStatus === "INVALID_ARGUMENT" || providerStatus === "NOT_FOUND") return 3;
 	return undefined;
+}
+
+function tokenErrorCategory(body: GoogleErrorResponse): string {
+	if (body.error === "invalid_client") return "invalid_client";
+	if (body.error === "invalid_grant") return "invalid_grant";
+	if (typeof body.error === "string") return "oauth_error";
+	if (body.error?.status === "UNAUTHENTICATED") return "unauthenticated";
+	if (body.error?.status === "PERMISSION_DENIED") return "permission_denied";
+	return "provider_error";
 }
 
 async function responseBody(response: Response): Promise<GoogleErrorResponse & Record<string, unknown>> {
@@ -74,11 +88,15 @@ async function responseBody(response: Response): Promise<GoogleErrorResponse & R
 	}
 }
 
-async function getAccessToken(config: ConfiguredCredentials, signal: AbortSignal): Promise<string> {
+async function getAccessToken(
+	config: ConfiguredCredentials,
+	signal: AbortSignal,
+	options: { forceRefresh?: boolean; diagnostic?: TokenDiagnosticState } = {},
+): Promise<string> {
 	const identity = config.type === "oauth"
-		? `oauth:${config.clientId}:${config.refreshToken}`
+		? `oauth:${config.clientId}:${config.clientSecret}:${config.refreshToken}`
 		: `service_account:${config.credentials.client_email}`;
-	if (cachedToken?.identity === identity && cachedToken.expiresAt > Date.now()) return cachedToken.accessToken;
+	if (!options.forceRefresh && cachedToken?.identity === identity && cachedToken.expiresAt > Date.now()) return cachedToken.accessToken;
 
 	let form: URLSearchParams;
 	if (config.type === "oauth") {
@@ -109,23 +127,34 @@ async function getAccessToken(config: ConfiguredCredentials, signal: AbortSignal
 			assertion,
 		});
 	}
-	const response = await fetch(TOKEN_URL, {
-		method: "POST",
-		headers: { "content-type": "application/x-www-form-urlencoded" },
-		body: form,
-		signal,
-	});
+	let response: Response;
+	try {
+		if (options.diagnostic) options.diagnostic.tokenExchangeAttempted = true;
+		response = await fetch(TOKEN_URL, {
+			method: "POST",
+			headers: { "content-type": "application/x-www-form-urlencoded" },
+			body: form,
+			signal,
+		});
+	} catch (error) {
+		if (options.diagnostic) options.diagnostic.errorCategory = error instanceof Error && error.name === "TimeoutError" ? "timeout" : "network_error";
+		throw error;
+	}
+	if (options.diagnostic) options.diagnostic.googleHttpStatus = response.status;
 	const body = await responseBody(response);
 	if (!response.ok) {
 		const code = providerErrorCode(response.status, body);
+		if (options.diagnostic) options.diagnostic.errorCategory = tokenErrorCategory(body);
 		throw errorWithCode(code ?? (response.status >= 500 ? 14 : 16));
 	}
 
 	const accessToken = body.access_token;
 	const expiresIn = Number(body.expires_in);
 	if (typeof accessToken !== "string" || !accessToken || !Number.isFinite(expiresIn) || expiresIn <= 0) {
+		if (options.diagnostic) options.diagnostic.errorCategory = "invalid_token_response";
 		throw new Error("Google authentication is unavailable.");
 	}
+	if (options.diagnostic) options.diagnostic.errorCategory = "none";
 	cachedToken = {
 		identity,
 		accessToken,
@@ -165,7 +194,8 @@ async function runReport(
 }
 
 export async function readGa4Report(input: Ga4RangeInput): Promise<Ga4Report> {
-	const range = resolveGa4Range(input, new Date(), process.env["GA4_PROPERTY_TIME_ZONE"]);
+	const configuredTimeZone = process.env["GA4_PROPERTY_TIME_ZONE"]?.trim() || undefined;
+	const range = resolveGa4Range(input, new Date(), configuredTimeZone);
 	const fetchedAt = new Date().toISOString();
 	try {
 		const credentials = configuredCredentials();
@@ -202,6 +232,7 @@ export async function readGa4Report(input: Ga4RangeInput): Promise<Ga4Report> {
 			startDate: range.startDate,
 			endDate: range.endDate,
 			fetchedAt,
+			configuredTimeZone,
 			metrics: totals,
 			trafficChannels,
 			trafficSources,
@@ -215,4 +246,57 @@ export async function readGa4Report(input: Ga4RangeInput): Promise<Ga4Report> {
 	} catch (error) {
 		return unavailableGa4Report(range, safeGa4ErrorMessage(error), fetchedAt);
 	}
+}
+
+export async function diagnoseGa4Runtime() {
+	const clientId = process.env["GA4_OAUTH_CLIENT_ID"];
+	const clientSecret = process.env["GA4_OAUTH_CLIENT_SECRET"];
+	const refreshToken = process.env["GA4_OAUTH_REFRESH_TOKEN"];
+	const serviceAccountJson = process.env["GA4_SERVICE_ACCOUNT_JSON"];
+	const propertyTimeZone = process.env["GA4_PROPERTY_TIME_ZONE"];
+	const oauthCredentialsPresent = {
+		clientId: Boolean(clientId?.trim()),
+		clientSecret: Boolean(clientSecret?.trim()),
+		refreshToken: Boolean(refreshToken?.trim()),
+	};
+	const anyOAuthCredential = Object.values(oauthCredentialsPresent).some(Boolean);
+	let authenticationMode: "oauth" | "service_account" | "partial_oauth" | "invalid_service_account" | "none";
+	if (anyOAuthCredential) authenticationMode = Object.values(oauthCredentialsPresent).every(Boolean) ? "oauth" : "partial_oauth";
+	else if (!serviceAccountJson) authenticationMode = "none";
+	else authenticationMode = "service_account";
+
+	const diagnostic: TokenDiagnosticState = {
+		tokenExchangeAttempted: false,
+		googleHttpStatus: null,
+		errorCategory: null,
+	};
+	if (authenticationMode === "partial_oauth") diagnostic.errorCategory = "partial_oauth_credentials";
+	else if (authenticationMode === "none") diagnostic.errorCategory = "missing_credentials";
+	else {
+		try {
+			const credentials = configuredCredentials();
+			if (!credentials) {
+				diagnostic.errorCategory = "missing_credentials";
+			} else {
+				if (credentials.type === "service_account") authenticationMode = "service_account";
+				await getAccessToken(credentials, AbortSignal.timeout(REQUEST_TIMEOUT_MS), { forceRefresh: true, diagnostic });
+			}
+		} catch (error) {
+			if (authenticationMode === "service_account" && (error as Error)?.message === "invalid_credentials_config") {
+				authenticationMode = "invalid_service_account";
+				diagnostic.errorCategory = "invalid_service_account_credentials";
+			} else if (!diagnostic.errorCategory) {
+				diagnostic.errorCategory = "authentication_error";
+			}
+		}
+	}
+	return {
+		oauthCredentialsPresent,
+		serviceAccountConfigured: Boolean(serviceAccountJson),
+		authenticationMode,
+		tokenExchangeAttempted: diagnostic.tokenExchangeAttempted,
+		googleHttpStatus: diagnostic.googleHttpStatus,
+		errorCategory: diagnostic.errorCategory,
+		propertyTimeZoneAvailable: Boolean(propertyTimeZone?.trim()),
+	};
 }
