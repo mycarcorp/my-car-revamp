@@ -9,7 +9,7 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -21,6 +21,8 @@ import { AnalyticsConsentManager } from "@/components/AnalyticsConsentManager";
 import { captureAttribution } from "@/lib/attribution";
 import { configureAnalytics, trackMetaPageView, trackPageView } from "@/lib/analytics";
 import { beginVisit, trackPath } from "@/lib/visitor-personalization";
+
+const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
 function NotFoundComponent() {
   return (
@@ -141,7 +143,7 @@ function RootComponent() {
   const searchStr = useRouterState({ select: (s) => s.location.searchStr });
   // Admin hero-editor preview frame loads "/" — never count it as a visit.
   const skipTracking = isAdmin || searchStr.includes("heroPreview=1");
-  useEffect(() => {
+  useIsomorphicLayoutEffect(() => {
     configureAnalytics(pathname, !skipTracking);
     if (!skipTracking) {
       captureAttribution();
