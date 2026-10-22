@@ -17,7 +17,7 @@ vi.mock("jose", () => ({
 	},
 }));
 
-import { readGa4Report } from "./marketing-ga4.server";
+import { diagnoseGa4Runtime, readGa4Report } from "./marketing-ga4.server";
 
 describe("GA4 Worker REST reporting", () => {
 	beforeEach(() => {
@@ -93,6 +93,105 @@ describe("GA4 Worker REST reporting", () => {
 		expect(importPKCS8).not.toHaveBeenCalled();
 	});
 
+	it("reports only presence booleans for missing and partial runtime configuration", async () => {
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+		vi.stubEnv("GA4_PROPERTY_TIME_ZONE", "");
+
+		const missing = await diagnoseGa4Runtime();
+		expect(missing).toEqual({
+			oauthCredentialsPresent: { clientId: false, clientSecret: false, refreshToken: false },
+			serviceAccountConfigured: false,
+			authenticationMode: "none",
+			tokenExchangeAttempted: false,
+			googleHttpStatus: null,
+			errorCategory: "missing_credentials",
+			propertyTimeZoneAvailable: false,
+		});
+
+		vi.stubEnv("GA4_OAUTH_CLIENT_ID", "synthetic-client-id");
+		const partial = await diagnoseGa4Runtime();
+		expect(partial).toMatchObject({
+			oauthCredentialsPresent: { clientId: true, clientSecret: false, refreshToken: false },
+			authenticationMode: "partial_oauth",
+			tokenExchangeAttempted: false,
+			googleHttpStatus: null,
+			errorCategory: "partial_oauth_credentials",
+			propertyTimeZoneAvailable: false,
+		});
+		expect(JSON.stringify([missing, partial])).not.toContain("synthetic-client-id");
+		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("classifies Google invalid_client errors without exposing provider text or credentials", async () => {
+		vi.stubEnv("GA4_OAUTH_CLIENT_ID", "synthetic-client-id");
+		vi.stubEnv("GA4_OAUTH_CLIENT_SECRET", "synthetic-client-secret");
+		vi.stubEnv("GA4_OAUTH_REFRESH_TOKEN", "synthetic-refresh-token");
+		vi.stubEnv("GA4_PROPERTY_TIME_ZONE", "America/Los_Angeles");
+		vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "invalid_client", error_description: "synthetic private detail" }, { status: 401 })));
+
+		const diagnostics = await diagnoseGa4Runtime();
+
+		expect(diagnostics).toMatchObject({
+			oauthCredentialsPresent: { clientId: true, clientSecret: true, refreshToken: true },
+			authenticationMode: "oauth",
+			tokenExchangeAttempted: true,
+			googleHttpStatus: 401,
+			errorCategory: "invalid_client",
+			propertyTimeZoneAvailable: true,
+		});
+		const serialized = JSON.stringify(diagnostics);
+		expect(serialized).not.toContain("synthetic-client-id");
+		expect(serialized).not.toContain("synthetic-client-secret");
+		expect(serialized).not.toContain("synthetic-refresh-token");
+		expect(serialized).not.toContain("synthetic private detail");
+	});
+
+	it("classifies Google invalid_grant responses as sanitized diagnostics", async () => {
+		vi.stubEnv("GA4_OAUTH_CLIENT_ID", "grant-client-id");
+		vi.stubEnv("GA4_OAUTH_CLIENT_SECRET", "grant-client-secret");
+		vi.stubEnv("GA4_OAUTH_REFRESH_TOKEN", "grant-refresh-token");
+		vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "invalid_grant", error_description: "synthetic grant detail" }, { status: 400 })));
+
+		const diagnostics = await diagnoseGa4Runtime();
+
+		expect(diagnostics).toMatchObject({
+			authenticationMode: "oauth",
+			tokenExchangeAttempted: true,
+			googleHttpStatus: 400,
+			errorCategory: "invalid_grant",
+		});
+		expect(JSON.stringify(diagnostics)).not.toContain("grant-refresh-token");
+		expect(JSON.stringify(diagnostics)).not.toContain("synthetic grant detail");
+	});
+
+	it("exchanges a fresh token after the OAuth client secret changes", async () => {
+		vi.stubEnv("GA4_OAUTH_CLIENT_ID", "cache-rotation-client");
+		vi.stubEnv("GA4_OAUTH_CLIENT_SECRET", "first-synthetic-secret");
+		vi.stubEnv("GA4_OAUTH_REFRESH_TOKEN", "cache-rotation-refresh");
+		let tokenNumber = 0;
+		const calls: Array<{ url: string; init: RequestInit }> = [];
+		vi.stubGlobal("fetch", vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			const url = String(input);
+			calls.push({ url, init: init ?? {} });
+			if (url === "https://oauth2.googleapis.com/token") {
+				tokenNumber += 1;
+				return Response.json({ access_token: `cache-test-token-${tokenNumber}`, expires_in: 3600 });
+			}
+			return Response.json({});
+		}));
+
+		await readGa4Report({ preset: 7 });
+		vi.stubEnv("GA4_OAUTH_CLIENT_SECRET", "second-synthetic-secret");
+		await readGa4Report({ preset: 7 });
+
+		const tokenCalls = calls.filter(({ url }) => url === "https://oauth2.googleapis.com/token");
+		expect(tokenCalls).toHaveLength(2);
+		expect(calls.filter(({ url }) => url.includes(":runReport"))).toHaveLength(18);
+		expect(calls.slice(1, 10).every(({ init }) => new Headers(init.headers).get("authorization") === "Bearer cache-test-token-1")).toBe(true);
+		expect(calls.slice(11).every(({ init }) => new Headers(init.headers).get("authorization") === "Bearer cache-test-token-2")).toBe(true);
+	});
+
 	it("exchanges server-only refresh-token credentials and submits all nine reports", async () => {
 		vi.stubEnv("GA4_OAUTH_CLIENT_ID", "oauth-client-id-test");
 		vi.stubEnv("GA4_OAUTH_CLIENT_SECRET", "oauth-client-secret-test");
@@ -142,6 +241,7 @@ describe("GA4 Worker REST reporting", () => {
 	});
 
 	it("uses read-only OAuth and submits the existing nine report definitions", async () => {
+		vi.stubEnv("GA4_PROPERTY_TIME_ZONE", "America/Los_Angeles");
 		vi.stubEnv("GA4_SERVICE_ACCOUNT_JSON", JSON.stringify({
 			type: "service_account",
 			client_email: "ga4-test@example.invalid",
@@ -160,7 +260,7 @@ describe("GA4 Worker REST reporting", () => {
 
 		const report = await readGa4Report({ preset: 7 });
 
-		expect(report.status).toBe("available");
+		expect(report).toMatchObject({ status: "available", timeZone: "America/Los_Angeles" });
 		expect(calls).toHaveLength(10);
 		expect(calls[0]?.url).toBe("https://oauth2.googleapis.com/token");
 		const tokenBody = new URLSearchParams(String(calls[0]?.init.body));

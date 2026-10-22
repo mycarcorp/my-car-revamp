@@ -36,6 +36,15 @@ export type Ga4Report = {
 	generateLeadEvents: number | null;
 };
 export type Ga4IntegrationStatus = "Connected" | "Not Configured" | "Missing Credentials" | "Permission Denied" | "No Data Yet" | "Temporary API Error" | "Quota Exceeded";
+export type Ga4RuntimeDiagnostics = {
+	oauthCredentialsPresent: { clientId: boolean; clientSecret: boolean; refreshToken: boolean };
+	serviceAccountConfigured: boolean;
+	authenticationMode: "oauth" | "service_account" | "partial_oauth" | "invalid_service_account" | "none";
+	tokenExchangeAttempted: boolean;
+	googleHttpStatus: number | null;
+	errorCategory: string | null;
+	propertyTimeZoneAvailable: boolean;
+};
 
 export function resolveGa4IntegrationStatus(report?: Ga4Report | null, requestError?: unknown): Ga4IntegrationStatus {
 	const message = report?.message ?? (requestError instanceof Error ? requestError.message : "");
@@ -121,6 +130,7 @@ export function mapGa4Reports(input: {
 	startDate: string;
 	endDate: string;
 	fetchedAt: string;
+	configuredTimeZone?: string;
 	metrics: ApiReport;
 	trafficChannels: ApiReport;
 	trafficSources?: ApiReport;
@@ -144,7 +154,7 @@ export function mapGa4Reports(input: {
 	const generateLeadDaily = input.generateLeadDaily ?? {};
 	const trafficSources = input.trafficSources ?? {};
 	const metadata = [input.metrics, input.daily, input.trafficChannels, trafficSources, input.landingPages, vehiclePages, input.deviceCategories, generateLeadDaily, input.generateLeadEvents]
-		.map((report) => report.metadata?.timeZone).find((value): value is string => Boolean(value)) ?? null;
+		.map((report) => report.metadata?.timeZone).find((value): value is string => Boolean(value)) ?? input.configuredTimeZone ?? null;
 	return {
 		status: "available",
 		message: null,
