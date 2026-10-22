@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const { importPKCS8, sign } = vi.hoisted(() => ({
 	importPKCS8: vi.fn(async () => ({})),
@@ -20,6 +20,13 @@ vi.mock("jose", () => ({
 import { readGa4Report } from "./marketing-ga4.server";
 
 describe("GA4 Worker REST reporting", () => {
+	beforeEach(() => {
+		vi.stubEnv("GA4_OAUTH_CLIENT_ID", "");
+		vi.stubEnv("GA4_OAUTH_CLIENT_SECRET", "");
+		vi.stubEnv("GA4_OAUTH_REFRESH_TOKEN", "");
+		vi.stubEnv("GA4_SERVICE_ACCOUNT_JSON", "");
+	});
+
 	afterEach(() => {
 		vi.unstubAllEnvs();
 		vi.unstubAllGlobals();
@@ -30,6 +37,9 @@ describe("GA4 Worker REST reporting", () => {
 
 	it("returns unavailable null metrics without credentials or network requests", async () => {
 		vi.stubEnv("GA4_SERVICE_ACCOUNT_JSON", "");
+		vi.stubEnv("GA4_OAUTH_CLIENT_ID", "");
+		vi.stubEnv("GA4_OAUTH_CLIENT_SECRET", "");
+		vi.stubEnv("GA4_OAUTH_REFRESH_TOKEN", "");
 		vi.stubEnv("GA4_PROPERTY_TIME_ZONE", "America/Los_Angeles");
 		const fetchMock = vi.fn();
 		vi.stubGlobal("fetch", fetchMock);
@@ -38,7 +48,7 @@ describe("GA4 Worker REST reporting", () => {
 
 		expect(report).toMatchObject({
 			status: "unavailable",
-			message: "Google credentials are not configured for this server. Configure GA4_SERVICE_ACCOUNT_JSON.",
+			message: "Google credentials are not configured for this server. Configure GA4 OAuth refresh-token credentials or GA4_SERVICE_ACCOUNT_JSON.",
 			startDate: expect.any(String),
 			endDate: expect.any(String),
 			metrics: null,
@@ -61,6 +71,74 @@ describe("GA4 Worker REST reporting", () => {
 		expect(report).toMatchObject({ status: "unavailable", metrics: null, generateLeadEvents: null });
 		expect(report.message).not.toContain("private@example.invalid");
 		expect(fetchMock).not.toHaveBeenCalled();
+	});
+
+	it("rejects partially configured OAuth credentials without falling back to service-account credentials", async () => {
+		vi.stubEnv("GA4_OAUTH_CLIENT_ID", "partial-client-id");
+		vi.stubEnv("GA4_OAUTH_CLIENT_SECRET", "");
+		vi.stubEnv("GA4_OAUTH_REFRESH_TOKEN", "");
+		vi.stubEnv("GA4_SERVICE_ACCOUNT_JSON", JSON.stringify({
+			type: "service_account",
+			client_email: "fallback@example.invalid",
+			private_key: "test-private-key",
+		}));
+		const fetchMock = vi.fn();
+		vi.stubGlobal("fetch", fetchMock);
+
+		const report = await readGa4Report({ preset: 7 });
+
+		expect(report).toMatchObject({ status: "unavailable", metrics: null });
+		expect(report.message).toContain("credentials are invalid");
+		expect(fetchMock).not.toHaveBeenCalled();
+		expect(importPKCS8).not.toHaveBeenCalled();
+	});
+
+	it("exchanges server-only refresh-token credentials and submits all nine reports", async () => {
+		vi.stubEnv("GA4_OAUTH_CLIENT_ID", "oauth-client-id-test");
+		vi.stubEnv("GA4_OAUTH_CLIENT_SECRET", "oauth-client-secret-test");
+		vi.stubEnv("GA4_OAUTH_REFRESH_TOKEN", "oauth-refresh-token-test");
+		const calls: Array<{ url: string; init: RequestInit }> = [];
+		const fetchMock = vi.fn(async (input: RequestInfo | URL, init?: RequestInit) => {
+			const url = String(input);
+			calls.push({ url, init: init ?? {} });
+			if (url === "https://oauth2.googleapis.com/token") {
+				return Response.json({ access_token: "oauth-test-access-token", expires_in: 3600 });
+			}
+			return Response.json({});
+		});
+		vi.stubGlobal("fetch", fetchMock);
+
+		const report = await readGa4Report({ preset: 7 });
+
+		expect(report.status).toBe("available");
+		expect(calls).toHaveLength(10);
+		expect(calls[0]?.url).toBe("https://oauth2.googleapis.com/token");
+		expect(calls[0]?.init.method).toBe("POST");
+		expect(new Headers(calls[0]?.init.headers).get("content-type")).toBe("application/x-www-form-urlencoded");
+		const tokenBody = new URLSearchParams(String(calls[0]?.init.body));
+		expect(Object.fromEntries(tokenBody)).toEqual({
+			client_id: "oauth-client-id-test",
+			client_secret: "oauth-client-secret-test",
+			refresh_token: "oauth-refresh-token-test",
+			grant_type: "refresh_token",
+		});
+		expect(calls.slice(1).every(({ init }) => new Headers(init.headers).get("authorization") === "Bearer oauth-test-access-token")).toBe(true);
+		expect(calls.every(({ url, init }) => !url.includes("oauth-client-secret-test") && !url.includes("oauth-refresh-token-test") && !String(init.body).includes("oauth-test-access-token"))).toBe(true);
+		expect(importPKCS8).not.toHaveBeenCalled();
+	});
+
+	it("sanitizes revoked refresh-token failures", async () => {
+		vi.stubEnv("GA4_OAUTH_CLIENT_ID", "revoked-client-id");
+		vi.stubEnv("GA4_OAUTH_CLIENT_SECRET", "revoked-client-secret");
+		vi.stubEnv("GA4_OAUTH_REFRESH_TOKEN", "revoked-refresh-token");
+		vi.stubGlobal("fetch", vi.fn(async () => Response.json({ error: "invalid_grant", error_description: "private revoked token detail" }, { status: 400 })));
+
+		const report = await readGa4Report({ preset: 7 });
+
+		expect(report).toMatchObject({ status: "unavailable", metrics: null, generateLeadEvents: null });
+		expect(report.message).toBe("Google authentication failed. Check server credentials.");
+		expect(report.message).not.toContain("private revoked token detail");
+		expect(report.message).not.toContain("revoked-refresh-token");
 	});
 
 	it("uses read-only OAuth and submits the existing nine report definitions", async () => {
@@ -124,7 +202,7 @@ describe("GA4 Worker REST reporting", () => {
 
 		expect(report).toMatchObject({
 			status: "unavailable",
-			message: "GA4 access is not authorized. Grant the service account Viewer access to the Analytics property.",
+			message: "GA4 access is not authorized. Grant the configured Google identity Viewer access to the Analytics property.",
 			metrics: null,
 			generateLeadEvents: null,
 		});

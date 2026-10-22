@@ -194,13 +194,13 @@ export function safeGa4ErrorMessage(error: unknown): string {
 	const code = String(candidate?.code ?? "");
 	const detail = candidate?.message ?? "";
 	if (detail === "invalid_credentials_config") {
-		return "GA4 service-account credentials are invalid. Check the server-side credential configuration.";
+		return "GA4 credentials are invalid. Check the server-side credential configuration.";
 	}
 	if (/default credentials|credentials.*not found|could not load.*credential/i.test(detail)) {
-		return "Google credentials are not configured for the server. Configure Application Default Credentials or GA4_SERVICE_ACCOUNT_JSON.";
+		return "Google credentials are not configured for the server. Configure GA4 OAuth refresh-token credentials or GA4_SERVICE_ACCOUNT_JSON.";
 	}
 	if (code === "16" || code === "UNAUTHENTICATED") return "Google authentication failed. Check server credentials.";
-	if (code === "7" || code === "PERMISSION_DENIED") return "GA4 access is not authorized. Grant the service account Viewer access to the Analytics property.";
+	if (code === "7" || code === "PERMISSION_DENIED") return "GA4 access is not authorized. Grant the configured Google identity Viewer access to the Analytics property.";
 	if (code === "8" || code === "RESOURCE_EXHAUSTED") return "The Google Analytics reporting quota is temporarily exhausted. Try again later.";
 	if (code === "5" || code === "NOT_FOUND" || code === "3" || code === "INVALID_ARGUMENT") {
 		return "The configured GA4 property was not found or is invalid for this account.";

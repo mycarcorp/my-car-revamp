@@ -20,13 +20,25 @@ type ServiceAccountCredentials = {
 	client_email?: string;
 	private_key?: string;
 };
+type OAuthCredentials = { type: "oauth"; clientId: string; clientSecret: string; refreshToken: string };
+type ConfiguredCredentials = { type: "service_account"; credentials: ServiceAccountCredentials } | OAuthCredentials;
 
 type Ga4ApiReport = Parameters<typeof mapGa4Reports>[0]["metrics"];
 type GoogleErrorResponse = { error?: { code?: number; status?: string; message?: string } };
 
-let cachedToken: { email: string; accessToken: string; expiresAt: number } | undefined;
+let cachedToken: { identity: string; accessToken: string; expiresAt: number } | undefined;
 
-function configuredCredentials(): ServiceAccountCredentials | null {
+function configuredCredentials(): ConfiguredCredentials | null {
+	const clientId = process.env["GA4_OAUTH_CLIENT_ID"];
+	const clientSecret = process.env["GA4_OAUTH_CLIENT_SECRET"];
+	const refreshToken = process.env["GA4_OAUTH_REFRESH_TOKEN"];
+	if (clientId || clientSecret || refreshToken) {
+		if (!clientId?.trim() || !clientSecret?.trim() || !refreshToken?.trim()) {
+			throw new Error("invalid_credentials_config");
+		}
+		return { type: "oauth", clientId, clientSecret, refreshToken };
+	}
+
 	const rawCredentials = process.env["GA4_SERVICE_ACCOUNT_JSON"];
 	if (!rawCredentials) return null;
 	try {
@@ -34,7 +46,7 @@ function configuredCredentials(): ServiceAccountCredentials | null {
 		if (credentials.type !== "service_account" || !credentials.client_email || !credentials.private_key) {
 			throw new Error("invalid_credentials_config");
 		}
-		return credentials;
+		return { type: "service_account", credentials };
 	} catch {
 		throw new Error("invalid_credentials_config");
 	}
@@ -62,38 +74,51 @@ async function responseBody(response: Response): Promise<GoogleErrorResponse & R
 	}
 }
 
-async function getAccessToken(credentials: ServiceAccountCredentials, signal: AbortSignal): Promise<string> {
-	const email = credentials.client_email!;
-	if (cachedToken?.email === email && cachedToken.expiresAt > Date.now()) return cachedToken.accessToken;
+async function getAccessToken(config: ConfiguredCredentials, signal: AbortSignal): Promise<string> {
+	const identity = config.type === "oauth"
+		? `oauth:${config.clientId}:${config.refreshToken}`
+		: `service_account:${config.credentials.client_email}`;
+	if (cachedToken?.identity === identity && cachedToken.expiresAt > Date.now()) return cachedToken.accessToken;
 
-	let assertion: string;
-	try {
-		const key = await importPKCS8(credentials.private_key!, "RS256");
-		const now = Math.floor(Date.now() / 1000);
-		assertion = await new SignJWT({ scope: SCOPE })
-			.setProtectedHeader({ alg: "RS256", typ: "JWT" })
-			.setIssuer(email)
-			.setAudience(TOKEN_URL)
-			.setIssuedAt(now)
-			.setExpirationTime(now + 3600)
-			.sign(key);
-	} catch {
-		throw new Error("invalid_credentials_config");
+	let form: URLSearchParams;
+	if (config.type === "oauth") {
+		form = new URLSearchParams({
+			client_id: config.clientId,
+			client_secret: config.clientSecret,
+			refresh_token: config.refreshToken,
+			grant_type: "refresh_token",
+		});
+	} else {
+		const credentials = config.credentials;
+		let assertion: string;
+		try {
+			const key = await importPKCS8(credentials.private_key!, "RS256");
+			const now = Math.floor(Date.now() / 1000);
+			assertion = await new SignJWT({ scope: SCOPE })
+				.setProtectedHeader({ alg: "RS256", typ: "JWT" })
+				.setIssuer(credentials.client_email!)
+				.setAudience(TOKEN_URL)
+				.setIssuedAt(now)
+				.setExpirationTime(now + 3600)
+				.sign(key);
+		} catch {
+			throw new Error("invalid_credentials_config");
+		}
+		form = new URLSearchParams({
+			grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
+			assertion,
+		});
 	}
-
 	const response = await fetch(TOKEN_URL, {
 		method: "POST",
 		headers: { "content-type": "application/x-www-form-urlencoded" },
-		body: new URLSearchParams({
-			grant_type: "urn:ietf:params:oauth:grant-type:jwt-bearer",
-			assertion,
-		}),
+		body: form,
 		signal,
 	});
 	const body = await responseBody(response);
 	if (!response.ok) {
 		const code = providerErrorCode(response.status, body);
-		throw code ? errorWithCode(code) : new Error("Google authentication is unavailable.");
+		throw errorWithCode(code ?? (response.status >= 500 ? 14 : 16));
 	}
 
 	const accessToken = body.access_token;
@@ -102,7 +127,7 @@ async function getAccessToken(credentials: ServiceAccountCredentials, signal: Ab
 		throw new Error("Google authentication is unavailable.");
 	}
 	cachedToken = {
-		email,
+		identity,
 		accessToken,
 		expiresAt: Date.now() + Math.max(0, expiresIn * 1000 - TOKEN_REFRESH_SKEW_MS),
 	};
@@ -145,7 +170,7 @@ export async function readGa4Report(input: Ga4RangeInput): Promise<Ga4Report> {
 	try {
 		const credentials = configuredCredentials();
 		if (!credentials) {
-			return unavailableGa4Report(range, "Google credentials are not configured for this server. Configure GA4_SERVICE_ACCOUNT_JSON.", fetchedAt);
+			return unavailableGa4Report(range, "Google credentials are not configured for this server. Configure GA4 OAuth refresh-token credentials or GA4_SERVICE_ACCOUNT_JSON.", fetchedAt);
 		}
 		const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 		const accessToken = await getAccessToken(credentials, timeout);
