@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from "vitest";
 import {
+  createBrowserAnalyticsAdapter,
   createAnalyticsController,
+  getGa4MeasurementId,
   getTrackingConsentPreferences,
   getLeadFormType,
   isAnalyticsRoutePublic,
@@ -22,6 +24,47 @@ function mockAdapter() {
 }
 
 describe("central GA4 analytics gate", () => {
+  it("uses the required production measurement ID when build-time env injection is missing", () => {
+    expect(getGa4MeasurementId()).toBe("G-CFXQ8JPE21");
+  });
+
+  it("loads the Google tag only after consent and sends one page view per route", () => {
+    const calls: unknown[][] = [];
+    const script = { async: false, src: "", dataset: {} as Record<string, string> };
+    const appendChild = vi.fn();
+    vi.stubGlobal("window", { location: { origin: "https://mycarcorp.com" }, dataLayer: calls });
+    vi.stubGlobal("document", {
+      querySelector: vi.fn(() => null),
+      createElement: vi.fn(() => script),
+      head: { appendChild },
+    });
+    try {
+      const adapter = createBrowserAnalyticsAdapter();
+      const analytics = createAnalyticsController(adapter);
+      const environment = { measurementId: getGa4MeasurementId(), isPublicRoute: true };
+      analytics.configure({ ...environment, consent: "unknown" });
+      expect(analytics.pageView("/", "https://mycarcorp.com")).toBe(false);
+      expect(appendChild).not.toHaveBeenCalled();
+      expect(calls).toHaveLength(0);
+
+      analytics.configure({ ...environment, consent: "granted" });
+      expect(appendChild).toHaveBeenCalledOnce();
+      expect(script.src).toBe("https://www.googletagmanager.com/gtag/js?id=G-CFXQ8JPE21");
+      expect(analytics.pageView("/", "https://mycarcorp.com")).toBe(true);
+      expect(analytics.pageView("/", "https://mycarcorp.com")).toBe(false);
+      expect(analytics.pageView("/search", "https://mycarcorp.com")).toBe(true);
+      expect(calls.filter((call) => call[0] === "event" && call[1] === "page_view")).toHaveLength(2);
+
+      analytics.configure({ ...environment, consent: "denied" });
+      expect(analytics.pageView("/inventory", "https://mycarcorp.com")).toBe(false);
+      expect(analytics.track({ name: "form_start", params: { form_type: "contact" } })).toBe(false);
+      expect(calls.filter((call) => call[0] === "event" && call[1] === "page_view")).toHaveLength(2);
+      expect(calls.some((call) => call[0] === "consent" && call[1] === "update" && (call[2] as { analytics_storage?: string }).analytics_storage === "denied")).toBe(true);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("does not load or send before explicit analytics consent", () => {
     const adapter = mockAdapter();
     const analytics = createAnalyticsController(adapter);
@@ -116,6 +159,11 @@ describe("GA4 event allowlists", () => {
       setItem: (key: string, value: string) => { data.set(key, value); },
     };
     vi.stubGlobal("window", { localStorage, location: { origin: "https://mycarcorp.com", href: "https://mycarcorp.com/" } });
+    vi.stubGlobal("document", {
+      querySelector: vi.fn(() => null),
+      createElement: vi.fn(() => ({ async: false, src: "", dataset: {} })),
+      head: { appendChild: vi.fn() },
+    });
     try {
       data.set("mycar.analyticsConsent", "granted");
       expect(getTrackingConsentPreferences()).toEqual({ analytics: "unknown", meta: "unknown" });
