@@ -71,6 +71,32 @@ describe("central GA4 analytics gate", () => {
     }
   });
 
+  it("pushes gtag commands to dataLayer as Arguments objects, which gtag.js requires", () => {
+    const calls: unknown[] = [];
+    const script = { async: false, src: "", dataset: {} as Record<string, string> };
+    vi.stubGlobal("window", { location: { origin: "https://mycarcorp.com" }, dataLayer: calls });
+    vi.stubGlobal("document", {
+      querySelector: vi.fn(() => null),
+      createElement: vi.fn(() => script),
+      head: { appendChild: vi.fn() },
+    });
+    try {
+      const analytics = createAnalyticsController(createBrowserAnalyticsAdapter());
+      analytics.configure({ measurementId: "G-CFXQ8JPE21", consent: "granted", isPublicRoute: true });
+      analytics.pageView("/", "https://mycarcorp.com");
+      expect(calls.length).toBeGreaterThan(0);
+      for (const call of calls) {
+        expect(Object.prototype.toString.call(call)).toBe("[object Arguments]");
+        expect(Array.isArray(call)).toBe(false);
+      }
+      const commands = calls.map((call) => (call as unknown[])[0]);
+      expect(commands).toEqual(expect.arrayContaining(["js", "consent", "config", "event"]));
+      expect(calls.filter((call) => (call as unknown[])[0] === "config")).toHaveLength(1);
+    } finally {
+      vi.unstubAllGlobals();
+    }
+  });
+
   it("does not load or send before explicit analytics consent", () => {
     const adapter = mockAdapter();
     const analytics = createAnalyticsController(adapter);
