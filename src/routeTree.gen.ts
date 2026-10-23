@@ -34,9 +34,13 @@ import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
 import { Route as InventorySlugRouteImport } from './routes/inventory.$slug'
+import { Route as LeaseToOwnIndexRouteImport } from './routes/lease-to-own.index'
+import { Route as LeaseToOwnApplyRouteImport } from './routes/lease-to-own.apply'
+import { Route as LeaseToOwnPortalRouteImport } from './routes/lease-to-own.portal'
 import { Route as LocationsIndexRouteImport } from './routes/locations.index'
 import { Route as LocationsSlugRouteImport } from './routes/locations.$slug'
 import { Route as MyIndexRouteImport } from './routes/my.index'
+import { Route as StaffDmsRouteImport } from './routes/staff.dms'
 import { Route as AdminBlogIndexRouteImport } from './routes/admin.blog.index'
 import { Route as AdminBlogNewRouteImport } from './routes/admin.blog.new'
 import { Route as ApiPublicReceiveArticleRouteImport } from './routes/api/public/receive-article'
@@ -171,6 +175,21 @@ const InventorySlugRoute = InventorySlugRouteImport.update({
   path: '/inventory/$slug',
   getParentRoute: () => rootRouteImport,
 } as any)
+const LeaseToOwnIndexRoute = LeaseToOwnIndexRouteImport.update({
+  id: '/lease-to-own/',
+  path: '/lease-to-own/',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeaseToOwnApplyRoute = LeaseToOwnApplyRouteImport.update({
+  id: '/lease-to-own/apply',
+  path: '/lease-to-own/apply',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const LeaseToOwnPortalRoute = LeaseToOwnPortalRouteImport.update({
+  id: '/lease-to-own/portal',
+  path: '/lease-to-own/portal',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const LocationsIndexRoute = LocationsIndexRouteImport.update({
   id: '/locations/',
   path: '/locations/',
@@ -185,6 +204,11 @@ const MyIndexRoute = MyIndexRouteImport.update({
   id: '/',
   path: '/',
   getParentRoute: () => MyRoute,
+} as any)
+const StaffDmsRoute = StaffDmsRouteImport.update({
+  id: '/staff/dms',
+  path: '/staff/dms',
+  getParentRoute: () => rootRouteImport,
 } as any)
 const AdminBlogIndexRoute = AdminBlogIndexRouteImport.update({
   id: '/blog/',
@@ -253,9 +277,13 @@ export interface FileRoutesByFullPath {
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
+  '/lease-to-own/apply': typeof LeaseToOwnApplyRoute
+  '/lease-to-own/portal': typeof LeaseToOwnPortalRoute
   '/locations/$slug': typeof LocationsSlugRoute
+  '/staff/dms': typeof StaffDmsRoute
   '/admin/': typeof AdminIndexRoute
   '/blog/': typeof BlogIndexRoute
+  '/lease-to-own/': typeof LeaseToOwnIndexRoute
   '/locations/': typeof LocationsIndexRoute
   '/my/': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
@@ -289,9 +317,13 @@ export interface FileRoutesByTo {
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
+  '/lease-to-own/apply': typeof LeaseToOwnApplyRoute
+  '/lease-to-own/portal': typeof LeaseToOwnPortalRoute
   '/locations/$slug': typeof LocationsSlugRoute
+  '/staff/dms': typeof StaffDmsRoute
   '/admin': typeof AdminIndexRoute
   '/blog': typeof BlogIndexRoute
+  '/lease-to-own': typeof LeaseToOwnIndexRoute
   '/locations': typeof LocationsIndexRoute
   '/my': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
@@ -328,9 +360,13 @@ export interface FileRoutesById {
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
+  '/lease-to-own/apply': typeof LeaseToOwnApplyRoute
+  '/lease-to-own/portal': typeof LeaseToOwnPortalRoute
   '/locations/$slug': typeof LocationsSlugRoute
+  '/staff/dms': typeof StaffDmsRoute
   '/admin/': typeof AdminIndexRoute
   '/blog/': typeof BlogIndexRoute
+  '/lease-to-own/': typeof LeaseToOwnIndexRoute
   '/locations/': typeof LocationsIndexRoute
   '/my/': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
@@ -368,9 +404,13 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
+    | '/lease-to-own/apply'
+    | '/lease-to-own/portal'
     | '/locations/$slug'
+    | '/staff/dms'
     | '/admin/'
     | '/blog/'
+    | '/lease-to-own/'
     | '/locations/'
     | '/my/'
     | '/admin/blog/new'
@@ -404,9 +444,13 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
+    | '/lease-to-own/apply'
+    | '/lease-to-own/portal'
     | '/locations/$slug'
+    | '/staff/dms'
     | '/admin'
     | '/blog'
+    | '/lease-to-own'
     | '/locations'
     | '/my'
     | '/admin/blog/new'
@@ -442,9 +486,13 @@ export interface FileRouteTypes {
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
+    | '/lease-to-own/apply'
+    | '/lease-to-own/portal'
     | '/locations/$slug'
+    | '/staff/dms'
     | '/admin/'
     | '/blog/'
+    | '/lease-to-own/'
     | '/locations/'
     | '/my/'
     | '/admin/blog/new'
@@ -474,8 +522,12 @@ export interface RootRouteChildren {
   TermsRoute: typeof TermsRoute
   BlogSlugRoute: typeof BlogSlugRoute
   InventorySlugRoute: typeof InventorySlugRoute
+  LeaseToOwnApplyRoute: typeof LeaseToOwnApplyRoute
+  LeaseToOwnPortalRoute: typeof LeaseToOwnPortalRoute
   LocationsSlugRoute: typeof LocationsSlugRoute
+  StaffDmsRoute: typeof StaffDmsRoute
   BlogIndexRoute: typeof BlogIndexRoute
+  LeaseToOwnIndexRoute: typeof LeaseToOwnIndexRoute
   LocationsIndexRoute: typeof LocationsIndexRoute
   ApiPublicReceiveArticleRoute: typeof ApiPublicReceiveArticleRoute
   ApiPublicJobsMarketingRefreshRoute: typeof ApiPublicJobsMarketingRefreshRoute
@@ -659,6 +711,27 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof InventorySlugRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/lease-to-own/': {
+      id: '/lease-to-own/'
+      path: '/lease-to-own'
+      fullPath: '/lease-to-own/'
+      preLoaderRoute: typeof LeaseToOwnIndexRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lease-to-own/apply': {
+      id: '/lease-to-own/apply'
+      path: '/lease-to-own/apply'
+      fullPath: '/lease-to-own/apply'
+      preLoaderRoute: typeof LeaseToOwnApplyRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/lease-to-own/portal': {
+      id: '/lease-to-own/portal'
+      path: '/lease-to-own/portal'
+      fullPath: '/lease-to-own/portal'
+      preLoaderRoute: typeof LeaseToOwnPortalRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/locations/': {
       id: '/locations/'
       path: '/locations'
@@ -679,6 +752,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/my/'
       preLoaderRoute: typeof MyIndexRouteImport
       parentRoute: typeof MyRoute
+    }
+    '/staff/dms': {
+      id: '/staff/dms'
+      path: '/staff/dms'
+      fullPath: '/staff/dms'
+      preLoaderRoute: typeof StaffDmsRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/admin/blog/': {
       id: '/admin/blog/'
@@ -808,8 +888,12 @@ const rootRouteChildren: RootRouteChildren = {
   TermsRoute: TermsRoute,
   BlogSlugRoute: BlogSlugRoute,
   InventorySlugRoute: InventorySlugRoute,
+  LeaseToOwnApplyRoute: LeaseToOwnApplyRoute,
+  LeaseToOwnPortalRoute: LeaseToOwnPortalRoute,
   LocationsSlugRoute: LocationsSlugRoute,
+  StaffDmsRoute: StaffDmsRoute,
   BlogIndexRoute: BlogIndexRoute,
+  LeaseToOwnIndexRoute: LeaseToOwnIndexRoute,
   LocationsIndexRoute: LocationsIndexRoute,
   ApiPublicReceiveArticleRoute: ApiPublicReceiveArticleRoute,
   ApiPublicJobsMarketingRefreshRoute: ApiPublicJobsMarketingRefreshRoute,

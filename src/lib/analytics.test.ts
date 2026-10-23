@@ -17,6 +17,7 @@ import {
   sanitizePageLocation,
   setTrackingConsentPreferences,
   trackContactClick,
+  trackLeaseEvent,
   trackMetaPageView,
   trackMetaViewContent,
   withLeadEventId,
@@ -321,6 +322,28 @@ describe("GA4 event allowlists", () => {
     expect(send).not.toHaveBeenCalled();
   });
 });
+describe("Lease to Own analytics", () => {
+  it("keeps only allow-listed program parameters", () => {
+    expect(sanitizeEvent({
+      name: "lease_to_own_tier_selected",
+      params: { tier: "payday-flex", ssn: "123-45-6789", email: "a@b.co" } as never,
+    })).toEqual({ name: "lease_to_own_tier_selected", params: { tier: "payday-flex" } });
+    expect(sanitizeEvent({
+      name: "lease_to_own_document_upload_completed",
+      params: { document_type: "paystub", file_name: "jane-paystub.pdf" } as never,
+    })).toEqual({ name: "lease_to_own_document_upload_completed", params: { document_type: "paystub" } });
+    expect(sanitizeEvent({ name: "lease_to_own_application_step_completed", params: { step: 9 } as never }))
+      .toEqual({ name: "lease_to_own_application_step_completed", params: {} });
+  });
+
+  it("never collects on the lease portal or staff DMS", () => {
+    expect(isAnalyticsRoutePublic("/lease-to-own")).toBe(true);
+    expect(isAnalyticsRoutePublic("/lease-to-own/apply")).toBe(true);
+    expect(isAnalyticsRoutePublic("/lease-to-own/portal")).toBe(false);
+    expect(isAnalyticsRoutePublic("/staff/dms")).toBe(false);
+  });
+});
+
 describe("Meta Pixel URL safety", () => {
   const origin = "https://mycarcorp.com";
   const fbclid = "IwAR2xK9aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789_abc-def";
@@ -469,6 +492,22 @@ describe("Meta Pixel PageView tracking", () => {
       resetMetaPixelStateForTests();
       vi.unstubAllGlobals();
     }
+  });
+
+  it("keeps Lease to Own private routes, application URLs and lease events away from the Pixel", () => {
+    for (const path of ["/lease-to-own/portal", "/staff/dms", "/lease-to-own/apply?tier=payday-flex&value=10000"]) {
+      const env = setup({ path });
+      expect(trackMetaPageView(path.split(/[?#]/)[0]!)).toBe(false);
+      expect(env.calls()).toEqual([]);
+      expect(env.appendChild).not.toHaveBeenCalled();
+      resetMetaPixelStateForTests();
+      vi.unstubAllGlobals();
+    }
+    const env = setup({ path: "/lease-to-own" });
+    expect(trackMetaPageView("/lease-to-own")).toBe(true);
+    trackLeaseEvent("lease_to_own_tier_selected", { tier: "payday-flex" }, false);
+    trackLeaseEvent("lease_to_own_application_submitted", { tier: "payday-flex" }, false);
+    expect(env.calls().filter((entry) => entry[0] === "track" || entry[0] === "trackCustom")).toEqual([["track", "PageView"]]);
   });
 
   it("does not fire for redacted paths or private routes", () => {
