@@ -26,6 +26,7 @@ const STATIC_PAGES: Array<{
   { path: "/blog", priority: "0.8", changefreq: "daily" },
   { path: "/finance", priority: "0.7", changefreq: "monthly" },
   { path: "/sell", priority: "0.7", changefreq: "monthly" },
+  { path: "/lease-to-own", priority: "0.7", changefreq: "monthly" },
   { path: "/schedule", priority: "0.6", changefreq: "monthly" },
   { path: "/contact", priority: "0.6", changefreq: "monthly" },
 ];

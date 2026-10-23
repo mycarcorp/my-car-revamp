@@ -9,7 +9,49 @@ export type AnalyticsEvent =
   | { name: "appointment_type_selected"; params: { appointment_type: "test_drive" | "trade_appraisal" | "financing" | "general" } }
   | { name: "appointment_vehicle_selected"; params: { appointment_type: "test_drive" | "trade_appraisal" | "financing" | "general" } }
   | { name: "form_start"; params: { form_type: string } }
-  | { name: "generate_lead"; params: { form_type: string; lead_intent?: "sell" | "trade" } };
+  | { name: "generate_lead"; params: { form_type: string; lead_intent?: "sell" | "trade" } }
+  | { name: LeaseEventName; params: LeaseEventParams };
+
+export const LEASE_EVENT_NAMES = [
+  "lease_to_own_page_view",
+  "lease_to_own_calculator_interaction",
+  "lease_to_own_tier_selected",
+  "lease_to_own_application_started",
+  "lease_to_own_application_step_completed",
+  "lease_to_own_application_submitted",
+  "lease_to_own_document_upload_completed",
+  "lease_to_own_booking_requested",
+] as const;
+export type LeaseEventName = (typeof LEASE_EVENT_NAMES)[number];
+
+/** Only program-level choices — never applicant, document or account data. */
+export type LeaseEventParams = {
+  tier?: "premier-monthly" | "payday-flex" | "weekly-express";
+  step?: 1 | 2 | 3 | 4;
+  document_type?: "government_id" | "paystub" | "bank_statement" | "insurance_declaration" | "ach_authorization";
+  interaction?: "rideshare_slider" | "vehicle_value_slider" | "mechanical_component";
+};
+
+const LEASE_PARAM_VALUES = {
+  tier: new Set(["premier-monthly", "payday-flex", "weekly-express"]),
+  step: new Set([1, 2, 3, 4]),
+  document_type: new Set(["government_id", "paystub", "bank_statement", "insurance_declaration", "ach_authorization"]),
+  interaction: new Set(["rideshare_slider", "vehicle_value_slider", "mechanical_component"]),
+} as const;
+
+function isLeaseEvent(event: AnalyticsEvent): event is { name: LeaseEventName; params: LeaseEventParams } {
+  return (LEASE_EVENT_NAMES as readonly string[]).includes(event.name);
+}
+
+/** Sends a Lease to Own event once per page load per name+params combination. */
+const sentLeaseEvents = new Set<string>();
+export function trackLeaseEvent(name: LeaseEventName, params: LeaseEventParams = {}, once = true): boolean {
+  const key = `${name}:${JSON.stringify(params)}`;
+  if (once && sentLeaseEvents.has(key)) return false;
+  const sent = trackAnalyticsEvent({ name, params });
+  if (sent && once) sentLeaseEvents.add(key);
+  return sent;
+}
 
 export type AnalyticsItem = {
   item_id: string;
@@ -88,7 +130,7 @@ export function sanitizePageLocation(pathname: string, origin: string): string {
 }
 
 export function isAnalyticsRoutePublic(pathname: string): boolean {
-  return !["/admin", "/api", "/my", "/auth", "/reset-password"].some(
+  return !["/admin", "/api", "/my", "/auth", "/reset-password", "/staff", "/lease-to-own/portal"].some(
     (prefix) => pathname === prefix || pathname.startsWith(`${prefix}/`),
   );
 }
@@ -161,6 +203,14 @@ export function createAnalyticsController(adapter: AnalyticsAdapter) {
 
 export function sanitizeEvent(event: AnalyticsEvent): AnalyticsEvent | null {
   if (event.name === "page_view") return null;
+  if (isLeaseEvent(event)) {
+    const raw = event.params as Record<string, unknown>;
+    const params: Record<string, unknown> = {};
+    for (const key of Object.keys(LEASE_PARAM_VALUES) as Array<keyof typeof LEASE_PARAM_VALUES>) {
+      if ((LEASE_PARAM_VALUES[key] as Set<unknown>).has(raw[key])) params[key] = raw[key];
+    }
+    return { name: event.name, params: params as LeaseEventParams };
+  }
   if (event.name === "appointment_type_selected" || event.name === "appointment_vehicle_selected") {
     const types = new Set(["test_drive", "trade_appraisal", "financing", "general"]);
     const appointmentType = (event.params as { appointment_type?: unknown }).appointment_type;

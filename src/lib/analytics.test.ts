@@ -314,3 +314,24 @@ describe("GA4 event allowlists", () => {
     expect(send).not.toHaveBeenCalled();
   });
 });
+describe("Lease to Own analytics", () => {
+  it("keeps only allow-listed program parameters", () => {
+    expect(sanitizeEvent({
+      name: "lease_to_own_tier_selected",
+      params: { tier: "payday-flex", ssn: "123-45-6789", email: "a@b.co" } as never,
+    })).toEqual({ name: "lease_to_own_tier_selected", params: { tier: "payday-flex" } });
+    expect(sanitizeEvent({
+      name: "lease_to_own_document_upload_completed",
+      params: { document_type: "paystub", file_name: "jane-paystub.pdf" } as never,
+    })).toEqual({ name: "lease_to_own_document_upload_completed", params: { document_type: "paystub" } });
+    expect(sanitizeEvent({ name: "lease_to_own_application_step_completed", params: { step: 9 } as never }))
+      .toEqual({ name: "lease_to_own_application_step_completed", params: {} });
+  });
+
+  it("never collects on the lease portal or staff DMS", () => {
+    expect(isAnalyticsRoutePublic("/lease-to-own")).toBe(true);
+    expect(isAnalyticsRoutePublic("/lease-to-own/apply")).toBe(true);
+    expect(isAnalyticsRoutePublic("/lease-to-own/portal")).toBe(false);
+    expect(isAnalyticsRoutePublic("/staff/dms")).toBe(false);
+  });
+});

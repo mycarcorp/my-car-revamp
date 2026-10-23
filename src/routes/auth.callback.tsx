@@ -2,6 +2,7 @@ import { createFileRoute, useNavigate } from "@tanstack/react-router";
 import { useEffect } from "react";
 import { supabase } from "@/integrations/supabase/app-client";
 import { linkLegacyProfile } from "@/lib/legacy-auth.functions";
+import { consumeLeaseApplyReturn } from "@/lib/lease-to-own-client";
 
 export const Route = createFileRoute("/auth/callback")({
   ssr: false,
@@ -34,6 +35,13 @@ function AuthCallbackPage() {
         pending = !!sessionStorage.getItem("mycar.pendingPurchase");
       } catch {
         pending = false;
+      }
+      // Return Google sign-ins started from the Lease to Own application to that
+      // application (only the package choice is restored; no applicant data is stored).
+      const leaseReturn = signedIn && !pending ? consumeLeaseApplyReturn() : null;
+      if (leaseReturn) {
+        void navigate({ to: "/lease-to-own/apply", search: leaseReturn });
+        return;
       }
       void navigate({ to: signedIn ? (pending ? "/my" : "/search") : pending ? "/my" : "/auth" });
     };
