@@ -1,7 +1,7 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
 import { descriptionToPlainText, descriptionToSafeHtml, extractDescriptionFaqs } from "@/lib/vehicle-description";
 import { trackEvent } from "@/lib/visitor-personalization";
-import { publicCatalogItemId, trackAnalyticsEvent } from "@/lib/analytics";
+import { publicCatalogItemId, trackAnalyticsEvent, trackMetaViewContent } from "@/lib/analytics";
 import { useQuery } from "@tanstack/react-query";
 import { lazy, Suspense, useEffect, useMemo, useState } from "react";
 import {
@@ -300,15 +300,14 @@ function VehicleDetail() {
     });
     const itemName = vehicleTitle(v);
     const price = Number(v.price_cents) / 100;
-    trackAnalyticsEvent({
-      name: "view_item",
-      params: {
-        item_id: publicCatalogItemId(v.year, v.make, v.model),
-        item_name: itemName,
-        ...(v.body_style ? { item_category: v.body_style } : {}),
-        ...(Number.isFinite(price) && price >= 0 ? { price, currency: "USD" as const } : {}),
-      },
-    });
+    const viewItem = {
+      item_id: publicCatalogItemId(v.year, v.make, v.model),
+      item_name: itemName,
+      ...(v.body_style ? { item_category: v.body_style } : {}),
+      ...(Number.isFinite(price) && price >= 0 ? { price, currency: "USD" as const } : {}),
+    };
+    trackAnalyticsEvent({ name: "view_item", params: viewItem });
+    trackMetaViewContent(viewItem);
   }, [v.id, v.slug, v.year, v.make, v.model, v.trim, v.body_style, v.price_cents]);
 
   const [selectedSection, setSelectedSection] = useState("overview");

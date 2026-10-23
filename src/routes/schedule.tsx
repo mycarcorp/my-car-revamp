@@ -22,7 +22,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { LeadForm } from "@/components/LeadForm";
 import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
-import { recordFormStart, trackAnalyticsEvent } from "@/lib/analytics";
+import { recordFormStart, trackAnalyticsEvent, trackContactClick } from "@/lib/analytics";
 import { allVehiclesQuery, siteSettingsQuery, type VehicleWithPhotos } from "@/lib/queries";
 
 type AppointmentType = "test_drive" | "trade_appraisal" | "financing" | "general";
@@ -521,7 +521,7 @@ function SchedulePage() {
                     </div>
                     <div>
                       <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">Call Us</p>
-                      <a href={phoneHref} className="mt-1 block font-semibold text-foreground hover:text-primary">
+                      <a href={phoneHref} onClick={() => trackContactClick("phone", "schedule_page")} className="mt-1 block font-semibold text-foreground hover:text-primary">
                         {settings.phone}
                       </a>
                     </div>
@@ -799,6 +799,7 @@ function SchedulePage() {
                     {settings?.phone && (
                       <a
                         href={phoneHref}
+                        onClick={() => trackContactClick("phone", "schedule_page")}
                         className="mt-3 flex items-center gap-2 font-semibold text-foreground transition hover:text-primary"
                       >
                         <MessagesSquare className="size-4 text-primary" />
