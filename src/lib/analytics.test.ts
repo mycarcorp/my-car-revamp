@@ -14,7 +14,10 @@ import {
   sanitizeEvent,
   sanitizePageLocation,
   setTrackingConsentPreferences,
+  trackContactClick,
   trackMetaPageView,
+  trackMetaViewContent,
+  withLeadEventId,
 } from "./analytics";
 
 function mockAdapter() {
@@ -564,5 +567,334 @@ describe("Meta Pixel PageView tracking", () => {
     env.data.set("mycar.trackingConsent.v1", JSON.stringify({ analytics: "denied", meta: "granted" }));
     expect(trackMetaPageView("/")).toBe(true);
     expect(env.count("PageView")).toBe(2);
+  });
+});
+
+describe("Meta conversion events", () => {
+  const origin = "https://mycarcorp.com";
+  const fbclid = "IwAR2xK9aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789_abc-def";
+  const vehicle = { item_id: "2019-honda-civic", item_name: "2019 Honda Civic", item_category: "Sedan", price: 15000, currency: "USD" as const };
+
+  function setup(path = "/contact", options: { meta?: "granted" | "denied" | "unknown"; analytics?: "granted" | "denied" | "unknown" } = {}) {
+    const data = new Map<string, string>([
+      ["mycar.trackingConsent.v1", JSON.stringify({ analytics: options.analytics ?? "denied", meta: options.meta ?? "granted" })],
+    ]);
+    const make = (target: string) => {
+      const url = new URL(`${origin}${target}`);
+      return { origin, href: url.href, pathname: url.pathname, search: url.search };
+    };
+    const appendChild = vi.fn();
+    const win: Record<string, unknown> = {
+      localStorage: {
+        getItem: (key: string) => data.get(key) ?? null,
+        setItem: (key: string, value: string) => { data.set(key, value); },
+      },
+      location: make(path),
+      dataLayer: [] as unknown[],
+    };
+    vi.stubGlobal("window", win);
+    vi.stubGlobal("document", {
+      querySelector: vi.fn(() => null),
+      createElement: vi.fn(() => ({ async: false, src: "", dataset: {} as Record<string, string> })),
+      head: { appendChild },
+    });
+    const queue = () => ((win["fbq"] as { queue?: unknown[][] } | undefined)?.queue ?? []).map((entry) => [...entry]);
+    return {
+      data,
+      appendChild,
+      go: (target: string) => { win["location"] = make(target); },
+      calls: queue,
+      tracks: (name?: string) => queue().filter((entry) => entry[0] === "track" && (name ? entry[1] === name : true)),
+      dataLayer: () => (win["dataLayer"] as unknown[]).map((entry) => Array.from(entry as ArrayLike<unknown>)),
+    };
+  }
+
+  beforeEach(() => resetMetaPixelStateForTests());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    vi.restoreAllMocks();
+    resetMetaPixelStateForTests();
+  });
+
+  describe("ViewContent", () => {
+    it("sends vehicle catalog fields only, with an opaque event ID", () => {
+      const env = setup(`/inventory/2019-honda-civic?fbclid=${fbclid}`);
+      expect(trackMetaViewContent(vehicle)).toBe(true);
+      expect(env.tracks("ViewContent")).toEqual([
+        ["track", "ViewContent",
+          { content_type: "vehicle", content_ids: ["2019-honda-civic"], content_name: "2019 Honda Civic", content_category: "Sedan", value: 15000, currency: "USD" },
+          { eventID: expect.stringMatching(/^mc_[a-f0-9-]{16,40}$/) }],
+      ]);
+    });
+
+    it("rejects VIN-like IDs and PII-like names the same way GA4 view_item does", () => {
+      const env = setup("/inventory/x");
+      expect(trackMetaViewContent({ item_id: "1hgcm82633a004352", item_name: "2019 Honda Civic" })).toBe(false);
+      expect(trackMetaViewContent({ item_id: "public-car-slug", item_name: "Jane Doe 5405550100" })).toBe(false);
+      expect(trackMetaViewContent({ item_id: "public-car-slug", item_name: "private@example.com" })).toBe(false);
+      expect(env.calls()).toEqual([]);
+    });
+
+    it("sends once per vehicle page view and again after the visitor leaves and returns", () => {
+      const env = setup("/inventory/2019-honda-civic");
+      // Child effects run before the root PageView effect on a real mount.
+      expect(trackMetaViewContent(vehicle)).toBe(true);
+      expect(trackMetaPageView("/inventory/2019-honda-civic")).toBe(true);
+      expect(trackMetaViewContent(vehicle)).toBe(false);
+      expect(env.tracks("ViewContent")).toHaveLength(1);
+
+      env.go("/search");
+      expect(trackMetaPageView("/search")).toBe(true);
+      env.go("/inventory/2019-honda-civic");
+      expect(trackMetaViewContent(vehicle)).toBe(true);
+      expect(trackMetaPageView("/inventory/2019-honda-civic")).toBe(true);
+      expect(trackMetaViewContent(vehicle)).toBe(false);
+      expect(env.tracks("ViewContent")).toHaveLength(2);
+      expect(env.tracks("PageView")).toHaveLength(3);
+    });
+
+    it("sends nothing without Meta consent, whatever the GA4 consent is", () => {
+      for (const meta of ["unknown", "denied"] as const) {
+        const env = setup("/inventory/x", { meta, analytics: "granted" });
+        expect(trackMetaViewContent(vehicle)).toBe(false);
+        expect(env.calls()).toEqual([]);
+        expect(env.appendChild).not.toHaveBeenCalled();
+        resetMetaPixelStateForTests();
+        vi.unstubAllGlobals();
+      }
+    });
+  });
+
+  describe("Lead and Schedule", () => {
+    const send = () => vi.fn(() => true);
+
+    it("sends Lead for confirmed contact, car-finder, sell and trade submissions", () => {
+      const cases: Array<[string, Record<string, unknown>, string]> = [
+        ["contact", {}, "contact"],
+        ["contact", { request_type: "car_finder" }, "car_finder"],
+        ["trade", { intent: "sell" }, "sell"],
+        ["trade", { intent: "trade" }, "trade"],
+      ];
+      for (const [leadType, details, category] of cases) {
+        resetMetaPixelStateForTests();
+        const env = setup("/contact");
+        const eventDetails = { ...details };
+        const eventId = withLeadEventId(leadType, eventDetails);
+        expect(recordLeadSubmission(true, leadType, eventDetails, send())).toBe(true);
+        expect(env.tracks("Lead")).toEqual([["track", "Lead", { content_category: category }, { eventID: eventId }]]);
+        expect(env.tracks("Schedule")).toEqual([]);
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("sends Schedule, not Lead, for a confirmed appointment", () => {
+      const env = setup("/schedule");
+      const details: Record<string, unknown> = {};
+      const eventId = withLeadEventId("appointment", details);
+      recordLeadSubmission(true, "appointment", details, send());
+      expect(env.tracks("Schedule")).toEqual([["track", "Schedule", { content_category: "appointment" }, { eventID: eventId }]]);
+      expect(env.tracks("Lead")).toEqual([]);
+    });
+
+    it("never sends Meta conversions for finance, purchase requests, availability or unknown types", () => {
+      for (const leadType of ["finance", "purchase_request", "availability", "unknown_type"]) {
+        const env = setup("/finance");
+        const ga4Send = send();
+        recordLeadSubmission(true, leadType, { lead_event_id: "mc_00000000-0000-4000-8000-000000000000" }, ga4Send);
+        expect(env.tracks()).toEqual([]);
+        expect(env.appendChild).not.toHaveBeenCalled();
+        resetMetaPixelStateForTests();
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("leaves finance and purchase lead details byte-for-byte unchanged and creates no event ID", () => {
+      const financeDetails = { ssn: "000-00-0000", date_of_birth: "1901-01-01", cash_down: "1000", sms_consent: true };
+      const before = JSON.stringify(financeDetails);
+      expect(withLeadEventId("finance", financeDetails)).toBeNull();
+      expect(JSON.stringify(financeDetails)).toBe(before);
+      for (const leadType of ["purchase_request", "availability", "unknown_type", "constructor", "__proto__"]) {
+        const details = { note: "unchanged" };
+        expect(withLeadEventId(leadType, details)).toBeNull();
+        expect(details).toEqual({ note: "unchanged" });
+      }
+    });
+
+    it("creates unique opaque IDs for allowed lead types and keeps customer data out of them", () => {
+      const ids = new Set<string>();
+      for (let index = 0; index < 20; index += 1) {
+        const details: Record<string, unknown> = { full_name: "Jane Doe", email: "private@example.com" };
+        const id = withLeadEventId("contact", details);
+        expect(id).toMatch(/^mc_[a-f0-9-]{16,40}$/);
+        expect(details["lead_event_id"]).toBe(id);
+        expect(id).not.toMatch(/jane|doe|example|@/i);
+        ids.add(id!);
+      }
+      expect(ids.size).toBe(20);
+    });
+
+    it("sends nothing for a failed submission", () => {
+      const env = setup("/contact");
+      const ga4Send = send();
+      expect(recordLeadSubmission(false, "contact", {}, ga4Send)).toBe(false);
+      expect(ga4Send).not.toHaveBeenCalled();
+      expect(env.calls()).toEqual([]);
+    });
+
+    it("sends one conversion per event ID even if the success handler runs twice", () => {
+      const env = setup("/contact");
+      const details: Record<string, unknown> = {};
+      withLeadEventId("contact", details);
+      recordLeadSubmission(true, "contact", details, send());
+      recordLeadSubmission(true, "contact", details, send());
+      expect(env.tracks("Lead")).toHaveLength(1);
+    });
+
+    it("ignores a malformed event ID from lead details and generates a clean one", () => {
+      const env = setup("/contact");
+      recordLeadSubmission(true, "contact", { lead_event_id: "private@example.com 5405550100" }, send());
+      const [lead] = env.tracks("Lead");
+      expect((lead![3] as { eventID: string }).eventID).toMatch(/^mc_[a-f0-9-]{16,40}$/);
+      expect(JSON.stringify(env.calls())).not.toMatch(/private@example|5405550100/);
+    });
+
+    it("respects Meta consent independently of GA4 consent, still reporting the GA4 lead", () => {
+      for (const meta of ["unknown", "denied"] as const) {
+        const env = setup("/contact", { meta, analytics: "granted" });
+        const ga4Send = send();
+        expect(recordLeadSubmission(true, "contact", {}, ga4Send)).toBe(true);
+        expect(ga4Send).toHaveBeenCalledWith({ name: "generate_lead", params: { form_type: "contact" } });
+        expect(env.calls()).toEqual([]);
+        resetMetaPixelStateForTests();
+        vi.unstubAllGlobals();
+      }
+      const env = setup("/contact", { meta: "granted", analytics: "denied" });
+      const ga4Send = send();
+      recordLeadSubmission(true, "contact", {}, ga4Send);
+      expect(ga4Send).toHaveBeenCalledTimes(1);
+      expect(env.tracks("Lead")).toHaveLength(1);
+    });
+
+    it("does not send on URLs that are unsafe for the Pixel", () => {
+      const env = setup("/contact?email=private%40example.com");
+      recordLeadSubmission(true, "contact", {}, send());
+      expect(env.calls()).toEqual([]);
+      expect(env.appendChild).not.toHaveBeenCalled();
+    });
+  });
+
+  describe("click tracking", () => {
+    it("sends Meta Contact for phone clicks with a fixed label only", () => {
+      const env = setup("/contact");
+      trackContactClick("phone", "contact_page");
+      expect(env.tracks("Contact")).toEqual([
+        ["track", "Contact", { content_category: "phone_click", content_name: "contact_page" }, { eventID: expect.stringMatching(/^mc_/) }],
+      ]);
+    });
+
+    it("sends no Meta event for directions clicks", () => {
+      const env = setup("/contact");
+      trackContactClick("directions", "contact_page");
+      expect(env.tracks()).toEqual([]);
+    });
+
+    it("counts a quick repeat click once and a later click again", () => {
+      const env = setup("/contact");
+      let now = 1_000_000;
+      vi.spyOn(Date, "now").mockImplementation(() => now);
+      trackContactClick("phone", "contact_page");
+      now += 400;
+      trackContactClick("phone", "contact_page");
+      expect(env.tracks("Contact")).toHaveLength(1);
+      now += 1500;
+      trackContactClick("phone", "contact_page");
+      expect(env.tracks("Contact")).toHaveLength(2);
+      // A different link is a different action.
+      trackContactClick("phone", "schedule_page");
+      expect(env.tracks("Contact")).toHaveLength(3);
+    });
+
+    it("ignores unknown location labels", () => {
+      const env = setup("/contact");
+      trackContactClick("phone", "5405550100" as never);
+      trackContactClick("directions", "private@example.com" as never);
+      expect(env.calls()).toEqual([]);
+      expect(env.dataLayer()).toEqual([]);
+    });
+
+    it("sends no Meta Contact without Meta consent", () => {
+      const env = setup("/contact", { meta: "denied", analytics: "granted" });
+      trackContactClick("phone", "contact_page");
+      expect(env.calls()).toEqual([]);
+    });
+
+    it("accepts only fixed location labels in the GA4 click events", () => {
+      expect(sanitizeEvent({ name: "click_to_call", params: { link_location: "home_map" } })).toEqual({ name: "click_to_call", params: { link_location: "home_map" } });
+      expect(sanitizeEvent({ name: "click_directions", params: { link_location: "schedule_page", phone: "5405550100" } as never }))
+        .toEqual({ name: "click_directions", params: { link_location: "schedule_page" } });
+      for (const bad of ["5405550100", "private@example.com", "Contact Page", "", undefined, 7]) {
+        expect(sanitizeEvent({ name: "click_to_call", params: { link_location: bad as never } })).toBeNull();
+        expect(sanitizeEvent({ name: "click_directions", params: { link_location: bad as never } })).toBeNull();
+      }
+    });
+
+    it("sends GA4 click_to_call and click_directions with the label only, independent of Meta consent", async () => {
+      vi.resetModules();
+      const env = setup("/contact", { meta: "denied", analytics: "granted" });
+      const fresh = await import("./analytics");
+      fresh.configureAnalytics("/contact");
+      fresh.trackContactClick("phone", "contact_page");
+      fresh.trackContactClick("directions", "contact_page");
+      const events = env.dataLayer().filter((entry) => entry[0] === "event");
+      expect(events).toEqual([
+        ["event", "click_to_call", { link_location: "contact_page" }],
+        ["event", "click_directions", { link_location: "contact_page" }],
+      ]);
+      expect(env.calls()).toEqual([]);
+    });
+
+    it("sends no GA4 click events without GA4 consent, while Meta Contact still follows Meta consent", async () => {
+      vi.resetModules();
+      const env = setup("/contact", { meta: "granted", analytics: "denied" });
+      const fresh = await import("./analytics");
+      fresh.configureAnalytics("/contact");
+      fresh.trackContactClick("phone", "contact_page");
+      expect(env.dataLayer().filter((entry) => entry[0] === "event")).toEqual([]);
+      expect(env.tracks("Contact")).toHaveLength(1);
+    });
+  });
+
+  describe("privacy of everything sent to Meta", () => {
+    it("never includes names, emails, phones, VINs, URLs or raw form data in any conversion call", () => {
+      const env = setup(`/inventory/2019-honda-civic?utm_source=facebook&fbclid=${fbclid}`);
+      let now = 5_000_000;
+      vi.spyOn(Date, "now").mockImplementation(() => (now += 2000));
+      trackMetaViewContent(vehicle);
+      trackContactClick("phone", "home_map");
+      const details: Record<string, unknown> = { full_name: "Jane Doe", email: "private@example.com", phone: "5405550100", vin: "1HGCM82633A004352" };
+      withLeadEventId("contact", details);
+      recordLeadSubmission(true, "contact", details, vi.fn(() => true));
+      env.go("/schedule");
+      const appointment: Record<string, unknown> = { preferred_date: "2026-11-01" };
+      withLeadEventId("appointment", appointment);
+      recordLeadSubmission(true, "appointment", appointment, vi.fn(() => true));
+
+      const conversions = env.tracks().filter((entry) => entry[1] !== "PageView");
+      expect(conversions.map((entry) => entry[1])).toEqual(["ViewContent", "Contact", "Lead", "Schedule"]);
+      const allowedKeys = new Set(["content_type", "content_ids", "content_name", "content_category", "value", "currency"]);
+      for (const entry of conversions) {
+        for (const key of Object.keys(entry[2] as object)) expect(allowedKeys.has(key), key).toBe(true);
+        expect(Object.keys(entry[3] as object)).toEqual(["eventID"]);
+      }
+      const serialized = JSON.stringify(env.calls());
+      expect(serialized).not.toMatch(/Jane|Doe|private@example|5405550100|1HGCM82633A004352|2026-11-01|fbclid|utm_source|mycarcorp\.com/i);
+    });
+
+    it("keeps Meta consent independent of GA4: granting GA4 alone triggers no Meta event", () => {
+      const env = setup("/contact", { meta: "unknown", analytics: "unknown" });
+      setTrackingConsentPreferences({ analytics: "granted", meta: "denied" }, "/contact");
+      trackContactClick("phone", "contact_page");
+      expect(env.calls()).toEqual([]);
+    });
   });
 });

@@ -11,7 +11,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { mirrorLeadToLegacy } from "@/lib/legacy-mirror.functions";
 import { sendLeadToGhl } from "@/lib/ghl-webhook.functions";
 import { getAttributionDetails, mergeAttributionDetails } from "@/lib/attribution";
-import { getLeadFormType, recordFormStart, recordLeadSubmission } from "@/lib/analytics";
+import { getLeadFormType, recordFormStart, recordLeadSubmission, withLeadEventId } from "@/lib/analytics";
 import type { Database } from "@/integrations/supabase/types";
 
 type LeadType = Database["public"]["Enums"]["lead_type"];
@@ -94,6 +94,8 @@ export function LeadForm({
       if (vehicle.price != null && vehicle.price !== "") details["vehicle_price"] = String(vehicle.price);
       if (typeof window !== "undefined") details["vehicle_url"] = window.location.href;
     }
+    // Opaque ID for browser/server event deduplication; added only to non-finance lead types.
+    withLeadEventId(leadType, details);
     const { error } = await supabase.from("leads").insert({
       lead_type: leadType,
       full_name,

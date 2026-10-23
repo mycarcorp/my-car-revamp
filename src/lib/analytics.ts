@@ -9,7 +9,12 @@ export type AnalyticsEvent =
   | { name: "appointment_type_selected"; params: { appointment_type: "test_drive" | "trade_appraisal" | "financing" | "general" } }
   | { name: "appointment_vehicle_selected"; params: { appointment_type: "test_drive" | "trade_appraisal" | "financing" | "general" } }
   | { name: "form_start"; params: { form_type: string } }
-  | { name: "generate_lead"; params: { form_type: string; lead_intent?: "sell" | "trade" } };
+  | { name: "generate_lead"; params: { form_type: string; lead_intent?: "sell" | "trade" } }
+  | { name: "click_to_call"; params: { link_location: ContactLinkLocation } }
+  | { name: "click_directions"; params: { link_location: ContactLinkLocation } };
+
+/** Fixed labels for where a call or directions link sits; never free text. */
+export type ContactLinkLocation = "home_map" | "contact_page" | "schedule_page";
 
 export type AnalyticsItem = {
   item_id: string;
@@ -37,6 +42,7 @@ const SAFE_FORM_TYPES = new Set(["contact", "car_finder", "sell", "trade", "fina
 const SAFE_LIST_NAMES = new Set(["vehicle_inventory", "related_vehicles", "search_results"]);
 const SAFE_ITEM_CATEGORIES = new Set(["suv", "sedan", "truck", "coupe", "hatchback", "convertible", "minivan", "wagon", "van"]);
 const MAX_LIST_ITEMS = 10;
+const CONTACT_LINK_LOCATIONS = new Set<string>(["home_map", "contact_page", "schedule_page"]);
 const SENSITIVE_VALUE_PATTERN = /@|\b\d{3}[- .]?\d{3}[- .]?\d{4}\b|\b[A-HJ-NPR-Z0-9]{17}\b/i;
 const CONSENT_PREFERENCES_KEY = "mycar.trackingConsent.v1";
 const LEGACY_ANALYTICS_CONSENT_KEY = "mycar.analyticsConsent";
@@ -186,6 +192,12 @@ export function sanitizeEvent(event: AnalyticsEvent): AnalyticsEvent | null {
       },
     };
   }
+  if (event.name === "click_to_call" || event.name === "click_directions") {
+    const location = (event.params as { link_location?: unknown }).link_location;
+    return typeof location === "string" && CONTACT_LINK_LOCATIONS.has(location)
+      ? { name: event.name, params: { link_location: location as ContactLinkLocation } }
+      : null;
+  }
   const items = event.name === "view_item" ? [event.params] : event.params.items;
   const safeItems = items.slice(0, MAX_LIST_ITEMS).flatMap((item) => {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.item_id) || SENSITIVE_VALUE_PATTERN.test(item.item_id) || !item.item_name || item.item_id.length > 80 || item.item_name.length > 120) return [];
@@ -220,6 +232,8 @@ export function recordLeadSubmission(
   const formType = getLeadFormType(leadType, details);
   if (!formType) return false;
   const leadIntent = formType === "sell" || formType === "trade" ? formType : undefined;
+  // Meta runs on its own consent; finance and purchase requests are not in the Meta event map.
+  trackMetaLeadSubmission(formType, details["lead_event_id"]);
   return send({ name: "generate_lead", params: { form_type: formType, ...(leadIntent ? { lead_intent: leadIntent } : {}) } });
 }
 
@@ -348,6 +362,11 @@ let metaPixelLoaded = false;
 let metaConsentGranted = false;
 /** Location (path + query) of the last PageView sent, so repeat calls for the same page never double count. */
 let lastMetaPageKey: string | null = null;
+/** The last vehicle page that sent ViewContent, so effect re-runs on the same page never send it twice. */
+let lastMetaViewContent: { page: string; itemId: string } | null = null;
+/** Event IDs already sent, so one qualifying action can never produce two events. */
+const firedMetaEventIds = new Set<string>();
+const lastContactClick = new Map<string, number>();
 
 // The Meta Pixel reads the browser URL itself (document location and referrer), so event parameters cannot
 // protect it. Safety therefore depends on the URL: the Pixel only runs on pages whose whole URL is either
@@ -422,6 +441,9 @@ export function resetMetaPixelStateForTests(): void {
   metaPixelLoaded = false;
   metaConsentGranted = false;
   lastMetaPageKey = null;
+  lastMetaViewContent = null;
+  firedMetaEventIds.clear();
+  lastContactClick.clear();
 }
 
 function loadMetaPixel(): MetaPixel | null {
@@ -459,11 +481,29 @@ function loadMetaPixel(): MetaPixel | null {
 
 function suppressMetaPixel(): false {
   lastMetaPageKey = null;
+  lastMetaViewContent = null;
   if (metaPixelLoaded && metaConsentGranted) {
     metaPixel?.("consent", "revoke");
     metaConsentGranted = false;
   }
   return false;
+}
+
+/** Consent, route and URL checks shared by every Meta event. Meta consent is independent of GA4 consent. */
+function metaPageEligible(pathname: string): boolean {
+  if (getTrackingConsentPreferences().meta !== "granted") return false;
+  if (!isAnalyticsRoutePublic(pathname) || sanitizePagePath(pathname) !== pathname) return false;
+  return isMetaSafeUrl(window.location.href);
+}
+
+function ensureMetaPixel(): MetaPixel | null {
+  const pixel = loadMetaPixel();
+  if (!pixel) return null;
+  if (!metaConsentGranted) {
+    pixel("consent", "grant");
+    metaConsentGranted = true;
+  }
+  return pixel;
 }
 
 /**
@@ -472,22 +512,108 @@ function suppressMetaPixel(): false {
  */
 export function trackMetaPageView(pathname: string): boolean {
   if (typeof window === "undefined") return false;
-  const consent = getTrackingConsentPreferences().meta;
-  if (consent !== "granted" || !isAnalyticsRoutePublic(pathname)) return suppressMetaPixel();
-  const href = window.location.href;
-  if (sanitizePagePath(pathname) !== pathname || !isMetaSafeUrl(href)) return suppressMetaPixel();
-  const location = new URL(href);
+  if (!metaPageEligible(pathname)) return suppressMetaPixel();
+  const location = new URL(window.location.href);
   const pageKey = `${location.pathname}${location.search}`;
   if (pageKey === lastMetaPageKey) return false;
-  const pixel = loadMetaPixel();
+  // Moving to another page ends the previous page's ViewContent window.
+  if (lastMetaViewContent && lastMetaViewContent.page !== pageKey) lastMetaViewContent = null;
+  const pixel = ensureMetaPixel();
   if (!pixel) return false;
-  if (!metaConsentGranted) {
-    pixel("consent", "grant");
-    metaConsentGranted = true;
-  }
   pixel("track", "PageView");
   lastMetaPageKey = pageKey;
   return true;
+}
+
+type MetaConversionName = "ViewContent" | "Lead" | "Schedule" | "Contact";
+type MetaEventParams = Record<string, string | number | string[]>;
+
+const EVENT_ID_PATTERN = /^mc_[a-f0-9-]{16,40}$/;
+
+/** Opaque random ID shared by browser and (future) server events for deduplication. Carries no customer data. */
+export function createEventId(): string {
+  const webCrypto = (globalThis as { crypto?: Crypto }).crypto;
+  if (webCrypto?.randomUUID) return `mc_${webCrypto.randomUUID()}`;
+  const bytes = new Uint8Array(16);
+  if (webCrypto?.getRandomValues) webCrypto.getRandomValues(bytes);
+  else for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  return `mc_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Every Meta conversion goes through here: consent, safe URL, once per event ID, no customer data. */
+function sendMetaEvent(name: MetaConversionName, params: MetaEventParams, eventId: string): boolean {
+  if (typeof window === "undefined") return false;
+  if (!metaPageEligible(window.location.pathname)) return suppressMetaPixel();
+  if (firedMetaEventIds.has(eventId)) return false;
+  const pixel = ensureMetaPixel();
+  if (!pixel) return false;
+  pixel("track", name, params, { eventID: eventId });
+  if (firedMetaEventIds.size >= 500) firedMetaEventIds.clear();
+  firedMetaEventIds.add(eventId);
+  return true;
+}
+
+/** Form types that map to a Meta conversion. Finance, purchase requests and availability are deliberately absent. */
+const META_FORM_EVENTS = new Map<string, "Lead" | "Schedule">([
+  ["contact", "Lead"],
+  ["car_finder", "Lead"],
+  ["sell", "Lead"],
+  ["trade", "Lead"],
+  ["appointment", "Schedule"],
+]);
+
+/**
+ * Adds an opaque event ID to a lead's details when the lead type can produce a Meta conversion.
+ * Returns null and leaves `details` untouched for finance, purchase and any other type.
+ */
+export function withLeadEventId(leadType: string, details: Record<string, unknown>): string | null {
+  const formType = getLeadFormType(leadType, details);
+  if (!formType || !META_FORM_EVENTS.has(formType)) return null;
+  const eventId = createEventId();
+  details["lead_event_id"] = eventId;
+  return eventId;
+}
+
+/** Meta Lead / Schedule for a submission that was already saved. Never called for finance or purchase requests. */
+export function trackMetaLeadSubmission(formType: string, rawEventId?: unknown): boolean {
+  const metaEvent = META_FORM_EVENTS.get(formType);
+  if (!metaEvent) return false;
+  const eventId = typeof rawEventId === "string" && EVENT_ID_PATTERN.test(rawEventId) ? rawEventId : createEventId();
+  return sendMetaEvent(metaEvent, { content_category: formType }, eventId);
+}
+
+/** Meta ViewContent for a vehicle detail page, using the same sanitized catalog fields as GA4 view_item. */
+export function trackMetaViewContent(item: Extract<AnalyticsEvent, { name: "view_item" }>["params"]): boolean {
+  if (typeof window === "undefined") return false;
+  const safe = sanitizeEvent({ name: "view_item", params: item });
+  if (!safe || safe.name !== "view_item") return false;
+  const page = `${window.location.pathname}${window.location.search}`;
+  const itemId = safe.params.item_id;
+  if (lastMetaViewContent && lastMetaViewContent.page === page && lastMetaViewContent.itemId === itemId) return false;
+  const params: MetaEventParams = {
+    content_type: "vehicle",
+    content_ids: [itemId],
+    content_name: safe.params.item_name,
+    ...(safe.params.item_category ? { content_category: safe.params.item_category } : {}),
+    ...(safe.params.price !== undefined ? { value: safe.params.price, currency: "USD" } : {}),
+  };
+  const sent = sendMetaEvent("ViewContent", params, createEventId());
+  if (sent) lastMetaViewContent = { page, itemId };
+  return sent;
+}
+
+/**
+ * Records a phone or directions click: GA4 click_to_call / click_directions with a fixed location label,
+ * plus Meta Contact for phone clicks. Quick repeat clicks on the same link count once.
+ */
+export function trackContactClick(kind: "phone" | "directions", linkLocation: ContactLinkLocation): void {
+  if (!CONTACT_LINK_LOCATIONS.has(linkLocation)) return;
+  const key = `${kind}:${linkLocation}`;
+  const now = Date.now();
+  if (now - (lastContactClick.get(key) ?? -Infinity) < 1000) return;
+  lastContactClick.set(key, now);
+  trackAnalyticsEvent({ name: kind === "phone" ? "click_to_call" : "click_directions", params: { link_location: linkLocation } });
+  if (kind === "phone") sendMetaEvent("Contact", { content_category: "phone_click", content_name: linkLocation }, createEventId());
 }
 
 export function publicCatalogItemId(
