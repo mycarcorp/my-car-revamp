@@ -1,17 +1,25 @@
 import { importPKCS8, SignJWT } from "jose";
 import {
 	GA4_PROPERTY_ID,
+	TRACKED_GA4_EVENTS,
+	ga4ApiDateRange,
+	mapGa4Realtime,
 	mapGa4Reports,
 	resolveGa4Range,
 	safeGa4ErrorMessage,
+	unavailableGa4Realtime,
 	unavailableGa4Report,
 	type Ga4RangeInput,
+	type Ga4RealtimeReport,
 	type Ga4Report,
+	type Ga4SectionErrors,
+	type Ga4SectionKey,
 } from "./ga4-reporting";
 
 const SCOPE = "https://www.googleapis.com/auth/analytics.readonly";
 const TOKEN_URL = "https://oauth2.googleapis.com/token";
 const REPORT_URL = `https://analyticsdata.googleapis.com/v1beta/properties/${GA4_PROPERTY_ID}:runReport`;
+const REALTIME_URL = `https://analyticsdata.googleapis.com/v1beta/properties/${GA4_PROPERTY_ID}:runRealtimeReport`;
 const REQUEST_TIMEOUT_MS = 20000;
 const TOKEN_REFRESH_SKEW_MS = 60000;
 
@@ -163,35 +171,58 @@ async function getAccessToken(
 	return accessToken;
 }
 
-async function runReport(
-	accessToken: string,
-	range: { startDate: string; endDate: string },
-	signal: AbortSignal,
-	metrics: string[],
-	dimensions: string[] = [],
-	extra: Record<string, unknown> = {},
-): Promise<Ga4ApiReport> {
-	const response = await fetch(REPORT_URL, {
+async function postReport(url: string, accessToken: string, signal: AbortSignal, body: Record<string, unknown>): Promise<Ga4ApiReport> {
+	const response = await fetch(url, {
 		method: "POST",
 		headers: {
 			authorization: `Bearer ${accessToken}`,
 			"content-type": "application/json",
 		},
-		body: JSON.stringify({
-			dateRanges: [range],
-			metrics: metrics.map((name) => ({ name })),
-			dimensions: dimensions.map((name) => ({ name })),
-			...extra,
-		}),
+		body: JSON.stringify(body),
 		signal,
 	});
-	const body = await responseBody(response);
+	const payload = await responseBody(response);
 	if (!response.ok) {
-		const code = providerErrorCode(response.status, body);
+		const code = providerErrorCode(response.status, payload);
 		throw code ? errorWithCode(code) : new Error("Google Analytics reporting is unavailable.");
 	}
-	return body as Ga4ApiReport;
+	return payload as Ga4ApiReport;
 }
+
+async function runReport(
+	accessToken: string,
+	dateRange: { startDate: string; endDate: string },
+	signal: AbortSignal,
+	metrics: string[],
+	dimensions: string[] = [],
+	extra: Record<string, unknown> = {},
+): Promise<Ga4ApiReport> {
+	return postReport(REPORT_URL, accessToken, signal, {
+		dateRanges: [dateRange],
+		metrics: metrics.map((name) => ({ name })),
+		dimensions: dimensions.map((name) => ({ name })),
+		...extra,
+	});
+}
+
+/** Realtime reports have no date range: GA4 returns the last 30 minutes. */
+async function runRealtime(
+	accessToken: string,
+	signal: AbortSignal,
+	metrics: string[],
+	dimensions: string[] = [],
+	extra: Record<string, unknown> = {},
+): Promise<Ga4ApiReport> {
+	return postReport(REALTIME_URL, accessToken, signal, {
+		metrics: metrics.map((name) => ({ name })),
+		dimensions: dimensions.map((name) => ({ name })),
+		...extra,
+	});
+}
+
+const TRACKED_EVENT_FILTER = {
+	filter: { fieldName: "eventName", inListFilter: { values: [...TRACKED_GA4_EVENTS] } },
+};
 
 export async function readGa4Report(input: Ga4RangeInput): Promise<Ga4Report> {
 	const configuredTimeZone = process.env["GA4_PROPERTY_TIME_ZONE"]?.trim() || undefined;
@@ -204,47 +235,117 @@ export async function readGa4Report(input: Ga4RangeInput): Promise<Ga4Report> {
 		}
 		const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
 		const accessToken = await getAccessToken(credentials, timeout);
-		const period = { startDate: range.startDate, endDate: range.endDate };
-		const [totals, trafficChannels, trafficSources, landingPages, vehiclePages, deviceCategories, daily, generateLeadEvents, generateLeadDaily] = await Promise.all([
-			runReport(accessToken, period, timeout, ["activeUsers", "totalUsers", "sessions", "engagedSessions", "engagementRate", "screenPageViews"]),
-			runReport(accessToken, period, timeout, ["sessions", "activeUsers"], ["sessionDefaultChannelGroup"], { limit: 25 }),
-			runReport(accessToken, period, timeout, ["sessions", "activeUsers"], ["sessionSourceMedium"], { limit: 15 }),
-			runReport(accessToken, period, timeout, ["sessions", "activeUsers", "screenPageViews", "engagedSessions", "engagementRate"], ["landingPage"], { limit: 25 }),
-			runReport(accessToken, period, timeout, ["sessions", "activeUsers", "screenPageViews", "engagedSessions", "engagementRate"], ["pagePath"], {
+		// Presets use GA4 relative dates so "today" follows the property time zone; every query shares this one range.
+		const period = ga4ApiDateRange(input, range);
+		const leadFilter = { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "generate_lead" } } };
+		const queries: Record<Ga4SectionKey, () => Promise<Ga4ApiReport>> = {
+			metrics: () => runReport(accessToken, period, timeout, ["activeUsers", "totalUsers", "sessions", "engagedSessions", "engagementRate", "screenPageViews"]),
+			trafficChannels: () => runReport(accessToken, period, timeout, ["sessions", "activeUsers"], ["sessionDefaultChannelGroup"], { limit: 25 }),
+			trafficSources: () => runReport(accessToken, period, timeout, ["sessions", "activeUsers"], ["sessionSourceMedium"], { limit: 15 }),
+			landingPages: () => runReport(accessToken, period, timeout, ["sessions", "activeUsers", "screenPageViews", "engagedSessions", "engagementRate"], ["landingPage"], { limit: 25 }),
+			vehiclePages: () => runReport(accessToken, period, timeout, ["sessions", "activeUsers", "screenPageViews", "engagedSessions", "engagementRate"], ["pagePath"], {
 				limit: 25,
 				dimensionFilter: { filter: { fieldName: "pagePath", stringFilter: { matchType: "BEGINS_WITH", value: "/inventory/" } } },
 			}),
-			runReport(accessToken, period, timeout, ["sessions", "activeUsers"], ["deviceCategory"], { limit: 10 }),
-			runReport(accessToken, period, timeout, ["activeUsers", "sessions", "screenPageViews"], ["date"], {
+			deviceCategories: () => runReport(accessToken, period, timeout, ["sessions", "activeUsers"], ["deviceCategory"], { limit: 10 }),
+			daily: () => runReport(accessToken, period, timeout, ["activeUsers", "sessions", "screenPageViews"], ["date"], {
 				orderBys: [{ dimension: { dimensionName: "date" } }],
 				limit: 90,
 			}),
-			runReport(accessToken, period, timeout, ["eventCount"], [], {
-				dimensionFilter: { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "generate_lead" } } },
-			}),
-			runReport(accessToken, period, timeout, ["eventCount"], ["date"], {
-				dimensionFilter: { filter: { fieldName: "eventName", stringFilter: { matchType: "EXACT", value: "generate_lead" } } },
+			generateLeadEvents: () => runReport(accessToken, period, timeout, ["eventCount"], [], { dimensionFilter: leadFilter }),
+			generateLeadDaily: () => runReport(accessToken, period, timeout, ["eventCount"], ["date"], {
+				dimensionFilter: leadFilter,
 				orderBys: [{ dimension: { dimensionName: "date" } }],
 				limit: 90,
 			}),
-		]);
+			events: () => runReport(accessToken, period, timeout, ["eventCount", "totalUsers"], ["eventName"], {
+				dimensionFilter: TRACKED_EVENT_FILTER,
+				orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+				limit: 25,
+			}),
+		};
+		// Each query succeeds or fails on its own so one failing section never hides the rest.
+		const keys = Object.keys(queries) as Ga4SectionKey[];
+		const settled = await Promise.allSettled(keys.map((key) => queries[key]()));
+		const results: Partial<Record<Ga4SectionKey, Ga4ApiReport>> = {};
+		const sectionErrors: Ga4SectionErrors = {};
+		let firstFailure: unknown;
+		settled.forEach((outcome, index) => {
+			const key = keys[index]!;
+			if (outcome.status === "fulfilled") {
+				results[key] = outcome.value;
+			} else {
+				firstFailure ??= outcome.reason;
+				sectionErrors[key] = safeGa4ErrorMessage(outcome.reason);
+			}
+		});
+		if (Object.keys(results).length === 0) {
+			return unavailableGa4Report(range, safeGa4ErrorMessage(firstFailure), fetchedAt);
+		}
+		const get = (key: Ga4SectionKey): Ga4ApiReport | null => results[key] ?? null;
+		const propertyTimeZone = Object.values(results).map((report) => report?.metadata?.timeZone).find((value): value is string => Boolean(value));
+		// Show the resolved calendar dates in the property time zone when GA4 reports it.
+		let displayRange = range;
+		if (input.preset !== undefined && propertyTimeZone) {
+			try {
+				displayRange = resolveGa4Range(input, new Date(), propertyTimeZone);
+			} catch {
+				displayRange = range;
+			}
+		}
 		return mapGa4Reports({
-			startDate: range.startDate,
-			endDate: range.endDate,
+			startDate: displayRange.startDate,
+			endDate: displayRange.endDate,
 			fetchedAt,
 			configuredTimeZone,
-			metrics: totals,
-			trafficChannels,
-			trafficSources,
-			landingPages,
-			vehiclePages,
-			deviceCategories,
-			daily,
-			generateLeadDaily,
-			generateLeadEvents,
+			metrics: get("metrics"),
+			trafficChannels: get("trafficChannels"),
+			trafficSources: get("trafficSources"),
+			landingPages: get("landingPages"),
+			vehiclePages: get("vehiclePages"),
+			deviceCategories: get("deviceCategories"),
+			daily: get("daily"),
+			generateLeadDaily: get("generateLeadDaily"),
+			generateLeadEvents: get("generateLeadEvents"),
+			events: get("events"),
+			sectionErrors,
 		});
 	} catch (error) {
 		return unavailableGa4Report(range, safeGa4ErrorMessage(error), fetchedAt);
+	}
+}
+
+export async function readGa4Realtime(): Promise<Ga4RealtimeReport> {
+	const fetchedAt = new Date().toISOString();
+	try {
+		const credentials = configuredCredentials();
+		if (!credentials) {
+			return unavailableGa4Realtime("Google credentials are not configured for this server. Configure GA4 OAuth refresh-token credentials or GA4_SERVICE_ACCOUNT_JSON.", fetchedAt);
+		}
+		const timeout = AbortSignal.timeout(REQUEST_TIMEOUT_MS);
+		const accessToken = await getAccessToken(credentials, timeout);
+		const [activeUsers, events] = await Promise.allSettled([
+			runRealtime(accessToken, timeout, ["activeUsers"]),
+			runRealtime(accessToken, timeout, ["eventCount"], ["eventName"], {
+				dimensionFilter: TRACKED_EVENT_FILTER,
+				orderBys: [{ metric: { metricName: "eventCount" }, desc: true }],
+				limit: 25,
+			}),
+		]);
+		if (activeUsers.status === "rejected" && events.status === "rejected") {
+			return unavailableGa4Realtime(safeGa4ErrorMessage(activeUsers.reason), fetchedAt);
+		}
+		return mapGa4Realtime({
+			fetchedAt,
+			activeUsers: activeUsers.status === "fulfilled" ? activeUsers.value : null,
+			events: events.status === "fulfilled" ? events.value : null,
+			sectionErrors: {
+				...(activeUsers.status === "rejected" ? { activeUsers: safeGa4ErrorMessage(activeUsers.reason) } : {}),
+				...(events.status === "rejected" ? { events: safeGa4ErrorMessage(events.reason) } : {}),
+			},
+		});
+	} catch (error) {
+		return unavailableGa4Realtime(safeGa4ErrorMessage(error), fetchedAt);
 	}
 }
 

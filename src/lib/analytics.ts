@@ -10,7 +10,12 @@ export type AnalyticsEvent =
   | { name: "appointment_vehicle_selected"; params: { appointment_type: "test_drive" | "trade_appraisal" | "financing" | "general" } }
   | { name: "form_start"; params: { form_type: string } }
   | { name: "generate_lead"; params: { form_type: string; lead_intent?: "sell" | "trade" } }
+  | { name: "click_to_call"; params: { link_location: ContactLinkLocation } }
+  | { name: "click_directions"; params: { link_location: ContactLinkLocation } }
   | { name: LeaseEventName; params: LeaseEventParams };
+
+/** Fixed labels for where a call or directions link sits; never free text. */
+export type ContactLinkLocation = "home_map" | "contact_page" | "schedule_page";
 
 export const LEASE_EVENT_NAMES = [
   "lease_to_own_page_view",
@@ -79,6 +84,7 @@ const SAFE_FORM_TYPES = new Set(["contact", "car_finder", "sell", "trade", "fina
 const SAFE_LIST_NAMES = new Set(["vehicle_inventory", "related_vehicles", "search_results"]);
 const SAFE_ITEM_CATEGORIES = new Set(["suv", "sedan", "truck", "coupe", "hatchback", "convertible", "minivan", "wagon", "van"]);
 const MAX_LIST_ITEMS = 10;
+const CONTACT_LINK_LOCATIONS = new Set<string>(["home_map", "contact_page", "schedule_page"]);
 const SENSITIVE_VALUE_PATTERN = /@|\b\d{3}[- .]?\d{3}[- .]?\d{4}\b|\b[A-HJ-NPR-Z0-9]{17}\b/i;
 const CONSENT_PREFERENCES_KEY = "mycar.trackingConsent.v1";
 const LEGACY_ANALYTICS_CONSENT_KEY = "mycar.analyticsConsent";
@@ -236,6 +242,12 @@ export function sanitizeEvent(event: AnalyticsEvent): AnalyticsEvent | null {
       },
     };
   }
+  if (event.name === "click_to_call" || event.name === "click_directions") {
+    const location = (event.params as { link_location?: unknown }).link_location;
+    return typeof location === "string" && CONTACT_LINK_LOCATIONS.has(location)
+      ? { name: event.name, params: { link_location: location as ContactLinkLocation } }
+      : null;
+  }
   const items = event.name === "view_item" ? [event.params] : event.params.items;
   const safeItems = items.slice(0, MAX_LIST_ITEMS).flatMap((item) => {
     if (!/^[a-z0-9]+(?:-[a-z0-9]+)*$/.test(item.item_id) || SENSITIVE_VALUE_PATTERN.test(item.item_id) || !item.item_name || item.item_id.length > 80 || item.item_name.length > 120) return [];
@@ -270,6 +282,8 @@ export function recordLeadSubmission(
   const formType = getLeadFormType(leadType, details);
   if (!formType) return false;
   const leadIntent = formType === "sell" || formType === "trade" ? formType : undefined;
+  // Meta runs on its own consent; finance and purchase requests are not in the Meta event map.
+  trackMetaLeadSubmission(formType, details["lead_event_id"]);
   return send({ name: "generate_lead", params: { form_type: formType, ...(leadIntent ? { lead_intent: leadIntent } : {}) } });
 }
 
@@ -394,11 +408,92 @@ export function setTrackingConsentPreferences(
 type MetaPixel = (...args: unknown[]) => void;
 let metaPixel: MetaPixel | null = null;
 let metaPixelLoaded = false;
+/** True while the Pixel has been told consent is granted; used to revoke only on a real transition. */
+let metaConsentGranted = false;
+/** Location (path + query) of the last PageView sent, so repeat calls for the same page never double count. */
+let lastMetaPageKey: string | null = null;
+/** The last vehicle page that sent ViewContent, so effect re-runs on the same page never send it twice. */
+let lastMetaViewContent: { page: string; itemId: string } | null = null;
+/** Event IDs already sent, so one qualifying action can never produce two events. */
+const firedMetaEventIds = new Set<string>();
+const lastContactClick = new Map<string, number>();
 
-function pageLocationHasSensitiveQuery(): boolean {
-  if (typeof window === "undefined") return true;
-  const url = new URL(window.location.href);
-  return url.search.length > 0;
+// The Meta Pixel reads the browser URL itself (document location and referrer), so event parameters cannot
+// protect it. Safety therefore depends on the URL: the Pixel only runs on pages whose whole URL is either
+// query-free or made up solely of known advertising parameters with opaque, well-formed values.
+const META_UTM_KEYS = new Set(["utm_source", "utm_medium", "utm_campaign", "utm_content", "utm_term"]);
+const META_CLICK_ID_KEYS = new Set(["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "msclkid"]);
+const RAW_UTM_VALUE = /^[A-Za-z0-9_\-.~%+*:|]{1,256}$/;
+const DECODED_UTM_VALUE = /^[A-Za-z0-9 _\-.~+*:|]{1,256}$/;
+const CLICK_ID_VALUE = /^[A-Za-z0-9_.-]{10,256}$/;
+
+function isSafeUtmValue(raw: string): boolean {
+  if (!RAW_UTM_VALUE.test(raw)) return false;
+  let decoded = raw;
+  // Decode repeatedly so double-encoded values (%2540 -> %40 -> @) cannot hide sensitive data.
+  for (let pass = 0; pass < 3 && decoded.includes("%"); pass += 1) {
+    try {
+      decoded = decodeURIComponent(decoded);
+    } catch {
+      return false;
+    }
+  }
+  if (decoded.includes("%") || !DECODED_UTM_VALUE.test(decoded)) return false;
+  // Platform IDs such as Meta's {{campaign.id}} are long all-digit strings and are accepted as opaque IDs.
+  if (/^\d{15,20}$/.test(decoded)) return true;
+  if (SENSITIVE_VALUE_PATTERN.test(decoded)) return false;
+  // Rejects phone numbers, SSNs and similar identifiers even when separated by spaces, dots or hyphens.
+  return !/\d{9,}/.test(decoded.replace(/[ .-]/g, ""));
+}
+
+function isSafeClickIdValue(raw: string): boolean {
+  // Click IDs are opaque tokens generated by the ad platform and always contain letters.
+  return CLICK_ID_VALUE.test(raw) && /[A-Za-z]/.test(raw);
+}
+
+/**
+ * True only when the Meta Pixel may run on this URL: https, no credentials or fragment, a path that needs no
+ * redaction, and either no query or only unique, well-formed advertising parameters.
+ */
+export function isMetaSafeUrl(href: string): boolean {
+  let url: URL;
+  try {
+    url = new URL(href);
+  } catch {
+    return false;
+  }
+  if (url.protocol !== "https:" || url.username || url.password || url.hash) return false;
+  if (sanitizePagePath(url.pathname) !== url.pathname) return false;
+  const query = url.search.startsWith("?") ? url.search.slice(1) : url.search;
+  if (!query) return true;
+  const seen = new Set<string>();
+  for (const part of query.split("&")) {
+    const separator = part.indexOf("=");
+    if (separator <= 0) return false;
+    const key = part.slice(0, separator);
+    const value = part.slice(separator + 1);
+    if (seen.has(key)) return false;
+    seen.add(key);
+    if (META_UTM_KEYS.has(key)) {
+      if (!isSafeUtmValue(value)) return false;
+    } else if (META_CLICK_ID_KEYS.has(key)) {
+      if (!isSafeClickIdValue(value)) return false;
+    } else {
+      return false;
+    }
+  }
+  return true;
+}
+
+/** @internal Resets module-level Pixel state; used by tests that stub window and document. */
+export function resetMetaPixelStateForTests(): void {
+  metaPixel = null;
+  metaPixelLoaded = false;
+  metaConsentGranted = false;
+  lastMetaPageKey = null;
+  lastMetaViewContent = null;
+  firedMetaEventIds.clear();
+  lastContactClick.clear();
 }
 
 function loadMetaPixel(): MetaPixel | null {
@@ -424,25 +519,180 @@ function loadMetaPixel(): MetaPixel | null {
       script.dataset["mycarMeta"] = "true";
       document.head.appendChild(script);
     }
+    // Both calls must run before init: they stop Meta's automatic event setup (button-click and form-field
+    // detection) so only the events this site sends explicitly are collected.
+    metaPixel("set", "autoConfig", false, META_PIXEL_ID);
+    metaPixel("set", "smartSetup", false, META_PIXEL_ID);
     metaPixel("init", META_PIXEL_ID);
     metaPixelLoaded = true;
   }
   return metaPixel;
 }
 
+function suppressMetaPixel(): false {
+  lastMetaPageKey = null;
+  lastMetaViewContent = null;
+  if (metaPixelLoaded && metaConsentGranted) {
+    metaPixel?.("consent", "revoke");
+    metaConsentGranted = false;
+  }
+  return false;
+}
+
+/** Consent, route and URL checks shared by every Meta event. Meta consent is independent of GA4 consent. */
+function metaPageEligible(pathname: string): boolean {
+  if (getTrackingConsentPreferences().meta !== "granted") return false;
+  if (!isAnalyticsRoutePublic(pathname) || sanitizePagePath(pathname) !== pathname) return false;
+  return isMetaSafeUrl(window.location.href);
+}
+
+function ensureMetaPixel(): MetaPixel | null {
+  const pixel = loadMetaPixel();
+  if (!pixel) return null;
+  if (!metaConsentGranted) {
+    pixel("consent", "grant");
+    metaConsentGranted = true;
+  }
+  return pixel;
+}
+
+/**
+ * Sends one Meta PageView for the current page when Meta consent is granted and the URL is safe.
+ * Repeat calls for the same page (route effects, preference re-saves) never send a duplicate.
+ */
 export function trackMetaPageView(pathname: string): boolean {
   if (typeof window === "undefined") return false;
-  const consent = getTrackingConsentPreferences().meta;
-  if (consent !== "granted" || !isAnalyticsRoutePublic(pathname)) {
-    if (metaPixelLoaded) metaPixel?.("consent", "revoke");
-    return false;
-  }
-  if (pageLocationHasSensitiveQuery() || sanitizePagePath(pathname) !== pathname) return false;
-  const pixel = loadMetaPixel();
+  if (!metaPageEligible(pathname)) return suppressMetaPixel();
+  const location = new URL(window.location.href);
+  const pageKey = `${location.pathname}${location.search}`;
+  if (pageKey === lastMetaPageKey) return false;
+  // Moving to another page ends the previous page's ViewContent window.
+  if (lastMetaViewContent && lastMetaViewContent.page !== pageKey) lastMetaViewContent = null;
+  const pixel = ensureMetaPixel();
   if (!pixel) return false;
-  pixel("consent", "grant");
   pixel("track", "PageView");
+  lastMetaPageKey = pageKey;
   return true;
+}
+
+type MetaConversionName = "ViewContent" | "Lead" | "Schedule" | "Contact";
+type MetaEventParams = Record<string, string | number | string[]>;
+
+const EVENT_ID_PATTERN = /^mc_[a-f0-9-]{16,40}$/;
+
+const META_CONVERSION_NAMES: readonly MetaConversionName[] = ["ViewContent", "Lead", "Schedule", "Contact"];
+/**
+ * Lead and Schedule stay off until browser and server (GHL) events are confirmed to deduplicate,
+ * otherwise Meta could count the same submission twice.
+ */
+const DEFAULT_META_CONVERSIONS: ReadonlySet<MetaConversionName> = new Set<MetaConversionName>(["ViewContent", "Contact"]);
+
+/**
+ * Parses a comma-separated VITE_META_CONVERSIONS value. Only exact, case-sensitive event names count.
+ * Anything else (unknown names, wrong case, non-strings, empty or entirely unrecognized values) is ignored,
+ * and when nothing valid remains the defaults apply, so a typo can never enable Lead or Schedule.
+ */
+export function parseMetaConversions(raw: unknown): ReadonlySet<MetaConversionName> {
+  if (typeof raw !== "string" || raw.length > 200) return DEFAULT_META_CONVERSIONS;
+  const enabled = new Set<MetaConversionName>();
+  for (const token of raw.split(",")) {
+    const name = token.trim();
+    const match = META_CONVERSION_NAMES.find((candidate) => candidate === name);
+    if (match) enabled.add(match);
+  }
+  return enabled.size > 0 ? enabled : DEFAULT_META_CONVERSIONS;
+}
+
+export function getEnabledMetaConversions(): ReadonlySet<MetaConversionName> {
+  return parseMetaConversions(import.meta.env["VITE_META_CONVERSIONS"]);
+}
+
+/** Opaque random ID shared by browser and (future) server events for deduplication. Carries no customer data. */
+export function createEventId(): string {
+  const webCrypto = (globalThis as { crypto?: Crypto }).crypto;
+  if (webCrypto?.randomUUID) return `mc_${webCrypto.randomUUID()}`;
+  const bytes = new Uint8Array(16);
+  if (webCrypto?.getRandomValues) webCrypto.getRandomValues(bytes);
+  else for (let index = 0; index < bytes.length; index += 1) bytes[index] = Math.floor(Math.random() * 256);
+  return `mc_${Array.from(bytes, (byte) => byte.toString(16).padStart(2, "0")).join("")}`;
+}
+
+/** Every Meta conversion goes through here: consent, safe URL, once per event ID, no customer data. */
+function sendMetaEvent(name: MetaConversionName, params: MetaEventParams, eventId: string): boolean {
+  if (typeof window === "undefined") return false;
+  // A disabled event is dropped before the Pixel loads and without consuming its event ID.
+  if (!getEnabledMetaConversions().has(name)) return false;
+  if (!metaPageEligible(window.location.pathname)) return suppressMetaPixel();
+  if (firedMetaEventIds.has(eventId)) return false;
+  const pixel = ensureMetaPixel();
+  if (!pixel) return false;
+  pixel("track", name, params, { eventID: eventId });
+  if (firedMetaEventIds.size >= 500) firedMetaEventIds.clear();
+  firedMetaEventIds.add(eventId);
+  return true;
+}
+
+/** Form types that map to a Meta conversion. Finance, purchase requests and availability are deliberately absent. */
+const META_FORM_EVENTS = new Map<string, "Lead" | "Schedule">([
+  ["contact", "Lead"],
+  ["car_finder", "Lead"],
+  ["sell", "Lead"],
+  ["trade", "Lead"],
+  ["appointment", "Schedule"],
+]);
+
+/**
+ * Adds an opaque event ID to a lead's details when the lead type can produce a Meta conversion.
+ * Returns null and leaves `details` untouched for finance, purchase and any other type.
+ */
+export function withLeadEventId(leadType: string, details: Record<string, unknown>): string | null {
+  const formType = getLeadFormType(leadType, details);
+  if (!formType || !META_FORM_EVENTS.has(formType)) return null;
+  const eventId = createEventId();
+  details["lead_event_id"] = eventId;
+  return eventId;
+}
+
+/** Meta Lead / Schedule for a submission that was already saved. Never called for finance or purchase requests. */
+export function trackMetaLeadSubmission(formType: string, rawEventId?: unknown): boolean {
+  const metaEvent = META_FORM_EVENTS.get(formType);
+  if (!metaEvent) return false;
+  const eventId = typeof rawEventId === "string" && EVENT_ID_PATTERN.test(rawEventId) ? rawEventId : createEventId();
+  return sendMetaEvent(metaEvent, { content_category: formType }, eventId);
+}
+
+/** Meta ViewContent for a vehicle detail page, using the same sanitized catalog fields as GA4 view_item. */
+export function trackMetaViewContent(item: Extract<AnalyticsEvent, { name: "view_item" }>["params"]): boolean {
+  if (typeof window === "undefined") return false;
+  const safe = sanitizeEvent({ name: "view_item", params: item });
+  if (!safe || safe.name !== "view_item") return false;
+  const page = `${window.location.pathname}${window.location.search}`;
+  const itemId = safe.params.item_id;
+  if (lastMetaViewContent && lastMetaViewContent.page === page && lastMetaViewContent.itemId === itemId) return false;
+  const params: MetaEventParams = {
+    content_type: "vehicle",
+    content_ids: [itemId],
+    content_name: safe.params.item_name,
+    ...(safe.params.item_category ? { content_category: safe.params.item_category } : {}),
+    ...(safe.params.price !== undefined ? { value: safe.params.price, currency: "USD" } : {}),
+  };
+  const sent = sendMetaEvent("ViewContent", params, createEventId());
+  if (sent) lastMetaViewContent = { page, itemId };
+  return sent;
+}
+
+/**
+ * Records a phone or directions click: GA4 click_to_call / click_directions with a fixed location label,
+ * plus Meta Contact for phone clicks. Quick repeat clicks on the same link count once.
+ */
+export function trackContactClick(kind: "phone" | "directions", linkLocation: ContactLinkLocation): void {
+  if (!CONTACT_LINK_LOCATIONS.has(linkLocation)) return;
+  const key = `${kind}:${linkLocation}`;
+  const now = Date.now();
+  if (now - (lastContactClick.get(key) ?? -Infinity) < 1000) return;
+  lastContactClick.set(key, now);
+  trackAnalyticsEvent({ name: kind === "phone" ? "click_to_call" : "click_directions", params: { link_location: linkLocation } });
+  if (kind === "phone") sendMetaEvent("Contact", { content_category: "phone_click", content_name: linkLocation }, createEventId());
 }
 
 export function publicCatalogItemId(

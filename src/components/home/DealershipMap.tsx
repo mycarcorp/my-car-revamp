@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { MapPin, Navigation, Phone } from "lucide-react";
+import { trackContactClick } from "@/lib/analytics";
 
 const ADDRESS = "4720 Harrison Rd, Fredericksburg, VA 22408";
 const Q = encodeURIComponent(`My Car, ${ADDRESS}`);
@@ -21,12 +22,13 @@ export function DealershipMap({ phone }: { phone?: string | null }) {
               href={`https://www.google.com/maps/dir/?api=1&destination=${Q}`}
               target="_blank"
               rel="noreferrer"
+              onClick={() => trackContactClick("directions", "home_map")}
               className="inline-flex items-center gap-2 rounded-full bg-primary px-5 py-3 text-sm font-bold text-primary-foreground transition hover:brightness-110"
             >
               <Navigation className="size-4" /> Get Directions
             </a>
             {phone && (
-              <a href={`tel:${phone.replace(/[^0-9+]/g, "")}`} className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-3 text-sm font-bold transition hover:border-accent">
+              <a href={`tel:${phone.replace(/[^0-9+]/g, "")}`} onClick={() => trackContactClick("phone", "home_map")} className="inline-flex items-center gap-2 rounded-full border border-border px-5 py-3 text-sm font-bold transition hover:border-accent">
                 <Phone className="size-4" /> {phone}
               </a>
             )}

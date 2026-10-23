@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { CarFront, Clock3, Headphones, Mail, MapPin, Phone, ShieldCheck, type LucideIcon } from "lucide-react";
 import { LeadForm } from "@/components/LeadForm";
+import { trackContactClick } from "@/lib/analytics";
 import { siteSettingsQuery } from "@/lib/queries";
 import contactAgent from "@/assets/contact-hero.jpg";
 
@@ -174,6 +175,7 @@ function ContactPage() {
                   label="Call us"
                   value={phone}
                   href={`tel:${phoneHref}`}
+                  onClick={() => trackContactClick("phone", "contact_page")}
                   iconClass="bg-[#809C61]/15 text-[#61794A]"
                 />
 
@@ -190,6 +192,7 @@ function ContactPage() {
                   label="Visit the dealership"
                   value={address}
                   href={mapHref}
+                  onClick={() => trackContactClick("directions", "contact_page")}
                   external
                   iconClass="bg-[#D25B4C]/12 text-[#B44538]"
                 />
@@ -240,6 +243,7 @@ function ContactCard({
   href,
   iconClass,
   external = false,
+  onClick,
 }: {
   icon: LucideIcon;
   label: string;
@@ -247,10 +251,12 @@ function ContactCard({
   href: string;
   iconClass: string;
   external?: boolean;
+  onClick?: () => void;
 }) {
   return (
     <a
       href={href}
+      onClick={onClick}
       target={external ? "_blank" : undefined}
       rel={external ? "noopener noreferrer" : undefined}
       className="group flex items-center gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 transition-all hover:-translate-y-0.5 hover:border-[#F7941D]/60 hover:bg-white hover:shadow-sm"

@@ -34,6 +34,13 @@ export const getMarketingGa4 = createServerFn({ method: "POST" }).inputValidator
 		return ga4.readGa4Report(input as Parameters<typeof ga4.readGa4Report>[0]);
 	});
 });
+export const getMarketingGa4Realtime = createServerFn({ method: "POST" }).handler(async () => {
+	const m = await import("./marketing.server");
+	return runGa4ReportForStaff(undefined, m.requireMarketingStaff, async () => {
+		const ga4 = await import("./marketing-ga4.server");
+		return ga4.readGa4Realtime();
+	});
+});
 export const getMarketingGa4Diagnostics = createServerFn({ method: "POST" }).handler(async () => {
 	const m = await import("./marketing.server");
 	return runGa4ReportForStaff(undefined, m.requireMarketingStaff, async () => {
