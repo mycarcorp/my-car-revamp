@@ -245,7 +245,11 @@ export function createBrowserAnalyticsAdapter(): AnalyticsAdapter {
       if (typeof window === "undefined" || document.querySelector('script[data-mycar-ga="true"]')) return;
       const w = window as Window & { dataLayer?: unknown[]; gtag?: Gtag };
       w.dataLayer = w.dataLayer ?? [];
-      w.gtag = w.gtag ?? function gtag(...args: unknown[]) { w.dataLayer!.push(args); };
+      // gtag.js only executes commands pushed as `arguments` objects; a rest-param Array is ignored.
+      w.gtag = w.gtag ?? function gtag() {
+        // eslint-disable-next-line prefer-rest-params
+        w.dataLayer!.push(arguments);
+      };
       gtagFunction = w.gtag;
       w.gtag("js", new Date());
       w.gtag("consent", "default", { analytics_storage: "denied", ad_storage: "denied", ad_user_data: "denied", ad_personalization: "denied" });
