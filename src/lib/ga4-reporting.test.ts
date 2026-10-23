@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
+	formatGa4DateLabel,
+	ga4ApiDateRange,
 	ga4RangeSchema,
+	mapEventRows,
+	mapGa4Realtime,
 	mapGa4Reports,
 	resolveGa4IntegrationStatus,
 	resolveGa4Range,
@@ -103,5 +107,71 @@ describe("GA4 report mapping", () => {
 		expect(safeGa4ErrorMessage({ code: 3, message: "Invalid property 000000000" })).toContain("property was not found or is invalid");
 		expect(safeGa4ErrorMessage({ name: "TimeoutError", message: "request exceeded deadline" })).toContain("temporarily unavailable");
 		expect(safeGa4ErrorMessage({ message: "secret internal stack and credentials" })).not.toContain("secret");
+	});
+
+	it("maps tracked events in a fixed order with zeros for events GA4 did not return", () => {
+		const rows = mapEventRows({ rows: [
+			{ dimensionValues: [{ value: "generate_lead" }], metricValues: [{ value: "3" }, { value: "2" }] },
+			{ dimensionValues: [{ value: "page_view" }], metricValues: [{ value: "120" }, { value: "40" }] },
+			{ dimensionValues: [{ value: "customer_name_typed" }], metricValues: [{ value: "9" }, { value: "9" }] },
+		] });
+		expect(rows.map((row) => row.eventName)).toEqual([
+			"page_view", "view_item_list", "select_item", "view_item", "search",
+			"appointment_type_selected", "appointment_vehicle_selected", "form_start", "generate_lead",
+		]);
+		expect(rows[0]).toEqual({ eventName: "page_view", eventCount: 120, totalUsers: 40 });
+		expect(rows[1]).toEqual({ eventName: "view_item_list", eventCount: 0, totalUsers: null });
+		expect(rows[8]).toEqual({ eventName: "generate_lead", eventCount: 3, totalUsers: 2 });
+		expect(rows.some((row) => row.eventName === "customer_name_typed")).toBe(false);
+	});
+
+	it("keeps failed sections null with their warnings and classifies the report as Partial Data", () => {
+		const report = mapGa4Reports({
+			startDate: "2026-10-01", endDate: "2026-10-07", fetchedAt: "2026-10-08T00:00:00.000Z",
+			metrics: { rows: [{ metricValues: ["1", "2", "3", "1", "0.3", "5"].map((value) => ({ value })) }] },
+			trafficChannels: null, landingPages: {}, deviceCategories: {}, daily: {}, generateLeadEvents: {}, events: null,
+			sectionErrors: { trafficChannels: "Google Analytics is temporarily unavailable. Try again shortly.", events: "Google Analytics is temporarily unavailable. Try again shortly." },
+		});
+		expect(report.trafficChannels).toBeNull();
+		expect(report.events).toBeNull();
+		expect(report.landingPages).toEqual([]);
+		expect(report.metrics?.sessions).toBe(3);
+		expect(resolveGa4IntegrationStatus(report)).toBe("Partial Data");
+	});
+
+	it("distinguishes No Data Yet from Connected using event counts too", () => {
+		const base = { startDate: "2026-10-01", endDate: "2026-10-07", fetchedAt: "2026-10-08T00:00:00.000Z", metrics: {}, trafficChannels: {}, landingPages: {}, deviceCategories: {}, daily: {}, generateLeadEvents: {} };
+		expect(resolveGa4IntegrationStatus(mapGa4Reports({ ...base, events: {} }))).toBe("No Data Yet");
+		expect(resolveGa4IntegrationStatus(mapGa4Reports({
+			...base,
+			events: { rows: [{ dimensionValues: [{ value: "page_view" }], metricValues: [{ value: "5" }, { value: "2" }] }] },
+		}))).toBe("Connected");
+	});
+
+	it("maps Realtime active users and events, including empty and partial responses", () => {
+		const fetchedAt = "2026-10-23T12:00:00.000Z";
+		expect(mapGa4Realtime({ fetchedAt, activeUsers: { rows: [{ metricValues: [{ value: "7" }] }] }, events: {} })).toMatchObject({
+			status: "available", windowMinutes: 30, activeUsers: 7,
+		});
+		expect(mapGa4Realtime({ fetchedAt, activeUsers: {}, events: {} }).activeUsers).toBe(0);
+		const partial = mapGa4Realtime({ fetchedAt, activeUsers: null, events: {}, sectionErrors: { activeUsers: "unavailable" } });
+		expect(partial.activeUsers).toBeNull();
+		expect(partial.events).toHaveLength(9);
+	});
+
+	it("sends relative dates for presets (property time zone) and exact dates for custom ranges", () => {
+		const resolved = { startDate: "2026-10-01", endDate: "2026-10-07" };
+		expect(ga4ApiDateRange({ preset: 7 }, resolved)).toEqual({ startDate: "6daysAgo", endDate: "today" });
+		expect(ga4ApiDateRange({ preset: 90 }, resolved)).toEqual({ startDate: "89daysAgo", endDate: "today" });
+		expect(ga4ApiDateRange({ startDate: "2026-09-01", endDate: "2026-09-30" }, { startDate: "2026-09-01", endDate: "2026-09-30" }))
+			.toEqual({ startDate: "2026-09-01", endDate: "2026-09-30" });
+	});
+
+	it("formats GA4 date labels for axes and tooltips", () => {
+		expect(formatGa4DateLabel("20261023", "axis")).toBe("10/23");
+		expect(formatGa4DateLabel("20261023")).toBe("Oct 23, 2026");
+		expect(formatGa4DateLabel("2026-01-05")).toBe("Jan 5, 2026");
+		expect(formatGa4DateLabel("not-a-date")).toBe("not-a-date");
+		expect(formatGa4DateLabel("20261323")).toBe("20261323");
 	});
 });

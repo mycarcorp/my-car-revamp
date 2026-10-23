@@ -53,6 +53,7 @@ import {
   getLeadAttribution,
   getMarketingGa4,
   getMarketingGa4Diagnostics,
+  getMarketingGa4Realtime,
   inspectMarketingUrl,
   refreshMarketingFn,
   saveMarketingProspect,
@@ -68,7 +69,17 @@ import {
   type Prospect,
   type LeadAttributionReport,
 } from "@/lib/marketing";
-import { resolveGa4IntegrationStatus, type Ga4RangeInput, type Ga4Report, type Ga4RuntimeDiagnostics } from "@/lib/ga4-reporting";
+import {
+  GA4_SECTION_LABELS,
+  formatGa4DateLabel,
+  ga4ReportHasData,
+  resolveGa4IntegrationStatus,
+  type Ga4EventCount,
+  type Ga4RangeInput,
+  type Ga4Report,
+  type Ga4RuntimeDiagnostics,
+  type Ga4SectionKey,
+} from "@/lib/ga4-reporting";
 import { buildAttributionCsv, type AttributionRangeInput } from "@/lib/marketing-attribution";
 
 export const Route = createFileRoute("/admin/marketing")({
@@ -294,6 +305,7 @@ function Marketing() {
   const getAttribution = useServerFn(getLeadAttribution);
   const getGa4 = useServerFn(getMarketingGa4);
   const getGa4Diagnostics = useServerFn(getMarketingGa4Diagnostics);
+  const getGa4Realtime = useServerFn(getMarketingGa4Realtime);
   const queryKey = ["marketing", user?.id];
   const query = useQuery({
     queryKey,
@@ -339,6 +351,15 @@ function Marketing() {
     [busy, setBusy] = useState<string | null>(null),
     [keyword, setKeyword] = useState(""),
     [articleFilter, setArticleFilter] = useState("");
+  // Realtime is polled only while the Analytics tab is open, so other tabs never spend GA4 quota.
+  const realtimeQuery = useQuery({
+    queryKey: ["marketing", "ga4-realtime", user?.id],
+    queryFn: () => getGa4Realtime(),
+    enabled: Boolean(session && isStaff && tab === "analytics"),
+    staleTime: 30000,
+    refetchInterval: tab === "analytics" ? 60000 : false,
+    retry: false,
+  });
   const [inspectionUrl, setInspectionUrl] = useState(""),
     [inspectionResult, setInspectionResult] = useState<Awaited<
       ReturnType<typeof inspectMarketingUrl>
@@ -1082,12 +1103,17 @@ function Marketing() {
               const status = ga4Query.isPending && !ga4
                 ? "Loading"
                 : resolveGa4IntegrationStatus(ga4, ga4Query.error);
-              const unavailableLabel = status === "Loading" || status === "Connected" || status === "No Data Yet" ? "Not Configured" : status;
-              const hasActivity = status === "Connected";
+              const unavailableLabel = status === "Loading" || status === "Connected" || status === "No Data Yet" || status === "Partial Data" ? "Not Configured" : status;
+              const hasActivity = Boolean(ga4 && ga4ReportHasData(ga4));
               const rangeLabel = ga4Range.preset ? `Last ${ga4Range.preset} days` : `${ga4Range.startDate} – ${ga4Range.endDate}`;
-              const displayDate = (value: string) => value.length === 8 ? `${value.slice(4, 6)}/${value.slice(6, 8)}` : value;
-              const statusVariant = status === "Connected" ? "outline" : status === "Loading" ? "secondary" : status === "No Data Yet" ? "secondary" : "destructive";
-              const pageTable = (rows: NonNullable<Ga4Report["landingPages"]>, heading: string) => (
+              const displayDate = (value: string) => formatGa4DateLabel(value, "axis");
+              const dateTooltip = <ChartTooltipContent labelFormatter={(value) => formatGa4DateLabel(String(value))} />;
+              const sectionNote = (key: Ga4SectionKey, fallback: string) => {
+                const failure = ga4?.sectionErrors?.[key];
+                return failure ? `${GA4_SECTION_LABELS[key]} is unavailable: ${failure}` : fallback;
+              };
+              const statusVariant = status === "Connected" ? "outline" : status === "Loading" ? "secondary" : status === "No Data Yet" || status === "Partial Data" ? "secondary" : "destructive";
+              const pageTable = (rows: NonNullable<Ga4Report["landingPages"]>, heading: string, key: Ga4SectionKey) => (
                 <section>
                   <h3 className="mb-2 text-sm font-semibold">{heading}</h3>
                   {rows.length ? (
@@ -1105,10 +1131,73 @@ function Marketing() {
                         </tr>)}</tbody>
                       </table>
                     </div>
-                  ) : <Empty>No page rows were returned for this period.</Empty>}
+                  ) : <Empty>{sectionNote(key, "No page rows were returned for this period.")}</Empty>}
+                </section>
+              );
+              const rt = realtimeQuery.data;
+              const eventTable = (rows: Ga4EventCount[], showUsers: boolean) => (
+                <div className="overflow-x-auto border-y border-border">
+                  <table className="w-full min-w-[360px] text-left text-xs">
+                    <thead className="bg-muted/40 text-muted-foreground"><tr>
+                      <th className="px-3 py-2 font-medium">Event</th>
+                      <th className="px-3 py-2 font-medium">Count</th>
+                      {showUsers && <th className="px-3 py-2 font-medium">Users</th>}
+                    </tr></thead>
+                    <tbody>{rows.map((row) => <tr key={row.eventName} className="border-t border-border">
+                      <td className="px-3 py-2 font-mono font-medium">{row.eventName}</td>
+                      <td className="px-3 py-2">{number(row.eventCount)}</td>
+                      {showUsers && <td className="px-3 py-2">{number(row.totalUsers)}</td>}
+                    </tr>)}</tbody>
+                  </table>
+                </div>
+              );
+              const realtimeSection = (
+                <Section
+                  title="GA4 Realtime"
+                  subtitle="Live activity from the GA4 Realtime API for the last 30 minutes. Separate from the historical reports below, which can take 24–48 hours to finish processing."
+                  actions={
+                    <Button variant="outline" size="sm" disabled={realtimeQuery.isFetching} onClick={() => void realtimeQuery.refetch()} aria-label="Refresh GA4 Realtime">
+                      <RefreshCw className={`size-3.5 ${realtimeQuery.isFetching ? "animate-spin" : ""}`} />
+                      Refresh realtime
+                    </Button>
+                  }
+                >
+                  {realtimeQuery.isPending ? (
+                    <div className="flex items-center gap-2 py-6 text-sm text-muted-foreground"><Loader2 className="size-4 animate-spin" />Loading GA4 Realtime…</div>
+                  ) : realtimeQuery.error ? (
+                    <div role="alert" className="my-4 border-l-2 border-destructive bg-background p-4 text-sm">GA4 Realtime request failed. Try again or check server configuration.</div>
+                  ) : rt?.status === "unavailable" ? (
+                    <div role="alert" className="my-4 border-l-2 border-destructive bg-background p-4 text-sm"><p className="font-semibold">GA4 Realtime unavailable</p><p className="mt-1">{rt.message}</p></div>
+                  ) : rt ? (
+                    <>
+                      {(rt.sectionErrors.activeUsers || rt.sectionErrors.events) && (
+                        <div role="status" className="mb-3 border-l-2 border-amber-500 bg-background p-3 text-xs">
+                          {rt.sectionErrors.activeUsers && <p>Active users are unavailable: {rt.sectionErrors.activeUsers}</p>}
+                          {rt.sectionErrors.events && <p>Recent events are unavailable: {rt.sectionErrors.events}</p>}
+                        </div>
+                      )}
+                      <div className="grid gap-3 pb-4 sm:grid-cols-2">
+                        <Metric label="Active users · last 30 min" value={number(rt.activeUsers)} detail="GA4 Realtime activeUsers" icon={Users} />
+                        <Metric label="Tracked events · last 30 min" value={number(rt.events ? rt.events.reduce((total, row) => total + row.eventCount, 0) : null)} detail="Sum of the site events listed below" icon={Activity} />
+                      </div>
+                      {rt.events ? eventTable(rt.events, false) : <Empty>Recent event counts are unavailable.</Empty>}
+                      <p className="pt-3 text-xs text-muted-foreground" aria-live="polite">
+                        Realtime · updated {date(rt.fetchedAt)}. {rt.activeUsers === 0 ? "No consented visitors were active in the last 30 minutes. " : ""}Only visitors who accepted analytics and are not blocking Google tags are counted.
+                      </p>
+                    </>
+                  ) : null}
+                </Section>
+              );
+              const eventsSection = (
+                <section className="border-t border-border py-5">
+                  <h3 className="mb-1 text-sm font-semibold">GA4 event counts</h3>
+                  <p className="mb-2 text-xs text-muted-foreground">Existing site events for this period, from GA4 only. These measure consented activity and are separate from lead records saved in the database.</p>
+                  {ga4?.events ? eventTable(ga4.events, true) : <Empty>{sectionNote("events", "No event rows were returned.")}</Empty>}
                 </section>
               );
               return (
+            <>
+            {realtimeSection}
             <Section
               title="Google Analytics 4"
               subtitle="GA4 property 559909149 · website activity from Google Analytics, separate from Supabase leads and completed purchases."
@@ -1149,6 +1238,9 @@ function Marketing() {
               <p className="py-3 text-xs text-muted-foreground" aria-live="polite">
                 {ga4 ? `${rangeLabel} · ${ga4.startDate} – ${ga4.endDate} · ${ga4.timeZone ?? "Property time zone unavailable"} · Reported ${date(ga4.fetchedAt)}` : `${rangeLabel} · GA4 report freshness and property time zone appear when available`}
               </p>
+              <p className="pb-3 text-xs text-muted-foreground">
+                GA4 measures only consented, non-blocked activity: visitors who decline analytics, or whose browsers block Google tags, are not counted. GA4 counts are therefore lower than real traffic and are kept separate from lead records saved in the database.
+              </p>
               {ga4Diagnostics && (
                 <div className="mb-4 border-y border-border py-3 text-xs" aria-live="polite">
                   <p className="mb-2 font-semibold">Server connection diagnostics</p>
@@ -1171,8 +1263,18 @@ function Marketing() {
                 <div role="alert" className="my-4 border-l-2 border-destructive bg-background p-4 text-sm">{unavailableLabel}. GA4 report request failed. Try again or check server configuration.</div>
               ) : ga4?.status === "unavailable" ? (
                 <div role="alert" className="my-4 border-l-2 border-destructive bg-background p-4 text-sm"><p className="font-semibold">{unavailableLabel}</p><p className="mt-1">{ga4.message}</p></div>
-              ) : ga4?.metrics ? (
+              ) : ga4?.status === "available" ? (
                 <>
+                  {Object.keys(ga4.sectionErrors).length > 0 && (
+                    <div role="status" className="my-4 border-l-2 border-amber-500 bg-background p-4 text-sm">
+                      <p className="font-semibold">Some GA4 sections could not be loaded</p>
+                      <p className="mt-1 text-xs text-muted-foreground">The sections below that loaded are accurate for this period. The rest are marked unavailable and can be retried with Refresh report.</p>
+                      <ul className="mt-2 list-disc pl-5 text-xs">
+                        {(Object.keys(ga4.sectionErrors) as Ga4SectionKey[]).map((key) => <li key={key}>{GA4_SECTION_LABELS[key]}: {ga4.sectionErrors[key]}</li>)}
+                      </ul>
+                    </div>
+                  )}
+                  {ga4.metrics ? (
                   <div className="grid gap-3 py-5 sm:grid-cols-2 xl:grid-cols-4">
                     <Metric label="Active users" value={number(ga4.metrics.activeUsers)} detail="GA4 active users" icon={Users} />
                     <Metric label="Total users" value={number(ga4.metrics.totalUsers)} detail="GA4 total users" icon={Users} />
@@ -1182,6 +1284,7 @@ function Marketing() {
                     <Metric label="Page views" value={number(ga4.metrics.screenPageViews)} detail="GA4 screenPageViews" icon={Globe} />
                     <Metric label="GA4 generate_lead" value={number(ga4.generateLeadEvents)} detail="GA4 event count; not Supabase leads or verified purchases" icon={CheckCircle2} />
                   </div>
+                  ) : <Empty>{sectionNote("metrics", "Summary metrics were not returned.")}</Empty>}
                   <div className="border-y border-border py-4">
                     <h3 className="mb-3 text-sm font-semibold">Daily traffic</h3>
                     {ga4.daily?.length ? (
@@ -1190,37 +1293,39 @@ function Marketing() {
                           <CartesianGrid vertical={false} />
                           <XAxis dataKey="date" tickFormatter={displayDate} tickLine={false} axisLine={false} tickMargin={8} minTickGap={24} />
                           <YAxis allowDecimals={false} tickLine={false} axisLine={false} />
-                          <Tooltip content={<ChartTooltipContent />} />
+                          <Tooltip content={dateTooltip} />
                           <Line type="monotone" dataKey="sessions" stroke="var(--color-sessions)" strokeWidth={2} dot={false} />
                           <Line type="monotone" dataKey="screenPageViews" stroke="var(--color-screenPageViews)" strokeWidth={2} dot={false} />
                         </LineChart>
                       </ChartContainer>
-                    ) : <Empty>No daily traffic rows were returned for this period.</Empty>}
+                    ) : <Empty>{sectionNote("daily", "No daily traffic rows were returned for this period.")}</Empty>}
                   </div>
                   <div className="grid gap-6 py-5 xl:grid-cols-2">
                     {([ ["Sessions by acquisition channel", ga4.trafficChannels], ["Traffic source / medium", ga4.trafficSources] ] as const).map(([heading, rows]) => (
                       <section key={heading}>
                         <h3 className="mb-2 text-sm font-semibold">{heading}</h3>
-                        {rows?.length ? <ChartContainer config={{ sessions: { label: "Sessions", color: "var(--color-primary)" } }} className="aspect-auto h-64 w-full"><BarChart data={rows.slice(0, 10)} margin={{ top: 8, right: 8, bottom: 28, left: 0 }}><CartesianGrid vertical={false} /><XAxis dataKey="label" tickLine={false} axisLine={false} angle={-25} textAnchor="end" interval={0} height={56} tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} tickLine={false} axisLine={false} /><Tooltip content={<ChartTooltipContent />} /><Bar dataKey="sessions" fill="var(--color-sessions)" radius={[3, 3, 0, 0]} /></BarChart></ChartContainer> : <Empty>No acquisition rows were returned.</Empty>}
+                        {rows?.length ? <ChartContainer config={{ sessions: { label: "Sessions", color: "var(--color-primary)" } }} className="aspect-auto h-64 w-full"><BarChart data={rows.slice(0, 10)} margin={{ top: 8, right: 8, bottom: 28, left: 0 }}><CartesianGrid vertical={false} /><XAxis dataKey="label" tickLine={false} axisLine={false} angle={-25} textAnchor="end" interval={0} height={56} tick={{ fontSize: 10 }} /><YAxis allowDecimals={false} tickLine={false} axisLine={false} /><Tooltip content={<ChartTooltipContent />} /><Bar dataKey="sessions" fill="var(--color-sessions)" radius={[3, 3, 0, 0]} /></BarChart></ChartContainer> : <Empty>{sectionNote(heading === "Traffic source / medium" ? "trafficSources" : "trafficChannels", "No acquisition rows were returned.")}</Empty>}
                       </section>
                     ))}
                     <section>
                       <h3 className="mb-2 text-sm font-semibold">Sessions by device</h3>
-                      {ga4.deviceCategories?.length ? <ChartContainer config={{ sessions: { label: "Sessions", color: "var(--color-primary)" } }} className="aspect-auto h-64 w-full"><BarChart data={ga4.deviceCategories} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}><CartesianGrid vertical={false} /><XAxis dataKey="label" tickLine={false} axisLine={false} /><YAxis allowDecimals={false} tickLine={false} axisLine={false} /><Tooltip content={<ChartTooltipContent />} /><Bar dataKey="sessions" fill="var(--color-sessions)" radius={[3, 3, 0, 0]} /></BarChart></ChartContainer> : <Empty>No device rows were returned.</Empty>}
+                      {ga4.deviceCategories?.length ? <ChartContainer config={{ sessions: { label: "Sessions", color: "var(--color-primary)" } }} className="aspect-auto h-64 w-full"><BarChart data={ga4.deviceCategories} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}><CartesianGrid vertical={false} /><XAxis dataKey="label" tickLine={false} axisLine={false} /><YAxis allowDecimals={false} tickLine={false} axisLine={false} /><Tooltip content={<ChartTooltipContent />} /><Bar dataKey="sessions" fill="var(--color-sessions)" radius={[3, 3, 0, 0]} /></BarChart></ChartContainer> : <Empty>{sectionNote("deviceCategories", "No device rows were returned.")}</Empty>}
                     </section>
                     <section>
                       <h3 className="mb-2 text-sm font-semibold">GA4 generate_lead events over time</h3>
-                      {ga4.generateLeadDaily?.length ? <ChartContainer config={{ eventCount: { label: "Events", color: "var(--color-positive)" } }} className="aspect-auto h-64 w-full"><LineChart data={ga4.generateLeadDaily} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}><CartesianGrid vertical={false} /><XAxis dataKey="date" tickFormatter={displayDate} tickLine={false} axisLine={false} minTickGap={24} /><YAxis allowDecimals={false} tickLine={false} axisLine={false} /><Tooltip content={<ChartTooltipContent />} /><Line type="monotone" dataKey="eventCount" stroke="var(--color-eventCount)" strokeWidth={2} dot={false} /></LineChart></ChartContainer> : <Empty>No generate_lead event rows were returned.</Empty>}
+                      {ga4.generateLeadDaily?.length ? <ChartContainer config={{ eventCount: { label: "Events", color: "var(--color-positive)" } }} className="aspect-auto h-64 w-full"><LineChart data={ga4.generateLeadDaily} margin={{ top: 8, right: 12, bottom: 4, left: 0 }}><CartesianGrid vertical={false} /><XAxis dataKey="date" tickFormatter={displayDate} tickLine={false} axisLine={false} minTickGap={24} /><YAxis allowDecimals={false} tickLine={false} axisLine={false} /><Tooltip content={dateTooltip} /><Line type="monotone" dataKey="eventCount" stroke="var(--color-eventCount)" strokeWidth={2} dot={false} /></LineChart></ChartContainer> : <Empty>{sectionNote("generateLeadDaily", "No generate_lead event rows were returned.")}</Empty>}
                     </section>
                   </div>
+                  {eventsSection}
                   <div className="grid gap-6 border-t border-border py-5 xl:grid-cols-2">
-                    {pageTable(ga4.landingPages ?? [], "Top landing pages")}
-                    {pageTable(ga4.vehiclePages ?? [], "Top vehicle-detail pages under /inventory/")}
+                    {pageTable(ga4.landingPages ?? [], "Top landing pages", "landingPages")}
+                    {pageTable(ga4.vehiclePages ?? [], "Top vehicle-detail pages under /inventory/", "vehiclePages")}
                   </div>
-                  {!hasActivity && <div className="border-t border-border py-3 text-sm text-muted-foreground">The GA4 API responded successfully, but returned no activity for this reporting period.</div>}
+                  {!hasActivity && <div className="border-t border-border py-3 text-sm text-muted-foreground">The GA4 API responded successfully, but returned no activity for this reporting period. This is not a connection failure: standard GA4 reports can take 24–48 hours to finish processing, and activity is only recorded from the day consent-gated collection began working. Check GA4 Realtime above for live activity.</div>}
                 </>
               ) : <Empty>No GA4 report data was returned.</Empty>}
             </Section>
+            </>
               );
             })()}
           </TabsContent>
