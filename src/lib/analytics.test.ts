@@ -4,9 +4,11 @@ import {
   createAnalyticsController,
   getGa4MeasurementId,
   getTrackingConsentPreferences,
+  getEnabledMetaConversions,
   getLeadFormType,
   isAnalyticsRoutePublic,
   isMetaSafeUrl,
+  parseMetaConversions,
   publicCatalogItemId,
   recordFormStart,
   recordLeadSubmission,
@@ -612,8 +614,136 @@ describe("Meta conversion events", () => {
   beforeEach(() => resetMetaPixelStateForTests());
   afterEach(() => {
     vi.unstubAllGlobals();
+    vi.unstubAllEnvs();
     vi.restoreAllMocks();
     resetMetaPixelStateForTests();
+  });
+
+  const enableAll = () => vi.stubEnv("VITE_META_CONVERSIONS", "ViewContent,Contact,Lead,Schedule");
+
+  describe("rollout flag", () => {
+    it("enables only ViewContent and Contact by default", () => {
+      vi.stubEnv("VITE_META_CONVERSIONS", "");
+      expect([...getEnabledMetaConversions()].sort()).toEqual(["Contact", "ViewContent"]);
+      expect([...parseMetaConversions(undefined)].sort()).toEqual(["Contact", "ViewContent"]);
+    });
+
+    it("does not send Lead or Schedule by default, but still sends ViewContent and Contact", () => {
+      vi.stubEnv("VITE_META_CONVERSIONS", "");
+      const env = setup("/contact");
+      const lead: Record<string, unknown> = {};
+      withLeadEventId("contact", lead);
+      expect(lead["lead_event_id"]).toMatch(/^mc_/); // event ID creation is unchanged
+      recordLeadSubmission(true, "contact", lead, vi.fn(() => true));
+      const appointment: Record<string, unknown> = {};
+      withLeadEventId("appointment", appointment);
+      recordLeadSubmission(true, "appointment", appointment, vi.fn(() => true));
+      expect(env.tracks("Lead")).toEqual([]);
+      expect(env.tracks("Schedule")).toEqual([]);
+      expect(trackMetaViewContent(vehicle)).toBe(true);
+      trackContactClick("phone", "contact_page");
+      expect(env.tracks("ViewContent")).toHaveLength(1);
+      expect(env.tracks("Contact")).toHaveLength(1);
+    });
+
+    it("keeps GA4 generate_lead and click events independent of the Meta flag", async () => {
+      vi.stubEnv("VITE_META_CONVERSIONS", "");
+      const ga4Send = vi.fn(() => true);
+      setup("/contact", { meta: "granted", analytics: "granted" });
+      expect(recordLeadSubmission(true, "contact", {}, ga4Send)).toBe(true);
+      expect(ga4Send).toHaveBeenCalledWith({ name: "generate_lead", params: { form_type: "contact" } });
+
+      // Even when every Meta conversion is switched off by config, GA4 clicks follow GA4 consent only.
+      vi.stubEnv("VITE_META_CONVERSIONS", "ViewContent");
+      vi.resetModules();
+      const env = setup("/contact", { meta: "granted", analytics: "granted" });
+      const fresh = await import("./analytics");
+      fresh.configureAnalytics("/contact");
+      fresh.trackContactClick("phone", "contact_page");
+      fresh.trackContactClick("directions", "contact_page");
+      expect(env.dataLayer().filter((entry) => entry[0] === "event").map((entry) => entry[1])).toEqual(["click_to_call", "click_directions"]);
+      expect(env.tracks("Contact")).toEqual([]);
+    });
+
+    it("applies an exact override and replaces the defaults", () => {
+      expect([...parseMetaConversions("Lead,Schedule")].sort()).toEqual(["Lead", "Schedule"]);
+      expect([...parseMetaConversions(" ViewContent , Lead ")].sort()).toEqual(["Lead", "ViewContent"]);
+      expect([...parseMetaConversions("Contact")]).toEqual(["Contact"]);
+      vi.stubEnv("VITE_META_CONVERSIONS", "Lead");
+      const env = setup("/contact");
+      const details: Record<string, unknown> = {};
+      withLeadEventId("contact", details);
+      recordLeadSubmission(true, "contact", details, vi.fn(() => true));
+      trackContactClick("phone", "contact_page");
+      expect(env.tracks("Lead")).toHaveLength(1);
+      expect(env.tracks("Contact")).toEqual([]);
+    });
+
+    it("ignores unknown, wrongly cased and malformed values and never enables Lead or Schedule by accident", () => {
+      const defaults = ["Contact", "ViewContent"];
+      const malformed: unknown[] = [
+        "", "   ", ",", ",,,", "lead", "LEAD", "schedule", "Lead;Schedule", "Lead Schedule", "Lead|Schedule",
+        "Leads", "Purchase", "all", "*", "true", "1", "Lead=true", "[\"Lead\"]", "{\"Lead\":true}", "PageView",
+        "__proto__", "constructor", "toString", "x".repeat(500) + ",Lead", 1, true, null, undefined, {}, ["Lead"],
+      ];
+      for (const value of malformed) {
+        const enabled = parseMetaConversions(value);
+        expect([...enabled].sort(), String(value)).toEqual(defaults);
+      }
+      // Valid names survive next to junk, junk does not.
+      expect([...parseMetaConversions("junk,Lead,lead,Schedule2")]).toEqual(["Lead"]);
+    });
+
+    it("never changes PageView, which stays independent of the flag", () => {
+      for (const value of ["", "Lead", "garbage", "ViewContent,Contact,Lead,Schedule"]) {
+        vi.stubEnv("VITE_META_CONVERSIONS", value);
+        resetMetaPixelStateForTests();
+        const env = setup("/contact");
+        expect(trackMetaPageView("/contact")).toBe(true);
+        expect(env.tracks("PageView")).toHaveLength(1);
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("keeps Meta consent in force for every enabled event", () => {
+      enableAll();
+      for (const meta of ["unknown", "denied"] as const) {
+        const env = setup("/contact", { meta, analytics: "granted" });
+        const details: Record<string, unknown> = {};
+        withLeadEventId("contact", details);
+        recordLeadSubmission(true, "contact", details, vi.fn(() => true));
+        trackContactClick("phone", "contact_page");
+        trackMetaViewContent(vehicle);
+        expect(env.calls()).toEqual([]);
+        resetMetaPixelStateForTests();
+        vi.unstubAllGlobals();
+      }
+    });
+
+    it("does not consume the event ID while an event is disabled, so enabling later still sends once", () => {
+      vi.stubEnv("VITE_META_CONVERSIONS", "");
+      const env = setup("/contact");
+      const details: Record<string, unknown> = {};
+      const eventId = withLeadEventId("contact", details);
+      recordLeadSubmission(true, "contact", details, vi.fn(() => true));
+      expect(env.tracks("Lead")).toEqual([]);
+      enableAll();
+      recordLeadSubmission(true, "contact", details, vi.fn(() => true));
+      recordLeadSubmission(true, "contact", details, vi.fn(() => true));
+      expect(env.tracks("Lead")).toEqual([["track", "Lead", { content_category: "contact" }, { eventID: eventId }]]);
+    });
+
+    it("does not duplicate ViewContent or Contact when React effects re-run", () => {
+      enableAll();
+      const env = setup("/inventory/2019-honda-civic");
+      // StrictMode double effects plus re-renders on the same vehicle page.
+      for (let run = 0; run < 4; run += 1) {
+        trackMetaViewContent(vehicle);
+        trackMetaPageView("/inventory/2019-honda-civic");
+      }
+      expect(env.tracks("ViewContent")).toHaveLength(1);
+      expect(env.tracks("PageView")).toHaveLength(1);
+    });
   });
 
   describe("ViewContent", () => {
@@ -667,6 +797,7 @@ describe("Meta conversion events", () => {
 
   describe("Lead and Schedule", () => {
     const send = () => vi.fn(() => true);
+    beforeEach(() => { enableAll(); });
 
     it("sends Lead for confirmed contact, car-finder, sell and trade submissions", () => {
       const cases: Array<[string, Record<string, unknown>, string]> = [
@@ -866,6 +997,7 @@ describe("Meta conversion events", () => {
 
   describe("privacy of everything sent to Meta", () => {
     it("never includes names, emails, phones, VINs, URLs or raw form data in any conversion call", () => {
+      enableAll();
       const env = setup(`/inventory/2019-honda-civic?utm_source=facebook&fbclid=${fbclid}`);
       let now = 5_000_000;
       vi.spyOn(Date, "now").mockImplementation(() => (now += 2000));

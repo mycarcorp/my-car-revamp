@@ -530,6 +530,33 @@ type MetaEventParams = Record<string, string | number | string[]>;
 
 const EVENT_ID_PATTERN = /^mc_[a-f0-9-]{16,40}$/;
 
+const META_CONVERSION_NAMES: readonly MetaConversionName[] = ["ViewContent", "Lead", "Schedule", "Contact"];
+/**
+ * Lead and Schedule stay off until browser and server (GHL) events are confirmed to deduplicate,
+ * otherwise Meta could count the same submission twice.
+ */
+const DEFAULT_META_CONVERSIONS: ReadonlySet<MetaConversionName> = new Set<MetaConversionName>(["ViewContent", "Contact"]);
+
+/**
+ * Parses a comma-separated VITE_META_CONVERSIONS value. Only exact, case-sensitive event names count.
+ * Anything else (unknown names, wrong case, non-strings, empty or entirely unrecognized values) is ignored,
+ * and when nothing valid remains the defaults apply, so a typo can never enable Lead or Schedule.
+ */
+export function parseMetaConversions(raw: unknown): ReadonlySet<MetaConversionName> {
+  if (typeof raw !== "string" || raw.length > 200) return DEFAULT_META_CONVERSIONS;
+  const enabled = new Set<MetaConversionName>();
+  for (const token of raw.split(",")) {
+    const name = token.trim();
+    const match = META_CONVERSION_NAMES.find((candidate) => candidate === name);
+    if (match) enabled.add(match);
+  }
+  return enabled.size > 0 ? enabled : DEFAULT_META_CONVERSIONS;
+}
+
+export function getEnabledMetaConversions(): ReadonlySet<MetaConversionName> {
+  return parseMetaConversions(import.meta.env["VITE_META_CONVERSIONS"]);
+}
+
 /** Opaque random ID shared by browser and (future) server events for deduplication. Carries no customer data. */
 export function createEventId(): string {
   const webCrypto = (globalThis as { crypto?: Crypto }).crypto;
@@ -543,6 +570,8 @@ export function createEventId(): string {
 /** Every Meta conversion goes through here: consent, safe URL, once per event ID, no customer data. */
 function sendMetaEvent(name: MetaConversionName, params: MetaEventParams, eventId: string): boolean {
   if (typeof window === "undefined") return false;
+  // A disabled event is dropped before the Pixel loads and without consuming its event ID.
+  if (!getEnabledMetaConversions().has(name)) return false;
   if (!metaPageEligible(window.location.pathname)) return suppressMetaPixel();
   if (firedMetaEventIds.has(eventId)) return false;
   const pixel = ensureMetaPixel();
