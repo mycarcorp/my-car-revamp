@@ -1,4 +1,4 @@
-import { describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import {
   createBrowserAnalyticsAdapter,
   createAnalyticsController,
@@ -6,9 +6,11 @@ import {
   getTrackingConsentPreferences,
   getLeadFormType,
   isAnalyticsRoutePublic,
+  isMetaSafeUrl,
   publicCatalogItemId,
   recordFormStart,
   recordLeadSubmission,
+  resetMetaPixelStateForTests,
   sanitizeEvent,
   sanitizePageLocation,
   setTrackingConsentPreferences,
@@ -312,5 +314,255 @@ describe("GA4 event allowlists", () => {
     const send = vi.fn(() => true);
     expect(recordLeadSubmission(false, "finance", {}, send)).toBe(false);
     expect(send).not.toHaveBeenCalled();
+  });
+});
+describe("Meta Pixel URL safety", () => {
+  const origin = "https://mycarcorp.com";
+  const fbclid = "IwAR2xK9aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789_abc-def";
+  const gclid = "Cj0KCQjw-r_BhDdARIsAG8Kj7nXyZabc123_-defGHIjkl";
+
+  it("allows query-free URLs and known advertising parameters with opaque values", () => {
+    for (const path of [
+      "/",
+      "/?",
+      "/search",
+      `/?fbclid=${fbclid}`,
+      `/finance?utm_source=facebook&utm_medium=paid_social&utm_campaign=preapproval_2026_10&fbclid=${fbclid}`,
+      `/search?utm_source=google&utm_medium=cpc&utm_campaign=vla_inventory_2026_10&gclid=${gclid}`,
+      "/?utm_source=fb&utm_medium=paid_social&utm_campaign=120210123456789012&utm_content=Spring%20Sale&utm_term=used+suv",
+      "/?utm_campaign=fall-sale-2026-10-24",
+      "/?gbraid=0AAAAAo1234567890abcdef&wbraid=CjQKCAjw1234567890abc&ttclid=E.C.P.AbCdEf12345&msclkid=abcdef1234567890abcdef",
+    ]) {
+      expect(isMetaSafeUrl(`${origin}${path}`), path).toBe(true);
+    }
+  });
+
+  it("rejects unknown keys, repeated keys, empty values and malformed query structure", () => {
+    for (const path of [
+      "/schedule?type=test_drive",
+      "/search?make=Honda",
+      "/?email=private%40example.com",
+      "/?name=Jane+Doe",
+      "/?vin=1HGCM82633A004352",
+      `/?fbclid=${fbclid}&email=private%40example.com`,
+      `/?utm_source=a&utm_source=b`,
+      `/?fbclid=${fbclid}&fbclid=${fbclid}`,
+      "/?utm_source=",
+      "/?utm_source",
+      "/?&utm_source=facebook",
+      "/?utm_source=facebook&",
+      "/?utm%5Fsource=facebook",
+      "/?UTM_SOURCE=facebook",
+    ]) {
+      expect(isMetaSafeUrl(`${origin}${path}`), path).toBe(false);
+    }
+  });
+
+  it("rejects suspicious, encoded and sensitive values in allowed keys", () => {
+    for (const path of [
+      "/?utm_source=private%40example.com",
+      "/?utm_source=private%2540example.com",
+      "/?utm_source=a%252540b.com",
+      "/?utm_content=5405550100",
+      "/?utm_content=540-555-0100",
+      "/?utm_content=540%20555%200100",
+      "/?utm_term=1HGCM82633A004352",
+      "/?utm_term=123-45-6789",
+      "/?utm_term=123%2045%206789",
+      "/?utm_campaign=%3Cscript%3Ealert(1)%3C%2Fscript%3E",
+      "/?utm_campaign=a%2",
+      "/?utm_campaign=jane/doe",
+      `/?utm_campaign=${"a".repeat(257)}`,
+      "/?fbclid=short",
+      "/?fbclid=5405550100",
+      "/?fbclid=abc%40def123456789",
+      "/?fbclid=abc def123456789",
+      `/?gclid=${"a".repeat(257)}`,
+    ]) {
+      expect(isMetaSafeUrl(`${origin}${path}`), path).toBe(false);
+    }
+  });
+
+  it("rejects unsafe paths, fragments, credentials, insecure schemes and unparsable URLs", () => {
+    expect(isMetaSafeUrl(`${origin}/inventory/1HGCM82633A004352?fbclid=${fbclid}`)).toBe(false);
+    expect(isMetaSafeUrl(`${origin}/inventory/private@example.com`)).toBe(false);
+    expect(isMetaSafeUrl(`${origin}/?fbclid=${fbclid}#details`)).toBe(false);
+    expect(isMetaSafeUrl(`${origin}/#access_token=secret`)).toBe(false);
+    expect(isMetaSafeUrl("https://user:pass@mycarcorp.com/")).toBe(false);
+    expect(isMetaSafeUrl(`http://mycarcorp.com/?fbclid=${fbclid}`)).toBe(false);
+    expect(isMetaSafeUrl("not a url")).toBe(false);
+    expect(isMetaSafeUrl("")).toBe(false);
+  });
+});
+
+describe("Meta Pixel PageView tracking", () => {
+  const origin = "https://mycarcorp.com";
+  const fbclid = "IwAR2xK9aBcDeFgHiJkLmNoPqRsTuVwXyZ0123456789_abc-def";
+
+  function setup(options: { meta?: "granted" | "denied" | "unknown"; analytics?: "granted" | "denied" | "unknown"; path?: string } = {}) {
+    const data = new Map<string, string>([
+      ["mycar.trackingConsent.v1", JSON.stringify({ analytics: options.analytics ?? "denied", meta: options.meta ?? "granted" })],
+    ]);
+    const appendChild = vi.fn();
+    const win: Record<string, unknown> = {
+      localStorage: {
+        getItem: (key: string) => data.get(key) ?? null,
+        setItem: (key: string, value: string) => { data.set(key, value); },
+      },
+      location: { origin, href: `${origin}${options.path ?? "/"}` },
+    };
+    vi.stubGlobal("window", win);
+    vi.stubGlobal("document", {
+      querySelector: vi.fn(() => null),
+      createElement: vi.fn(() => ({ async: false, src: "", dataset: {} as Record<string, string> })),
+      head: { appendChild },
+    });
+    return {
+      appendChild,
+      data,
+      go: (path: string) => { (win["location"] as { href: string }).href = `${origin}${path}`; },
+      calls: () => ((win["fbq"] as { queue?: unknown[][] } | undefined)?.queue ?? []).map((entry) => [...entry]),
+      count: (name: string) => ((win["fbq"] as { queue?: unknown[][] } | undefined)?.queue ?? []).filter((entry) => entry[0] === "track" && entry[1] === name).length,
+    };
+  }
+
+  beforeEach(() => resetMetaPixelStateForTests());
+  afterEach(() => {
+    vi.unstubAllGlobals();
+    resetMetaPixelStateForTests();
+  });
+
+  it("sends exactly one PageView on a paid landing URL, with auto-configuration disabled before init", () => {
+    const env = setup({ path: `/?utm_source=facebook&utm_medium=paid_social&fbclid=${fbclid}` });
+    expect(trackMetaPageView("/")).toBe(true);
+    expect(env.calls()).toEqual([
+      ["set", "autoConfig", false, "913977571315979"],
+      ["set", "smartSetup", false, "913977571315979"],
+      ["init", "913977571315979"],
+      ["consent", "grant"],
+      ["track", "PageView"],
+    ]);
+    expect(env.appendChild).toHaveBeenCalledTimes(1);
+  });
+
+  it("sends only the bare PageView: no custom data, URL, or customer values reach the Pixel calls", () => {
+    const env = setup({ path: `/?fbclid=${fbclid}` });
+    trackMetaPageView("/");
+    const trackCall = env.calls().find((entry) => entry[0] === "track");
+    expect(trackCall).toEqual(["track", "PageView"]);
+    const serialized = JSON.stringify(env.calls());
+    expect(serialized).not.toContain(fbclid);
+    expect(serialized).not.toContain("mycarcorp.com");
+  });
+
+  it("does not load or fire the Pixel on unsafe URLs even with Meta consent", () => {
+    for (const path of ["/schedule?type=test_drive", "/search?make=Honda", `/?fbclid=${fbclid}&email=private%40example.com`, "/?utm_term=1HGCM82633A004352", "/?utm_source=facebook#frag"]) {
+      const env = setup({ path });
+      expect(trackMetaPageView(path.split(/[?#]/)[0]!)).toBe(false);
+      expect(env.calls()).toEqual([]);
+      expect(env.appendChild).not.toHaveBeenCalled();
+      resetMetaPixelStateForTests();
+      vi.unstubAllGlobals();
+    }
+  });
+
+  it("does not fire for redacted paths or private routes", () => {
+    const vin = "1HGCM82633A004352";
+    const env = setup({ path: `/inventory/${vin}` });
+    expect(trackMetaPageView(`/inventory/${vin}`)).toBe(false);
+    env.go("/admin/marketing");
+    expect(trackMetaPageView("/admin/marketing")).toBe(false);
+    env.go("/my/purchases/123");
+    expect(trackMetaPageView("/my/purchases/123")).toBe(false);
+    expect(env.calls()).toEqual([]);
+  });
+
+  it("requires explicit Meta consent and ignores GA4 consent in both directions", () => {
+    for (const meta of ["unknown", "denied"] as const) {
+      const env = setup({ meta, analytics: "granted", path: `/?fbclid=${fbclid}` });
+      expect(trackMetaPageView("/")).toBe(false);
+      expect(env.calls()).toEqual([]);
+      expect(env.appendChild).not.toHaveBeenCalled();
+      resetMetaPixelStateForTests();
+      vi.unstubAllGlobals();
+    }
+    const env = setup({ meta: "granted", analytics: "denied" });
+    expect(trackMetaPageView("/")).toBe(true);
+    expect(env.count("PageView")).toBe(1);
+  });
+
+  it("does not let a GA4 consent change trigger Meta", () => {
+    const env = setup({ meta: "denied", analytics: "unknown" });
+    setTrackingConsentPreferences({ analytics: "granted", meta: "denied" }, "/");
+    expect(env.calls()).toEqual([]);
+    expect(env.count("PageView")).toBe(0);
+  });
+
+  it("counts one PageView per page: route changes add one each, repeated calls for the same page add none", () => {
+    const env = setup({ path: `/?fbclid=${fbclid}` });
+    expect(trackMetaPageView("/")).toBe(true);
+    expect(trackMetaPageView("/")).toBe(false);
+    expect(env.count("PageView")).toBe(1);
+
+    env.go("/search");
+    expect(trackMetaPageView("/search")).toBe(true);
+    expect(trackMetaPageView("/search")).toBe(false);
+    expect(env.count("PageView")).toBe(2);
+
+    env.go("/finance");
+    expect(trackMetaPageView("/finance")).toBe(true);
+    expect(env.count("PageView")).toBe(3);
+
+    // One script, one init and one auto-config disable no matter how many pages were viewed.
+    expect(env.appendChild).toHaveBeenCalledTimes(1);
+    expect(env.calls().filter((entry) => entry[0] === "init")).toHaveLength(1);
+    expect(env.calls().filter((entry) => entry[0] === "set" && entry[1] === "autoConfig")).toHaveLength(1);
+    expect(env.calls().filter((entry) => entry[0] === "consent" && entry[1] === "grant")).toHaveLength(1);
+  });
+
+  it("does not duplicate PageView when preferences are re-saved on a page that already fired", () => {
+    const env = setup({ meta: "granted", analytics: "denied" });
+    expect(trackMetaPageView("/")).toBe(true);
+    setTrackingConsentPreferences({ analytics: "granted", meta: "granted" }, "/");
+    setTrackingConsentPreferences({ analytics: "denied", meta: "granted" }, "/");
+    expect(env.count("PageView")).toBe(1);
+  });
+
+  it("fires one PageView when Meta consent is newly granted from the consent manager", () => {
+    const env = setup({ meta: "unknown", analytics: "unknown", path: `/?utm_source=facebook&fbclid=${fbclid}` });
+    expect(trackMetaPageView("/")).toBe(false);
+    setTrackingConsentPreferences({ analytics: "denied", meta: "granted" }, "/");
+    expect(env.count("PageView")).toBe(1);
+    expect(env.calls()[0]).toEqual(["set", "autoConfig", false, "913977571315979"]);
+  });
+
+  it("revokes Pixel consent on an unsafe page and re-grants when a safe page is viewed again", () => {
+    const env = setup({ path: `/?fbclid=${fbclid}` });
+    expect(trackMetaPageView("/")).toBe(true);
+
+    env.go("/search?make=Honda");
+    expect(trackMetaPageView("/search")).toBe(false);
+    expect(env.calls().filter((entry) => entry[0] === "consent" && entry[1] === "revoke")).toHaveLength(1);
+    expect(env.count("PageView")).toBe(1);
+
+    // Further suppressed calls do not repeat the revoke.
+    expect(trackMetaPageView("/search")).toBe(false);
+    expect(env.calls().filter((entry) => entry[0] === "consent" && entry[1] === "revoke")).toHaveLength(1);
+
+    env.go("/");
+    expect(trackMetaPageView("/")).toBe(true);
+    expect(env.calls().filter((entry) => entry[0] === "consent" && entry[1] === "grant")).toHaveLength(2);
+    expect(env.count("PageView")).toBe(2);
+  });
+
+  it("revokes when Meta consent is withdrawn and counts a fresh PageView if it is granted again", () => {
+    const env = setup({ path: "/" });
+    expect(trackMetaPageView("/")).toBe(true);
+    env.data.set("mycar.trackingConsent.v1", JSON.stringify({ analytics: "denied", meta: "denied" }));
+    expect(trackMetaPageView("/")).toBe(false);
+    expect(env.calls().filter((entry) => entry[0] === "consent" && entry[1] === "revoke")).toHaveLength(1);
+    env.data.set("mycar.trackingConsent.v1", JSON.stringify({ analytics: "denied", meta: "granted" }));
+    expect(trackMetaPageView("/")).toBe(true);
+    expect(env.count("PageView")).toBe(2);
   });
 });
