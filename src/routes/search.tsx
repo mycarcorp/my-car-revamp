@@ -22,6 +22,7 @@ import { allVehiclesQuery, type VehicleWithPhotos } from "@/lib/queries";
 import { isVideoUrl } from "@/lib/vehicle-media";
 import { formatMiles, formatUsd, vehicleTitle } from "@/lib/format";
 import { publicCatalogItemId, trackAnalyticsEvent } from "@/lib/analytics";
+import { searchResultsRobots, vehiclePhotoAlt } from "@/lib/vehicle-seo";
 
 /**
  * My Car inventory page: replace the file currently registering /search.
@@ -266,7 +267,7 @@ const InventoryListingCard = memo(function InventoryListingCard({ vehicle, prior
               <div key={photo.id || `${vehicle.id}-${index}`} className="h-full w-full shrink-0 grow-0 basis-full">
                 {visitedPhotos.includes(index) && <img
                   src={photo.url}
-                  alt={photo.alt || `${title} — photo ${index + 1}`}
+                  alt={vehiclePhotoAlt(vehicle, photo.alt, index)}
                   loading={priority && index === 0 ? "eager" : "lazy"}
                   fetchPriority={priority && index === 0 ? "high" : "auto"}
                   decoding="async"
@@ -373,8 +374,13 @@ export const Route = createFileRoute("/search")({
   loader: ({ context }) => context.queryClient.ensureQueryData(allVehiclesQuery()),
   errorComponent: () => <div role="alert" className="mx-auto max-w-5xl px-4 py-16">Unable to load inventory. Please refresh or contact My Car.</div>,
   notFoundComponent: () => <div className="mx-auto max-w-5xl px-4 py-16">Inventory unavailable.</div>,
-  head: () => ({
+  // The plain page is the indexable inventory list. Filtered, sorted, searched and paged variants are
+  // near-duplicates of it, so they are noindex (links are still followed) and carry no canonical.
+  head: ({ match }) => {
+    const robots = searchResultsRobots(match.search as Record<string, unknown>);
+    return {
     meta: [
+      ...(robots ? [{ name: "robots", content: robots }] : []),
       { title: "Used Cars for Sale in Fredericksburg, VA | My Car" },
       {
         name: "description",
@@ -387,8 +393,9 @@ export const Route = createFileRoute("/search")({
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
     ],
-    links: [{ rel: "canonical", href: "https://mycarcorp.com/search" }],
-  }),
+    links: robots ? [] : [{ rel: "canonical", href: "https://mycarcorp.com/search" }],
+    };
+  },
   component: SearchPage,
 });
 

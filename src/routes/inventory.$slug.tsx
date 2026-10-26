@@ -1,5 +1,5 @@
 import { createFileRoute, Link, notFound } from "@tanstack/react-router";
-import { descriptionToPlainText, descriptionToSafeHtml, extractDescriptionFaqs } from "@/lib/vehicle-description";
+import { descriptionToSafeHtml, extractDescriptionFaqs } from "@/lib/vehicle-description";
 import { trackEvent } from "@/lib/visitor-personalization";
 import { publicCatalogItemId, trackAnalyticsEvent, trackMetaViewContent } from "@/lib/analytics";
 import { useQuery } from "@tanstack/react-query";
@@ -20,7 +20,16 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { isVideoUrl, parseVideoAlt, videoPublicLabel } from "@/lib/vehicle-media";
-import { buildBreadcrumbJsonLd, dealerReference, jsonLdString } from "@/lib/seo";
+import { buildBreadcrumbJsonLd, jsonLdString } from "@/lib/seo";
+import {
+  buildVehicleJsonLd,
+  getVehicleDescription,
+  getVehicleImages,
+  getVehicleUrl,
+  vehiclePhotoAlt,
+  vehicleSeoDescription,
+  vehicleSeoTitle,
+} from "@/lib/vehicle-seo";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -36,112 +45,7 @@ import {
   type VehicleWithPhotos,
 } from "@/lib/queries";
 
-const SITE_URL = "https://mycarcorp.com";
 const RelatedVehicleCard = lazy(() => import("@/components/VehicleCard").then((module) => ({ default: module.VehicleCard })));
-
-/**
- * Build the canonical public URL for a vehicle detail page.
- */
-function getVehicleUrl(slug: string) {
-  return `${SITE_URL}/inventory/${encodeURIComponent(slug)}`;
-}
-
-/**
- * Converts relative MyCar URLs into absolute public URLs.
- *
- * Examples:
- * /api/public/vehicle-photos/example/photo-1.jpg
- * becomes:
- * https://mycarcorp.com/api/public/vehicle-photos/example/photo-1.jpg
- *
- * Existing absolute URLs remain unchanged.
-
-
- */
-function toAbsoluteUrl(url: string) {
-  const cleanUrl = url.trim();
-
-  if (!cleanUrl) {
-    return null;
-  }
-
-  if (cleanUrl.startsWith("https://") || cleanUrl.startsWith("http://")) {
-    return cleanUrl;
-  }
-
-  if (cleanUrl.startsWith("//")) {
-    return `https:${cleanUrl}`;
-  }
-
-  if (cleanUrl.startsWith("/")) {
-    return `${SITE_URL}${cleanUrl}`;
-  }
-
-  return `${SITE_URL}/${cleanUrl}`;
-}
-
-/**
- * Returns actual vehicle image URLs for SEO/schema.
- *
- * Video URLs are excluded because Product.image should contain
- * vehicle images rather than video files.
- *
- * Relative vehicle image URLs are converted to absolute URLs so
- * Google can crawl them correctly.
- */
-function getVehicleImages(vehicle: VehicleWithPhotos) {
-  return [...(vehicle.vehicle_photos ?? [])]
-    .sort((a, b) => a.position - b.position)
-    .map((photo) => {
-      if (typeof photo.url !== "string") {
-        return null;
-      }
-
-      const absoluteUrl = toAbsoluteUrl(photo.url);
-
-      if (!absoluteUrl) {
-        return null;
-      }
-
-      if (isVideoUrl(absoluteUrl)) {
-        return null;
-      }
-
-      return absoluteUrl;
-    })
-    .filter((url): url is string => Boolean(url));
-}
-
-/**
- * Use the inventory description when one exists.
- * Otherwise provide a factual fallback based only on vehicle data.
- */
-function getVehicleDescription(vehicle: VehicleWithPhotos) {
-  const customDescription = typeof vehicle.description === "string" ? vehicle.description.trim() : "";
-
-  if (customDescription) {
-    return descriptionToPlainText(customDescription);
-  }
-
-  const mileage = vehicle.mileage != null ? formatMiles(vehicle.mileage) : null;
-
-  const parts = [
-    `Used ${vehicleTitle(vehicle)}`,
-    mileage ? `with ${mileage}` : null,
-    "available at MyCar in Fredericksburg, VA.",
-  ].filter(Boolean);
-
-  return parts.join(" ");
-}
-/**
- * Ensure Google always receives a valid ISO currency code.
- * MyCar inventory is priced in USD, so USD is the fallback.
- */
-function getPriceCurrency(vehicle: VehicleWithPhotos) {
-  const currency = typeof vehicle.currency === "string" ? vehicle.currency.trim().toUpperCase() : "";
-
-  return /^[A-Z]{3}$/.test(currency) ? currency : "USD";
-}
 
 export const Route = createFileRoute("/inventory/$slug")({
   loader: async ({ context, params }) => {
@@ -174,11 +78,9 @@ export const Route = createFileRoute("/inventory/$slug")({
 
     const v = loaderData.vehicle as VehicleWithPhotos;
 
-    const title = `${vehicleTitle(v)} for sale in Fredericksburg, VA — MyCar`;
+    const title = vehicleSeoTitle(v);
 
-    const description = `${vehicleTitle(v)} with ${formatMiles(v.mileage)} at ${formatUsd(
-      Number(v.price_cents),
-    )}. Stock #${v.stock_number}. VIN ${v.vin}.`;
+    const description = vehicleSeoDescription(v);
 
     const canonicalUrl = getVehicleUrl(loaderData.slug);
 
@@ -271,21 +173,11 @@ function VehicleDetail() {
 
   const photos = useMemo(() => [...(v.vehicle_photos ?? [])].sort((a, b) => a.position - b.position).map((photo) => ({ ...photo, id: photo.id || photo.url })), [v.vehicle_photos]);
 
-  /*
-   * These are absolute, crawlable image URLs used by
-   * Product/Vehicle structured data.
-   */
-  const schemaImages = useMemo(() => getVehicleImages(v), [v.vehicle_photos]);
-
   const canonicalUrl = getVehicleUrl(slug);
 
   const schemaDescription = useMemo(() => getVehicleDescription(v), [v]);
   const descriptionHtml = useMemo(() => descriptionToSafeHtml(v.description), [v.description]);
   const descriptionFaqs = useMemo(() => extractDescriptionFaqs(descriptionHtml), [descriptionHtml]);
-
-  const priceCurrency = getPriceCurrency(v);
-
-  const numericPrice = Number(v.price_cents) / 100;
 
   useEffect(() => {
     trackEvent("vehicle_view", {
@@ -408,94 +300,8 @@ function VehicleDetail() {
     ["Combined MPG", v.mpg_combined ? String(v.mpg_combined) : "—"],
   ];
 
-   /*
-   * Vehicle + Product structured data.
-   *
-   * Important:
-   * - Uses actual vehicle inventory data.
-   * - Uses absolute vehicle image URLs.
-   * - Excludes videos from Product.image.
-   * - Includes USD fallback for priceCurrency.
-   * - Does not fabricate shipping or return policies.
-   */
-  const jsonLd = {
-    "@context": "https://schema.org",
-
-    "@type": ["Product", "Vehicle"],
-
-    "@id": `${canonicalUrl}#vehicle`,
-
-    url: canonicalUrl,
-
-    name: vehicleTitle(v),
-
-    description: schemaDescription,
-
-    /*
-     * Google Merchant/Product structured data needs actual
-     * product images. These URLs are now always absolute.
-     */
-    ...(schemaImages.length > 0
-      ? {
-          image: schemaImages,
-        }
-      : {}),
-
-    sku: v.stock_number,
-
-    vehicleIdentificationNumber: v.vin,
-
-    brand: {
-      "@type": "Brand",
-      name: v.make,
-    },
-    model: v.model,
-
-    vehicleModelDate: String(v.year),
-
-    bodyType: v.body_style,
-
-    mileageFromOdometer: {
-      "@type": "QuantitativeValue",
-      value: Number(v.mileage),
-      unitCode: "SMI",
-    },
-
-    ...(v.exterior_color
-      ? {
-          color: v.exterior_color,
-        }
-      : {}),
-
-     ...(v.fuel_type
-      ? {
-          fuelType: v.fuel_type,
-        }
-      : {}),
-
-    ...(v.transmission
-      ? {
-          vehicleTransmission: v.transmission,
-        }
-      : {}),
-
-    offers: {
-      "@type": "Offer",
-
-      url: canonicalUrl,
-
-      price: Number.isFinite(numericPrice) ? numericPrice.toFixed(2) : undefined,
-
-      priceCurrency,
-
-      availability: v.status === "available" ? "https://schema.org/InStock" : "https://schema.org/LimitedAvailability",
-
-      itemCondition: "https://schema.org/UsedCondition",
-
-      // The dealership is defined once site-wide (root layout); this refers to it so details never conflict.
-      seller: dealerReference(),
-    },
-  };
+   // Product + Vehicle structured data: only known values are emitted (see vehicle-seo.ts).
+  const jsonLd = buildVehicleJsonLd(v, slug);
 
   const walkaroundVideos = photos
     .filter((p) => isVideoUrl(p.url) && !failedPhotoIds.includes(p.id))
@@ -665,7 +471,7 @@ function VehicleDetail() {
                   <img
                     key={currentMedia.url}
                     src={currentMedia.url}
-                    alt={currentMedia.alt ?? `${vehicleTitle(v)} photo ${active + 1}`}
+                    alt={vehiclePhotoAlt(v, currentMedia.alt, active)}
                     loading="eager"
                     fetchPriority={active === 0 ? "high" : "auto"}
                     decoding="async"
@@ -737,7 +543,7 @@ function VehicleDetail() {
                   ) : (
                     <img
                       src={photo.url}
-                      alt={photo.alt ?? `Photo ${index + 1}`}
+                      alt={vehiclePhotoAlt(v, photo.alt, index)}
                       loading="lazy"
                       decoding="async"
                       className="size-full object-cover"
@@ -1104,6 +910,19 @@ function VehicleDetail() {
                 ) : (
                   <p className="mt-5 text-sm text-slate-500">Browse available vehicles in our inventory.</p>
                 )}
+                <p className="mt-6 text-sm text-slate-600">
+                  <Link to="/search" className="font-semibold text-[#0969c5] hover:underline">
+                    Browse all used cars in Fredericksburg, VA
+                  </Link>
+                  {" · "}
+                  <Link to="/sell" className="font-semibold text-[#0969c5] hover:underline">
+                    Sell or trade your car
+                  </Link>
+                  {" · "}
+                  <Link to="/schedule" className="font-semibold text-[#0969c5] hover:underline">
+                    Schedule a visit
+                  </Link>
+                </p>
               </section>
             )}
           </div>
@@ -1177,7 +996,7 @@ function VehicleDetail() {
                   <img
                     key={currentMedia.url}
                     src={currentMedia.url}
-                    alt={currentMedia.alt ?? vehicleTitle(v)}
+                    alt={vehiclePhotoAlt(v, currentMedia.alt, active)}
                     className="max-h-full max-w-full object-contain"
                   />
                 ))}
@@ -1217,7 +1036,7 @@ function VehicleDetail() {
                       <Play />
                     </span>
                   ) : (
-                    <img src={photos[index]?.url} alt={`Photo ${index + 1}`} loading="lazy" decoding="async" className="size-full object-cover" />
+                    <img src={photos[index]?.url} alt={vehiclePhotoAlt(v, photos[index]?.alt, index)} loading="lazy" decoding="async" className="size-full object-cover" />
                   )}
                 </button>
               ))}

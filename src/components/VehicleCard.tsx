@@ -4,6 +4,7 @@ import { Camera, ChevronLeft, ChevronRight, Heart, Images, Play, TrendingDown, X
 import { isVideoUrl } from "@/lib/vehicle-media";
 import { Badge } from "@/components/ui/badge";
 import { formatMiles, formatUsd, monthlyPayment, vehicleTitle } from "@/lib/format";
+import { vehiclePhotoAlt } from "@/lib/vehicle-seo";
 import type { VehicleWithPhotos, SiteSettings } from "@/lib/queries";
 import { GetStartedButton } from "@/components/GetStartedButton";
 
@@ -203,7 +204,7 @@ export function VehicleCard({
         <img
           key={active.url}
           src={active.url}
-          alt={active.alt || vehicleTitle(vehicle)}
+          alt={vehiclePhotoAlt(vehicle, active.alt, currentIndex)}
           loading={large ? "eager" : "lazy"}
           decoding="async"
           onError={() => markFailed(active.url)}

@@ -277,8 +277,9 @@ describe("dealership structured data", () => {
   });
 
   it("vehicle pages refer to the one dealer entity instead of redefining it", () => {
-    const vdp = read("src/routes/inventory.$slug.tsx");
-    expect(vdp).toContain("seller: dealerReference()");
+    // The seller reference now lives in the shared vehicle schema builder that the page calls.
+    expect(read("src/routes/inventory.$slug.tsx")).toContain("buildVehicleJsonLd(v, slug)");
+    expect(read("src/lib/vehicle-seo.ts")).toContain("seller: dealerReference()");
     expect(dealerReference()).toMatchObject({ "@id": DEALER_ID, name: "My Car" });
   });
 });
