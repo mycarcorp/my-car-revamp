@@ -2,6 +2,7 @@ import { createFileRoute } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import {
+  AlertTriangle,
   CalendarDays,
   CalendarCheck,
   Car,
@@ -31,6 +32,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { supabase } from "@/integrations/supabase/app-client";
 import { listCustomers } from "@/lib/admin-customers.functions";
 import { listLeads, type AdminLeadRow } from "@/lib/admin-leads.functions";
+import { getGhlDeliveryStatus, needsGhlFollowUp } from "@/lib/ghl-delivery-status";
 
 export const Route = createFileRoute("/admin/customers")({
   component: AdminCustomers,
@@ -453,6 +455,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
     return new Date(now.getFullYear(), now.getMonth(), 1);
   });
   const [search, setSearch] = useState("");
+  const [followUpOnly, setFollowUpOnly] = useState(false);
   const [selectedLead, setSelectedLead] = useState<AdminLeadRow | null>(null);
   const [deletingLeadId, setDeletingLeadId] = useState<string | number | null>(null);
 
@@ -512,9 +515,11 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
 
   const filtered = useMemo(() => {
     const needle = search.trim().toLowerCase();
+    const now = Date.now();
 
     return leads.filter((lead) => {
       if (!matchesLeadType(lead, type)) return false;
+      if (followUpOnly && !needsGhlFollowUp(lead, now)) return false;
       if (selectedCalendarDate) {
         if (leadDateKey(lead) !== selectedCalendarDate) return false;
       } else if (!matchesDateFilter(lead, dateFilter)) {
@@ -530,6 +535,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
         getPreferredDate(lead),
         getPreferredTime(lead),
         lead.status || "new",
+        getGhlDeliveryStatus(lead, now).label,
         lead.created_at ? formatLongDate(lead.created_at) : "—",
       ]
         .filter(Boolean)
@@ -537,7 +543,13 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
         .toLowerCase()
         .includes(needle);
     });
-  }, [leads, type, dateFilter, selectedCalendarDate, search]);
+  }, [leads, type, dateFilter, selectedCalendarDate, search, followUpOnly]);
+
+  const followUpCount = useMemo(() => {
+    const now = Date.now();
+
+    return leads.filter((lead) => needsGhlFollowUp(lead, now)).length;
+  }, [leads]);
 
   const countFor = (key: LeadFilterType) => leads.filter((lead) => matchesLeadType(lead, key)).length;
 
@@ -682,19 +694,38 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
               <p className="mt-1 text-sm text-muted-foreground">Select a card to filter the customer submissions.</p>
             </div>
 
-            {activeOverviewKey || selectedCalendarDate ? (
+            <div className="flex flex-wrap items-center gap-3">
               <button
                 type="button"
-                onClick={() => {
-                  setType("all");
-                  setDateFilter("all");
-                  setSelectedCalendarDate(null);
-                }}
-                className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                onClick={() => setFollowUpOnly((value) => !value)}
+                aria-pressed={followUpOnly}
+                title="Leads whose delivery to GoHighLevel failed, is unconfirmed, or stalled while sending. Read-only: nothing is resent."
+                className={`inline-flex h-9 items-center gap-2 rounded-md border px-3 text-sm font-medium transition-colors focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring ${
+                  followUpOnly
+                    ? "border-[#F49923] bg-[#F49923] text-black"
+                    : "border-input bg-background text-foreground hover:border-primary/40"
+                }`}
               >
-                Clear filter
+                <AlertTriangle className="size-4" aria-hidden="true" />
+                Needs GHL Follow-up
+                <span className="rounded-full bg-black/10 px-2 text-xs">{isLoading ? "—" : followUpCount.toLocaleString()}</span>
               </button>
-            ) : null}
+
+              {activeOverviewKey || selectedCalendarDate || followUpOnly ? (
+                <button
+                  type="button"
+                  onClick={() => {
+                    setType("all");
+                    setDateFilter("all");
+                    setSelectedCalendarDate(null);
+                    setFollowUpOnly(false);
+                  }}
+                  className="text-sm font-medium text-muted-foreground transition-colors hover:text-foreground"
+                >
+                  Clear filter
+                </button>
+              ) : null}
+            </div>
           </div>
 
           <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-4 xl:grid-cols-8">
@@ -760,7 +791,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
             <Users className="mx-auto size-8 text-muted-foreground/60" />
             <p className="mt-3 font-medium">No customer submissions found</p>
             <p className="mt-1 text-sm text-muted-foreground">
-              Try changing the request type, calendar filter, or search term.
+              Try changing the request type, calendar filter, GHL follow-up filter, or search term.
             </p>
           </div>
         ) : (
@@ -808,6 +839,11 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
                             label="Submitted"
                             value={lead.created_at ? formatLongDate(lead.created_at) : "—"}
                           />
+
+                          <div>
+                            <p className="text-muted-foreground">GHL delivery</p>
+                            <GhlDeliveryBadge lead={lead} className="mt-1" />
+                          </div>
                         </div>
                       </div>
                     </div>
@@ -819,14 +855,15 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
             </div>
 
             <div className="hidden overflow-x-auto md:block">
-              <table className="w-full min-w-[1050px] table-fixed text-left text-sm">
+              <table className="w-full min-w-[1150px] table-fixed text-left text-sm">
                 <colgroup>
-                  <col className="w-[21%]" />
+                  <col className="w-[18%]" />
+                  <col className="w-[11%]" />
+                  <col className="w-[12%]" />
                   <col className="w-[13%]" />
-                  <col className="w-[14%]" />
-                  <col className="w-[15%]" />
-                  <col className="w-[10%]" />
-                  <col className="w-[10%]" />
+                  <col className="w-[8%]" />
+                  <col className="w-[9%]" />
+                  <col className="w-[12%]" />
                   <col className="w-[13%]" />
                   <col className="w-[4%]" />
                 </colgroup>
@@ -839,6 +876,7 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
                     <th className="px-4 py-3 font-medium">Date</th>
                     <th className="px-4 py-3 font-medium">Time</th>
                     <th className="px-4 py-3 font-medium">Status</th>
+                    <th className="px-4 py-3 font-medium">GHL delivery</th>
                     <th className="px-4 py-3 font-medium">Submitted</th>
                     <th className="px-4 py-3">
                       <span className="sr-only">Open</span>
@@ -903,6 +941,10 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
                           </Badge>
                         </td>
 
+                        <td className="overflow-hidden px-4 py-3">
+                          <GhlDeliveryBadge lead={lead} />
+                        </td>
+
                         <td className="truncate px-4 py-3 text-muted-foreground">
                           {lead.created_at ? formatLongDate(lead.created_at) : "—"}
                         </td>
@@ -950,6 +992,26 @@ function LeadsSection({ accessToken, accounts }: { accessToken: string; accounts
         }}
       />
     </>
+  );
+}
+
+/** Read-only GoHighLevel delivery badge: fixed labels only, never HTTP codes, errors or URLs. */
+function GhlDeliveryBadge({ lead, className = "" }: { lead: AdminLeadRow; className?: string }) {
+  const status = getGhlDeliveryStatus(lead);
+
+  if (status.kind === "not_applicable") return <span className={`text-muted-foreground ${className}`}>—</span>;
+
+  const tone =
+    status.kind === "delivered"
+      ? "border-[#809C61]/50 bg-[#809C61]/12 text-foreground"
+      : status.needsFollowUp
+        ? "border-[#D25B4C]/50 bg-[#D25B4C]/12 text-foreground"
+        : "text-muted-foreground";
+
+  return (
+    <Badge variant="outline" title={status.hint} className={`max-w-full truncate ${tone} ${className}`}>
+      {status.label}
+    </Badge>
   );
 }
 
