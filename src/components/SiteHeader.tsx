@@ -1,6 +1,6 @@
 import { Link, useNavigate, useRouterState } from "@tanstack/react-router";
 import { lazy, Suspense, useEffect, useState } from "react";
-import { Car, ClipboardList, Heart, LayoutDashboard, LogOut, Menu, Settings, User2, X } from "lucide-react";
+import { Car, ClipboardList, Heart, KeyRound, LayoutDashboard, LogOut, Menu, Settings, User2, X } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
 import { Sheet, SheetContent } from "@/components/ui/sheet";
@@ -22,6 +22,7 @@ const NAV = [
   { to: "/search", label: "Shop inventory" },
   { to: "/finance", label: "Financing" },
   { to: "/sell", label: "Sell or trade" },
+  { to: "/lease-to-own", label: "Lease to Own" },
   { to: "/blog", label: "Blog" },
 ] as const;
 const SignInSheet = lazy(() => import("@/components/SignInSheet").then((module) => ({ default: module.SignInSheet })));
@@ -415,6 +416,13 @@ export function SiteHeader() {
                     <Link to="/my/purchases">
                       <Car className="mr-2 size-4" />
                       My purchases
+                    </Link>
+                  </DropdownMenuItem>
+
+                  <DropdownMenuItem asChild>
+                    <Link to="/lease-to-own/portal">
+                      <KeyRound className="mr-2 size-4" />
+                      Lease to Own
                     </Link>
                   </DropdownMenuItem>
 

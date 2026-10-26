@@ -1,6 +1,6 @@
 import { Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
-import { Facebook, Instagram, Linkedin, Youtube } from "lucide-react";
+import { Facebook, Instagram, Linkedin, Lock, Youtube } from "lucide-react";
 import { siteSettingsQuery, serviceAreasQuery } from "@/lib/queries";
 import { BrandLogo } from "@/components/BrandLogo";
 
@@ -133,6 +133,12 @@ export function SiteFooter() {
             </li>
 
             <li>
+              <Link to="/lease-to-own" className="hover:text-primary">
+                Lease to Own
+              </Link>
+            </li>
+
+            <li>
               <Link to="/schedule" className="hover:text-primary">
                 Book a visit
               </Link>
@@ -196,13 +202,18 @@ export function SiteFooter() {
         <div className="mx-auto flex max-w-7xl flex-wrap items-center justify-between gap-3 px-4 py-6 text-xs text-muted-foreground">
           <span>© {new Date().getFullYear()} My Car Business Services LLC.</span>
 
-          <nav className="flex gap-4">
+          <nav className="flex flex-wrap gap-4">
             <Link to="/privacy" className="hover:text-primary">
               Privacy Policy
             </Link>
 
             <Link to="/terms" className="hover:text-primary">
               Terms and Conditions
+            </Link>
+
+            <Link to="/staff/dms" rel="nofollow" className="inline-flex items-center gap-1 text-muted-foreground/70 hover:text-primary">
+              <Lock className="size-3" aria-hidden="true" />
+              Staff DMS Portal
             </Link>
           </nav>
         </div>
