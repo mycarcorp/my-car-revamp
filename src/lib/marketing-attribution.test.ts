@@ -324,3 +324,35 @@ describe("verified marketing outcomes", () => {
     expect(report.completedPurchases).toMatchObject({ status: "unavailable", count: null, complete: false });
   });
 });
+
+describe("marketing attribution with new sources and channels", () => {
+  const lead = (source: string, extra: Record<string, unknown> = {}): AttributionLeadRow => ({
+    lead_type: "contact",
+    created_at: "2026-10-20T12:00:00Z",
+    details: { lead_source: source, last_touch_source: source, first_touch_source: source, source_evidence: "inferred", ...extra },
+  });
+
+  it("recognizes the new search engine, AI assistant and Microsoft Ads labels instead of Other / Unknown", () => {
+    const labels = ["Bing Organic", "Yahoo Organic", "DuckDuckGo Organic", "Brave Organic", "Ecosia Organic", "ChatGPT", "Perplexity", "Gemini", "Copilot", "Claude", "Microsoft Ads"];
+    const report = aggregateLeadAttribution(labels.map((label) => lead(label)), { startDate: "2026-10-20", endDate: "2026-10-20" }, labels.length, "2026-10-21T00:00:00Z");
+    const sources = report.bySource.map((row) => row.source).sort();
+    expect(sources).toEqual([...labels].sort());
+    expect(sources).not.toContain("Other / Unknown");
+    expect(report.lastTouch.bySource.map((row) => row.source).sort()).toEqual([...labels].sort());
+  });
+
+  it("keeps existing labels and still groups truly unknown sources as Other / Unknown", () => {
+    const report = aggregateLeadAttribution(
+      [lead("Google Organic"), lead("Direct Traffic"), lead("Referral Websites"), lead("Facebook"), lead("Some New Site")],
+      { startDate: "2026-10-20", endDate: "2026-10-20" }, 5, "2026-10-21T00:00:00Z");
+    expect(report.bySource.map((row) => row.source).sort()).toEqual(["Direct Traffic", "Facebook", "Google Organic", "Other / Unknown", "Referral Websites"]);
+  });
+
+  it("reports leads saved with and without channel fields identically", () => {
+    const older = lead("Google Organic");
+    const newer = lead("Google Organic", { channel: "organic_search", first_touch_channel: "organic_search", last_touch_channel: "organic_search", msclkid: "" });
+    const report = aggregateLeadAttribution([older, newer], { startDate: "2026-10-20", endDate: "2026-10-20" }, 2, "2026-10-21T00:00:00Z");
+    expect(report.bySource).toMatchObject([{ source: "Google Organic", count: 2 }]);
+    expect(report.total).toBe(2);
+  });
+});

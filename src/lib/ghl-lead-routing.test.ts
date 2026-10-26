@@ -233,6 +233,45 @@ describe("website lead routing to GoHighLevel", () => {
     });
   });
 
+  describe("attribution forwarding", () => {
+    const touchFields = {
+      channel: "organic_search",
+      first_touch_channel: "organic_search",
+      last_touch_channel: "ai_assistant",
+      msclkid: "m1",
+      lead_source: "ChatGPT",
+      lead_medium: "ai_referral",
+      first_touch_source: "Google Organic",
+      last_touch_source: "ChatGPT",
+      referrer: "https://chatgpt.com/",
+      landing_page: "https://mycarcorp.com/?utm_source=chatgpt.com",
+    };
+
+    it.each(["contact", "trade", "appointment", "availability", "finance"])("forwards channel, first/last touch channel and msclkid for %s leads", async (leadType) => {
+      await deliverLeadToGhl(input(leadType, touchFields));
+      expect(bodies()[0]).toMatchObject(touchFields);
+    });
+
+    it("forwards the channel fields for Car Finder too, and keeps the existing event types", async () => {
+      await deliverLeadToGhl(input("contact", { ...carFinderDetails, ...touchFields }));
+      expect(bodies()[0]).toMatchObject({ event_type: "car_finder_request", ...touchFields });
+    });
+
+    it("still forwards only approved attribution keys", async () => {
+      await deliverLeadToGhl(input("contact", { ...touchFields, channel_notes: "x", channelx: "y", source_reason: "z", internal_note: "n", ssn: SSN }));
+      const [payload] = bodies();
+      for (const key of ["channel_notes", "channelx", "source_reason", "internal_note", "ssn"]) expect(payload, key).not.toHaveProperty(key);
+    });
+
+    it("sends older leads without the new fields unchanged", async () => {
+      await deliverLeadToGhl(input("contact", { lead_source: "Google Organic", lead_medium: "organic" }));
+      const [payload] = bodies();
+      expect(payload).toMatchObject({ lead_source: "Google Organic" });
+      expect(payload).not.toHaveProperty("channel");
+      expect(payload).not.toHaveProperty("msclkid");
+    });
+  });
+
   describe("duplicate forwarding", () => {
     it("forwards one submission once even if the call is repeated", async () => {
       const details = { ...carFinderDetails };

@@ -135,8 +135,8 @@ export async function deliverLeadToGhl(data: GhlLeadData): Promise<{ delivered: 
   // Attribution fields (lead_source, utm_*, click IDs, first_/last_touch_*).
   for (const [k, val] of Object.entries(d)) {
     if (
-      /^(lead_source|lead_medium|utm_|referrer$|landing_page$|conversion_page$|first_touch_|last_touch_)/.test(k) ||
-      ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "li_fat_id", "rdt_cid"].includes(k)
+      /^(lead_source|lead_medium|channel$|utm_|referrer$|landing_page$|conversion_page$|first_touch_|last_touch_)/.test(k) ||
+      ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "li_fat_id", "rdt_cid", "msclkid"].includes(k)
     ) {
       base[k] = str(val);
     }
