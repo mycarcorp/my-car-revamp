@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { logSafeError } from "./safe-log";
 
 /** Website lead types that mirror to GoHighLevel, mapped to their event_type. */
 const EVENT_TYPES: Record<string, string> = {
@@ -61,91 +62,105 @@ export const sendLeadToGhl = createServerFn({ method: "POST" })
           : {},
     };
   })
-  .handler(async ({ data }): Promise<{ delivered: boolean; status: number | null }> => {
-    const event_type = EVENT_TYPES[data.leadType]!;
-    const d = data.details;
-    const v = data.vehicle ?? {};
+  .handler(({ data }) => deliverLeadToGhl(data));
 
-    const base: Record<string, unknown> = {
-      event_type,
-      source: "MyCar Website",
-      full_name: data.fullName,
-      ...splitName(data.fullName),
-      email: data.email,
-      phone: data.phone,
-      message: data.message,
-      submitted_at: new Date().toISOString(),
+type GhlLeadData = {
+  leadType: string;
+  fullName: string;
+  email: string;
+  phone: string;
+  message: string;
+  vehicleUrl: string;
+  vehicle: GhlLeadInput["vehicle"];
+  details: Record<string, unknown>;
+};
+
+/** Exported so error handling can be tested without the Start runtime. */
+export async function deliverLeadToGhl(data: GhlLeadData): Promise<{ delivered: boolean; status: number | null }> {
+  const event_type = EVENT_TYPES[data.leadType]!;
+  const d = data.details;
+  const v = data.vehicle ?? {};
+
+  const base: Record<string, unknown> = {
+    event_type,
+    source: "MyCar Website",
+    full_name: data.fullName,
+    ...splitName(data.fullName),
+    email: data.email,
+    phone: data.phone,
+    message: data.message,
+    submitted_at: new Date().toISOString(),
+  };
+  // Attribution fields (lead_source, utm_*, click IDs, first_/last_touch_*).
+  for (const [k, val] of Object.entries(d)) {
+    if (
+      /^(lead_source|lead_medium|utm_|referrer$|landing_page$|conversion_page$|first_touch_|last_touch_)/.test(k) ||
+      ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "li_fat_id", "rdt_cid"].includes(k)
+    ) {
+      base[k] = str(val);
+    }
+  }
+
+  const vehicleFields: Record<string, unknown> = {
+    vehicle_id: str(v.id),
+    vin: str(v.vin),
+    stock_number: str(v.stock_number),
+    year: str(v.year),
+    make: str(v.make),
+    model: str(v.model),
+    trim: str(v.trim),
+    vehicle_url: data.vehicleUrl,
+  };
+
+  let payload: Record<string, unknown>;
+  if (event_type === "financing") {
+    payload = {
+      ...base,
+      ...vehicleFields,
+      vehicle_of_interest: str(d["vehicle_of_interest"]),
+      employment: str(d["employment"]),
+      income_band: str(d["income_band"]),
+      desired_payment: str(d["desired_payment"]),
+      vehicle_price: str(d["vehicle_price"]),
+      down_payment: str(d["down_payment"]),
+      loan_term: str(d["loan_term"]),
+      apr: str(d["apr"]),
     };
-    // Attribution fields (lead_source, utm_*, click IDs, first_/last_touch_*).
-    for (const [k, val] of Object.entries(d)) {
-      if (
-        /^(lead_source|lead_medium|utm_|referrer$|landing_page$|conversion_page$|first_touch_|last_touch_)/.test(k) ||
-        ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "li_fat_id", "rdt_cid"].includes(k)
-      ) {
-        base[k] = str(val);
-      }
-    }
-
-    const vehicleFields: Record<string, unknown> = {
-      vehicle_id: str(v.id),
-      vin: str(v.vin),
-      stock_number: str(v.stock_number),
-      year: str(v.year),
-      make: str(v.make),
-      model: str(v.model),
-      trim: str(v.trim),
-      vehicle_url: data.vehicleUrl,
+  } else if (event_type === "check_availability") {
+    payload = { ...base, ...vehicleFields, vehicle_price: str(v.price) };
+  } else if (event_type === "sell_or_trade") {
+    const ymmParts = str(d["year_make_model"]).trim().split(/\s+/).filter(Boolean);
+    payload = {
+      ...base,
+      vehicle_year: ymmParts[0] ?? "",
+      vehicle_make: ymmParts[1] ?? "",
+      vehicle_model: ymmParts.slice(2).join(" "),
+      year_make_model: str(d["year_make_model"]),
+      vin: str(d["vin"]),
+      license_plate: str(d["plate"]),
+      mileage: str(d["mileage"]),
+      zip: str(d["zip"]),
+      condition: str(d["condition"]),
+      title_status: str(d["title_status"]),
+      intent: str(d["intent"]),
     };
+  } else {
+    payload = {
+      ...base,
+      preferred_date: str(d["preferred_date"]),
+      preferred_time: str(d["preferred_time"]),
+      appointment_type: str(d["appointment_type"]),
+      vehicle_of_interest: str(d["vehicle_of_interest"]),
+      ...vehicleFields,
+    };
+  }
 
-    let payload: Record<string, unknown>;
-    if (event_type === "financing") {
-      payload = {
-        ...base,
-        ...vehicleFields,
-        vehicle_of_interest: str(d["vehicle_of_interest"]),
-        employment: str(d["employment"]),
-        income_band: str(d["income_band"]),
-        desired_payment: str(d["desired_payment"]),
-        vehicle_price: str(d["vehicle_price"]),
-        down_payment: str(d["down_payment"]),
-        loan_term: str(d["loan_term"]),
-        apr: str(d["apr"]),
-      };
-    } else if (event_type === "check_availability") {
-      payload = { ...base, ...vehicleFields, vehicle_price: str(v.price) };
-    } else if (event_type === "sell_or_trade") {
-      const ymmParts = str(d["year_make_model"]).trim().split(/\s+/).filter(Boolean);
-      payload = {
-        ...base,
-        vehicle_year: ymmParts[0] ?? "",
-        vehicle_make: ymmParts[1] ?? "",
-        vehicle_model: ymmParts.slice(2).join(" "),
-        year_make_model: str(d["year_make_model"]),
-        vin: str(d["vin"]),
-        license_plate: str(d["plate"]),
-        mileage: str(d["mileage"]),
-        zip: str(d["zip"]),
-        condition: str(d["condition"]),
-        title_status: str(d["title_status"]),
-        intent: str(d["intent"]),
-      };
-    } else {
-      payload = {
-        ...base,
-        preferred_date: str(d["preferred_date"]),
-        preferred_time: str(d["preferred_time"]),
-        appointment_type: str(d["appointment_type"]),
-        vehicle_of_interest: str(d["vehicle_of_interest"]),
-        ...vehicleFields,
-      };
-    }
-
-    try {
-      const { postToGhl } = await import("./ghl-webhook.server");
-      const status = await postToGhl(payload);
-      return { delivered: status >= 200 && status < 300, status };
-    } catch (error) {
-      console.error("[ghl-webhook] request threw", error);
-      return { delivered: false, status: null };
-    }
-  });
+  try {
+    const { postToGhl } = await import("./ghl-webhook.server");
+    const status = await postToGhl(payload);
+    return { delivered: status >= 200 && status < 300, status };
+  } catch (error) {
+    logSafeError("ghl-webhook.request", error);
+    return { delivered: false, status: null };
+  }
+}

@@ -2,6 +2,8 @@
 // schema of the same Supabase project. The service-role key never leaves the
 // server, and the legacy schema is never exposed to the browser.
 
+import { UpstreamRequestError, upstreamHttpError } from "./safe-log";
+
 type Json = Record<string, unknown>;
 
 function creds() {
@@ -41,8 +43,15 @@ async function rest(
     body: init.body === undefined ? null : JSON.stringify(init.body),
   });
   const text = await res.text();
-  if (!res.ok) throw new Error(`Legacy request failed (${res.status}): ${text.slice(0, 300)}`);
-  return text ? JSON.parse(text) : null;
+  // Never echo the response body: PostgREST errors can quote submitted column values.
+  if (!res.ok) throw upstreamHttpError(res.status, text);
+  if (!text) return null;
+  try {
+    return JSON.parse(text);
+  } catch {
+    // SyntaxError messages quote part of the input, so replace it with a fixed error.
+    throw new UpstreamRequestError({ category: "invalid_response", status: res.status });
+  }
 }
 
 const nz = (v: unknown, max: number): string | null => {
@@ -315,9 +324,8 @@ export async function mirrorFinancingRow(input: MirrorLeadInput): Promise<void> 
   try {
     await rest("mc_financing", { method: "POST", profile: "mycarco_db", body: extended });
   } catch (err) {
-    const message = err instanceof Error ? err.message : "";
-    // PGRST204 = column not found: the extended migration has not been run yet.
-    if (!/PGRST204|column .* does not exist/i.test(message)) throw err;
+    // PGRST204 / 42703 = column not found: the extended migration has not been run yet.
+    if (!(err instanceof UpstreamRequestError && err.missingColumn)) throw err;
     await rest("mc_financing", { method: "POST", profile: "mycarco_db", body: base });
   }
 }

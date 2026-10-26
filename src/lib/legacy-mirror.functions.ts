@@ -1,4 +1,5 @@
 import { createServerFn } from "@tanstack/react-start";
+import { logSafeError } from "./safe-log";
 
 type LeadType = "finance" | "trade" | "appointment" | "contact" | "availability";
 
@@ -39,25 +40,39 @@ export const mirrorLeadToLegacy = createServerFn({ method: "POST" })
           : {},
     };
   })
-  .handler(async ({ data }): Promise<{ mirrored: boolean }> => {
-    const { mirrorContactRow, mirrorFinancingRow, mirrorTradeRow } = await import("./legacy-mirror.server");
-    try {
-      if (data.leadType === "finance") {
-        await mirrorFinancingRow(data);
-      } else if (data.leadType === "trade") {
-        // Full appraisal worksheet + a contact row so the lead stays visible.
-        await mirrorTradeRow(data);
-        await mirrorContactRow(data).catch(() => undefined);
-      } else {
-        await mirrorContactRow(data);
-      }
-      return { mirrored: true };
-    } catch (error) {
-      // Mirroring must never break the customer-facing submission.
-      console.error("[legacy-mirror] lead mirror failed", error);
-      return { mirrored: false };
+  .handler(({ data }) => mirrorLeadSubmission(data));
+
+type MirrorLeadData = {
+  leadType: LeadType;
+  fullName: string;
+  email: string;
+  phone: string | null;
+  message: string | null;
+  vehicleId: string | null;
+  userId: string | null;
+  details: Record<string, unknown>;
+};
+
+/** Exported so error handling can be tested without the Start runtime. */
+export async function mirrorLeadSubmission(data: MirrorLeadData): Promise<{ mirrored: boolean }> {
+  const { mirrorContactRow, mirrorFinancingRow, mirrorTradeRow } = await import("./legacy-mirror.server");
+  try {
+    if (data.leadType === "finance") {
+      await mirrorFinancingRow(data);
+    } else if (data.leadType === "trade") {
+      // Full appraisal worksheet + a contact row so the lead stays visible.
+      await mirrorTradeRow(data);
+      await mirrorContactRow(data).catch(() => undefined);
+    } else {
+      await mirrorContactRow(data);
     }
-  });
+    return { mirrored: true };
+  } catch (error) {
+    // Mirroring must never break the customer-facing submission.
+    logSafeError("legacy-mirror.lead", error);
+    return { mirrored: false };
+  }
+}
 
 /** Mirror a save/unsave of a vehicle into mycarco_db.mc_saved_cars. */
 export const mirrorSavedVehicleToLegacy = createServerFn({ method: "POST" })
@@ -75,7 +90,7 @@ export const mirrorSavedVehicleToLegacy = createServerFn({ method: "POST" })
       if (!user) return { mirrored: false };
       return await mirrorSavedCar(user.id, data.vehicleId, data.action);
     } catch (error) {
-      console.error("[legacy-mirror] saved-car mirror failed", error);
+      logSafeError("legacy-mirror.saved-car", error);
       return { mirrored: false };
     }
   });
