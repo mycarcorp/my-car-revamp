@@ -9,7 +9,7 @@ import { supabase } from "@/integrations/supabase/app-client";
 import { ctaButtonClass } from "@/lib/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { mirrorLeadToLegacy } from "@/lib/legacy-mirror.functions";
-import { sendLeadToGhl } from "@/lib/ghl-webhook.functions";
+import { isGhlForwardedLeadType, sendLeadToGhl } from "@/lib/ghl-webhook.functions";
 import { getAttributionDetails, mergeAttributionDetails } from "@/lib/attribution";
 import { getLeadFormType, recordFormStart, recordLeadSubmission, withLeadEventId } from "@/lib/analytics";
 import type { Database } from "@/integrations/supabase/types";
@@ -126,7 +126,7 @@ export function LeadForm({
       },
     }).catch(() => undefined);
     // Mirror to the CRM webhook, only after the database save succeeded.
-    if (leadType === "finance" || leadType === "availability" || leadType === "trade" || leadType === "appointment") {
+    if (isGhlForwardedLeadType(leadType)) {
       void sendLeadToGhl({
         data: {
           leadType,

@@ -7,7 +7,45 @@ const EVENT_TYPES: Record<string, string> = {
   availability: "check_availability",
   trade: "sell_or_trade",
   appointment: "book_a_visit",
+  // Contact-page and Car Finder inquiries. Car Finder is told apart by details.request_type.
+  contact: "website_contact",
 };
+
+const CAR_FINDER_EVENT_TYPE = "car_finder_request";
+
+/** Car Finder budget: a plain non-negative number, as the form's numeric field allows. Anything else is dropped. */
+function carFinderBudget(value: unknown): string {
+  const text = str(value).trim();
+  return /^\d{1,9}(\.\d{1,2})?$/.test(text) ? text : "";
+}
+
+/** Car Finder financing preference: only the form's three choices. */
+function carFinderFinancingPreference(value: unknown): string {
+  const text = str(value).trim();
+  return text === "yes" || text === "no" || text === "unsure" ? text : "";
+}
+
+/** True for lead types the website mirrors to GoHighLevel. Finance-adjacent and CEO-owned flows have their own senders. */
+export function isGhlForwardedLeadType(leadType: string): boolean {
+  return Object.prototype.hasOwnProperty.call(EVENT_TYPES, leadType);
+}
+
+/** Contact leads split into a general contact and a Car Finder request. */
+export function ghlEventTypeFor(leadType: string, details: Record<string, unknown> = {}): string | null {
+  if (!isGhlForwardedLeadType(leadType)) return null;
+  if (leadType === "contact" && details["request_type"] === "car_finder") return CAR_FINDER_EVENT_TYPE;
+  return EVENT_TYPES[leadType]!;
+}
+
+/**
+ * Per-instance guard against forwarding the same submission twice (for example a repeated client call).
+ * Keyed by the opaque lead_event_id; released again if delivery fails so a later attempt is still possible.
+ */
+const LEAD_EVENT_ID = /^mc_[a-f0-9-]{16,40}$/;
+const forwardedLeadEvents = new Set<string>();
+export function resetGhlForwardingStateForTests(): void {
+  forwardedLeadEvents.clear();
+}
 
 function splitName(fullName: string): { first_name: string; last_name: string } {
   const parts = fullName.trim().split(/\s+/);
@@ -47,7 +85,7 @@ export type GhlLeadInput = {
 export const sendLeadToGhl = createServerFn({ method: "POST" })
   .inputValidator((input: GhlLeadInput) => {
     const leadType = str(input?.leadType);
-    if (!EVENT_TYPES[leadType]) throw new Error("Unsupported lead type");
+    if (!isGhlForwardedLeadType(leadType)) throw new Error("Unsupported lead type");
     return {
       leadType,
       fullName: str(input?.fullName),
@@ -77,9 +115,12 @@ type GhlLeadData = {
 
 /** Exported so error handling can be tested without the Start runtime. */
 export async function deliverLeadToGhl(data: GhlLeadData): Promise<{ delivered: boolean; status: number | null }> {
-  const event_type = EVENT_TYPES[data.leadType]!;
+  const event_type = ghlEventTypeFor(data.leadType, data.details)!;
   const d = data.details;
   const v = data.vehicle ?? {};
+  const rawEventId = d["lead_event_id"];
+  const eventId = typeof rawEventId === "string" && LEAD_EVENT_ID.test(rawEventId) ? rawEventId : null;
+  if (eventId && forwardedLeadEvents.has(eventId)) return { delivered: true, status: null };
 
   const base: Record<string, unknown> = {
     event_type,
@@ -126,6 +167,21 @@ export async function deliverLeadToGhl(data: GhlLeadData): Promise<{ delivered: 
       loan_term: str(d["loan_term"]),
       apr: str(d["apr"]),
     };
+  } else if (event_type === "website_contact") {
+    payload = { ...base };
+  } else if (event_type === CAR_FINDER_EVENT_TYPE) {
+    payload = {
+      ...base,
+      request_type: "car_finder",
+      preferred_make: str(d["preferred_make"]),
+      preferred_model: str(d["preferred_model"]),
+      preferred_year_min: str(d["preferred_year_min"]),
+      preferred_year_max: str(d["preferred_year_max"]),
+      preferred_body_style: str(d["preferred_body_style"]),
+      maximum_budget: carFinderBudget(d["maximum_budget"]),
+      financing_needed: carFinderFinancingPreference(d["financing_needed"]),
+      must_have_features: str(d["must_have_features"]),
+    };
   } else if (event_type === "check_availability") {
     payload = { ...base, ...vehicleFields, vehicle_price: str(v.price) };
   } else if (event_type === "sell_or_trade") {
@@ -155,11 +211,16 @@ export async function deliverLeadToGhl(data: GhlLeadData): Promise<{ delivered: 
     };
   }
 
+  if (eventId) forwardedLeadEvents.add(eventId);
   try {
     const { postToGhl } = await import("./ghl-webhook.server");
     const status = await postToGhl(payload);
-    return { delivered: status >= 200 && status < 300, status };
+    const delivered = status >= 200 && status < 300;
+    if (!delivered && eventId) forwardedLeadEvents.delete(eventId);
+    if (eventId && forwardedLeadEvents.size > 500) forwardedLeadEvents.clear();
+    return { delivered, status };
   } catch (error) {
+    if (eventId) forwardedLeadEvents.delete(eventId);
     logSafeError("ghl-webhook.request", error);
     return { delivered: false, status: null };
   }
