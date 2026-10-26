@@ -100,7 +100,9 @@ function isoOrUndefined(value: string | null | undefined): string | undefined {
  */
 export function buildBlogPostingJsonLd(input: BlogPostingInput, logoUrl?: string): Record<string, unknown> {
   const published = isoOrUndefined(input.datePublished);
-  const modified = isoOrUndefined(input.dateModified) ?? published;
+  let modified = isoOrUndefined(input.dateModified) ?? published;
+  // A modified date earlier than the published date is inconsistent data; fall back to the published date.
+  if (modified && published && modified < published) modified = published;
   const authorName = input.authorName?.trim();
   return {
     "@context": "https://schema.org",
