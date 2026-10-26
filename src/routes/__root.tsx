@@ -12,6 +12,9 @@ import {
 import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
+import logoUrl from "@/assets/mycar-logo.png";
+import socialImage from "@/assets/home-hero-dealership-v3.jpg";
+import { absoluteUrl, buildDealerJsonLd, jsonLdScript } from "@/lib/seo";
 import { reportLovableError } from "../lib/lovable-error-reporting";
 import { AuthProvider } from "@/hooks/useAuth";
 import { SiteHeader } from "@/components/SiteHeader";
@@ -109,8 +112,15 @@ export const Route = createRootRouteWithContext<{ queryClient: QueryClient }>()(
         content: "Shop inventory, get pre-qualified, and value your trade with MyCar.",
       },
       { property: "og:type", content: "website" },
+      { property: "og:site_name", content: "My Car" },
+      { property: "og:locale", content: "en_US" },
+      // Fallback preview image; pages with their own image (vehicles, articles) override it.
+      { property: "og:image", content: absoluteUrl(socialImage) },
       { name: "twitter:card", content: "summary_large_image" },
+      { name: "twitter:image", content: absoluteUrl(socialImage) },
     ],
+    // One dealership entity for the whole site; vehicle and article schema refer to it by @id.
+    scripts: [jsonLdScript(buildDealerJsonLd(logoUrl))],
     links: [
       { rel: "stylesheet", href: appCss },
       { rel: "preconnect", href: "https://fonts.googleapis.com" },

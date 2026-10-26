@@ -6,6 +6,7 @@ export const Route = createFileRoute("/auth")({
   head: () => ({
     meta: [
       { title: "Sign In or Create an Account — MyCar" },
+      { name: "robots", content: "noindex" },
       {
         name: "description",
         content:

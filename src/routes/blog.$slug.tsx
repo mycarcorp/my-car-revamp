@@ -5,6 +5,8 @@ import { publicAutoseoSummaryList, publicAutoseoPost, type AutoseoPost } from "@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { escapeHtml, normalizeCta, normalizeHeadingStyles, sanitizeHtml, type HeadingStyle } from "@/lib/blog-content";
 import { normalizeArticleLists } from "@/lib/article-lists";
+import { buildBlogPostingJsonLd, buildBreadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
+import logoUrl from "@/assets/mycar-logo.png";
 
 const ORIGIN = "https://mycarcorp.com";
 
@@ -458,24 +460,25 @@ export const Route = createFileRoute("/blog/$slug")({
       }
 
       const scripts: Array<Record<string, string>> = [
-        {
-          type: "application/ld+json",
-          children: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "Article",
-            headline: a.title,
-            image: a.hero_image_url ?? undefined,
-            datePublished: a.published_at ?? undefined,
-            dateModified: a.updated_at ?? a.published_at ?? undefined,
-            description,
-            mainEntityOfPage: canonicalUrl,
-            publisher: {
-              "@type": "Organization",
-              name: "MyCar",
-              url: ORIGIN,
+        jsonLdScript(
+          buildBlogPostingJsonLd(
+            {
+              url: canonicalUrl,
+              headline: a.title,
+              description,
+              image: a.hero_image_url,
+              datePublished: a.published_at,
+              dateModified: a.updated_at,
             },
-          }),
-        },
+            logoUrl,
+          ),
+        ),
+        jsonLdScript(
+          buildBreadcrumbJsonLd([
+            { name: "Blog", path: "/blog" },
+            { name: a.title, path: `/blog/${a.slug}` },
+          ]),
+        ),
       ];
 
       const faqs = faqList(a);
@@ -571,6 +574,28 @@ export const Route = createFileRoute("/blog/$slug")({
           rel: "canonical",
           href: url,
         },
+      ],
+      scripts: [
+        jsonLdScript(
+          buildBlogPostingJsonLd(
+            {
+              url,
+              headline: p.title,
+              description,
+              image: p.image_url,
+              datePublished: p.published_at,
+              dateModified: p.updated_at,
+              authorName: p.author_name,
+            },
+            logoUrl,
+          ),
+        ),
+        jsonLdScript(
+          buildBreadcrumbJsonLd([
+            { name: "Blog", path: "/blog" },
+            { name: p.title, path: `/blog/${params.slug}` },
+          ]),
+        ),
       ],
     };
   },
@@ -726,6 +751,17 @@ function AutoseoArticle({ article, related }: { article: AutoseoPost; related: A
           </div>
         </section>
       )}
+
+      <nav aria-label="Next steps" className="mt-14 rounded-xl border border-border bg-card p-5 text-sm">
+        <h2 className="font-display text-lg font-bold">Ready for your next vehicle?</h2>
+        <p className="mt-2 text-muted-foreground">
+          <Link to="/search" className="font-semibold text-primary hover:underline">
+            Browse used cars in Fredericksburg, VA
+          </Link>
+          , <Link to="/sell" className="font-semibold text-primary hover:underline">sell or trade your car</Link>, or{" "}
+          <Link to="/schedule" className="font-semibold text-primary hover:underline">schedule a test drive</Link>.
+        </p>
+      </nav>
     </article>
   );
 }

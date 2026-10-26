@@ -7,6 +7,7 @@ export const Route = createFileRoute("/terms")({
       { name: "description", content: "MyCar terms and conditions for using our website and services." },
       { name: "robots", content: "index,follow" },
     ],
+    links: [{ rel: "canonical", href: "https://mycarcorp.com/terms" }],
   }),
   component: Terms,
 });

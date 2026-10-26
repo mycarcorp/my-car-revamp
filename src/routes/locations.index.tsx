@@ -16,6 +16,7 @@ export const Route = createFileRoute("/locations/")({
           "MyCar serves Fredericksburg, Spotsylvania, Stafford, King George, Richmond and Northern Virginia with inspected used cars, trucks and SUVs.",
       },
       { property: "og:title", content: "Areas We Serve — MyCar" },
+      { property: "og:url", content: "https://mycarcorp.com/locations" },
       { property: "og:type", content: "website" },
       { name: "twitter:card", content: "summary_large_image" },
       {
@@ -23,6 +24,7 @@ export const Route = createFileRoute("/locations/")({
         content: "Used vehicles for Fredericksburg, Spotsylvania, Stafford, King George and beyond.",
       },
     ],
+    links: [{ rel: "canonical", href: "https://mycarcorp.com/locations" }],
   }),
   component: LocationsIndex,
 });

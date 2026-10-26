@@ -20,6 +20,7 @@ import {
   ExternalLink,
 } from "lucide-react";
 import { isVideoUrl, parseVideoAlt, videoPublicLabel } from "@/lib/vehicle-media";
+import { buildBreadcrumbJsonLd, dealerReference, jsonLdString } from "@/lib/seo";
 
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -491,19 +492,8 @@ function VehicleDetail() {
 
       itemCondition: "https://schema.org/UsedCondition",
 
-      seller: {
-        "@type": "AutoDealer",
-
-        name: "MyCar",
-
-        url: SITE_URL,
-
-        areaServed: {
-          "@type": "City",
-          name: "Fredericksburg",
-          addressRegion: "VA",
-        },
-      },
+      // The dealership is defined once site-wide (root layout); this refers to it so details never conflict.
+      seller: dealerReference(),
     },
   };
 
@@ -567,6 +557,17 @@ function VehicleDetail() {
   return (
     <div className="min-h-screen bg-white text-[#142d46]">
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script
+        type="application/ld+json"
+        dangerouslySetInnerHTML={{
+          __html: jsonLdString(
+            buildBreadcrumbJsonLd([
+              { name: "Shop Inventory", path: "/search" },
+              { name: vehicleTitle(v), path: canonicalUrl },
+            ]),
+          ),
+        }}
+      />
       {descriptionFaqs.length > 0 && (
         <script
           type="application/ld+json"
