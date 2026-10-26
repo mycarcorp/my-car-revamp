@@ -83,12 +83,27 @@ function creds() {
   return { url, key };
 }
 
+/** A failed PostgREST request, with the HTTP status and the PostgREST/Postgres error code when the response had one. */
+export class AutoseoRestError extends Error {
+  status: number;
+  code: string | null;
+
+  constructor(message: string, status: number, code: string | null) {
+    super(message);
+    this.name = "AutoseoRestError";
+    this.status = status;
+    this.code = code;
+  }
+}
+
 async function rest(
   path: string,
   init: {
     method?: string;
     body?: unknown;
     prefer?: string;
+    /** Read retries only: send the API key without a bearer token. */
+    noBearer?: boolean;
   } = {},
 ): Promise<unknown> {
   const c = creds();
@@ -100,6 +115,10 @@ async function rest(
     "Content-Type": "application/json",
     [method === "GET" ? "Accept-Profile" : "Content-Profile"]: "mycarco_db",
   };
+
+  if (init.noBearer) {
+    delete headers["Authorization"];
+  }
 
   if (init.prefer) {
     headers["Prefer"] = init.prefer;
@@ -114,10 +133,95 @@ async function rest(
   const responseText = await res.text();
 
   if (!res.ok) {
-    throw new Error(`AutoSEO blog request failed (${res.status}): ${responseText.slice(0, 300)}`);
+    let code: string | null = null;
+
+    try {
+      const parsed = JSON.parse(responseText) as { code?: unknown };
+
+      if (typeof parsed?.code === "string") {
+        code = parsed.code;
+      }
+    } catch {
+      // The body was not JSON.
+    }
+
+    throw new AutoseoRestError(`AutoSEO blog request failed (${res.status}): ${responseText.slice(0, 300)}`, res.status, code);
   }
 
   return responseText ? JSON.parse(responseText) : null;
+}
+
+// ---------------------------------------------------------------------------
+// Public reads: strict first, weaker only for an older schema, never because a request failed
+// ---------------------------------------------------------------------------
+
+export const PUBLIC_READ_RETRY_DELAY_MS = 250;
+
+function isClockSkewRejection(error: unknown): boolean {
+  return error instanceof AutoseoRestError && error.status === 401 && /PGRST303/.test(error.message);
+}
+
+function isTransientFailure(error: unknown): boolean {
+  if (error instanceof AutoseoRestError) {
+    return error.status === 408 || error.status === 425 || error.status === 429 || error.status >= 500 || isClockSkewRejection(error);
+  }
+
+  return error instanceof TypeError || (error instanceof Error && (error.name === "AbortError" || error.name === "TimeoutError"));
+}
+
+/**
+ * One read, with a single retry for a transient failure (outage, timeout, rate limit, clock-skew rejection of the
+ * bearer token). The retry runs the same query, so it can never return more than the first attempt would have.
+ */
+async function restRead(path: string): Promise<unknown> {
+  try {
+    return await rest(path);
+  } catch (error) {
+    if (!isTransientFailure(error)) {
+      throw error;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, PUBLIC_READ_RETRY_DELAY_MS));
+
+    return rest(path, { noBearer: isClockSkewRejection(error) });
+  }
+}
+
+/**
+ * True only when the database reports that the named column does not exist: an older schema, where that rule has
+ * not been introduced. Outages, timeouts, auth and rate-limit errors, and errors about any other column, are false.
+ */
+export function isMissingColumnError(error: unknown, column: string): boolean {
+  if (!(error instanceof AutoseoRestError) || error.status !== 400) {
+    return false;
+  }
+
+  if (error.code !== "42703" && error.code !== "PGRST204") {
+    return false;
+  }
+
+  return new RegExp(`(?<![A-Za-z0-9_])${column}(?![A-Za-z0-9_])`).test(error.message);
+}
+
+const isMissingGateColumn = (error: unknown) => isMissingColumnError(error, "quality_status") || isMissingColumnError(error, "status");
+
+/**
+ * Runs the strict query (published, approved, with a publish date). A weaker query is tried only when the database
+ * says a gate column does not exist, which is the older-schema case the fallbacks were written for. Any other
+ * failure propagates, so a failed request can never turn into a response containing draft or unapproved articles.
+ */
+async function readGated<T>(tiers: string[]): Promise<T> {
+  for (let index = 0; index < tiers.length; index += 1) {
+    try {
+      return (await restRead(tiers[index]!)) as T;
+    } catch (error) {
+      if (index === tiers.length - 1 || !isMissingGateColumn(error)) {
+        throw error;
+      }
+    }
+  }
+
+  throw new Error("No AutoSEO read query was run.");
 }
 
 // ---------------------------------------------------------------------------
@@ -142,21 +246,33 @@ const SELECT =
 
 export async function listAutoseoPosts(summary = false): Promise<AutoseoPost[]> {
   const select = summary ? SELECT.split(",").filter((column) => column !== "content_html" && column !== "faq_schema").join(",") : SELECT;
+  const order = "order=published_at.desc.nullslast,created_at.desc";
+
+  return readGated<AutoseoPost[]>([
+    `blog_posts?select=${select}&status=eq.published&quality_status=eq.approved&published_at=not.is.null&${order}`,
+    `blog_posts?select=${select}&status=eq.published&published_at=not.is.null&${order}`,
+    `blog_posts?select=${select}&published_at=not.is.null&${order}`,
+  ]);
+}
+
+/** Public list: returns nothing, never anything weaker, when eligibility cannot be established. */
+export async function listAutoseoPostsPublic(summary = false): Promise<AutoseoPost[]> {
   try {
-    return (await rest(
-      `blog_posts?select=${select}&status=eq.published&quality_status=eq.approved&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
-    )) as AutoseoPost[];
-  } catch {
-    try {
-      return (await rest(
-        `blog_posts?select=${select}&status=eq.published&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
-      )) as AutoseoPost[];
-    } catch {
-      return (await rest(
-        `blog_posts?select=${select}&published_at=not.is.null&order=published_at.desc.nullslast,created_at.desc`,
-      )) as AutoseoPost[];
-    }
+    return await listAutoseoPosts(summary);
+  } catch (error) {
+    logPublicReadFailure("list", error);
+
+    return [];
   }
+}
+
+function logPublicReadFailure(what: string, error: unknown): void {
+  // Status and code only: never the database response, which can contain table details.
+  const status = error instanceof AutoseoRestError ? error.status : null;
+
+  const code = error instanceof AutoseoRestError ? error.code : null;
+
+  console.error(`[autoseo] public ${what} read failed`, { status, code });
 }
 
 /**
@@ -169,32 +285,29 @@ export async function listAutoseoAdminRows(): Promise<Array<Record<string, unkno
 }
 
 export async function getAutoseoPost(slug: string): Promise<AutoseoPost | null> {
+  const base = `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(slug)}`;
+
+  const rows = await readGated<AutoseoPost[]>([
+    `${base}&status=eq.published&quality_status=eq.approved&published_at=not.is.null&limit=1`,
+    `${base}&status=eq.published&published_at=not.is.null&limit=1`,
+    `${base}&published_at=not.is.null&limit=1`,
+  ]);
+
+  return rows?.[0] ?? null;
+}
+
+/**
+ * Public article lookup. An article that is not eligible is null (the page answers 404). A failed lookup is an
+ * error (the page answers 5xx and is retried later), never a 404 and never a weaker query, and the error shown to
+ * the visitor carries no database details.
+ */
+export async function getAutoseoPostPublic(slug: string): Promise<AutoseoPost | null> {
   try {
-    const rows = (await rest(
-      `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(
-        slug,
-      )}&status=eq.published&quality_status=eq.approved&published_at=not.is.null&limit=1`,
-    )) as AutoseoPost[];
+    return await getAutoseoPost(slug);
+  } catch (error) {
+    logPublicReadFailure("article", error);
 
-    return rows?.[0] ?? null;
-  } catch {
-    try {
-      const rows = (await rest(
-        `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(
-          slug,
-        )}&status=eq.published&published_at=not.is.null&limit=1`,
-      )) as AutoseoPost[];
-
-      return rows?.[0] ?? null;
-    } catch {
-      const rows = (await rest(
-        `blog_posts?select=${SELECT},content_markdown&slug=eq.${encodeURIComponent(
-          slug,
-        )}&published_at=not.is.null&limit=1`,
-      )) as AutoseoPost[];
-
-      return rows?.[0] ?? null;
-    }
+    throw new Error("This article is temporarily unavailable.");
   }
 }
 
@@ -2277,26 +2390,15 @@ export async function sitemapUrls(): Promise<
     lastmod: string | null;
   }>
 > {
-  let rows: SitemapRow[] = [];
+  const columns = "id,title,slug,meta_keywords,tags,updated_at,published_at,created_at";
 
-  try {
-    rows = (await rest(
-      "blog_posts?select=id,title,slug,meta_keywords,tags,updated_at,published_at,created_at,status,quality_status&status=eq.published&quality_status=eq.approved&published_at=not.is.null",
-    )) as SitemapRow[];
-  } catch {
-    try {
-      // Compatibility fallback for a table with status but without the quality
-      // gate columns.
-      rows = (await rest(
-        "blog_posts?select=id,title,slug,meta_keywords,tags,updated_at,published_at,created_at,status&status=eq.published&published_at=not.is.null",
-      )) as SitemapRow[];
-    } catch {
-      // Oldest compatibility fallback.
-      rows = (await rest(
-        "blog_posts?select=id,title,slug,meta_keywords,tags,updated_at,published_at,created_at&published_at=not.is.null",
-      )) as SitemapRow[];
-    }
-  }
+  const rows = await readGated<SitemapRow[]>([
+    `blog_posts?select=${columns},status,quality_status&status=eq.published&quality_status=eq.approved&published_at=not.is.null`,
+    // Older schema without the quality gate columns.
+    `blog_posts?select=${columns},status&status=eq.published&published_at=not.is.null`,
+    // Oldest schema without a status column.
+    `blog_posts?select=${columns}&published_at=not.is.null`,
+  ]);
 
   const validRows = (rows ?? []).filter((row) => row.slug && row.title);
 

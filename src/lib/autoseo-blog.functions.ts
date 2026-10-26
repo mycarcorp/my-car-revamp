@@ -562,7 +562,7 @@ export const publicAutoseoList = createServerFn({
   try {
     const m = await import("./autoseo-blog.server");
 
-    return await m.listAutoseoPosts();
+    return await m.listAutoseoPostsPublic();
   } catch {
     return [];
   }
@@ -572,7 +572,7 @@ export const publicAutoseoList = createServerFn({
 export const publicAutoseoSummaryList = createServerFn({ method: "GET" }).handler(async (): Promise<AutoseoPost[]> => {
   try {
     const m = await import("./autoseo-blog.server");
-    return (await m.listAutoseoPosts(true)).map((post) => ({ ...post, content_html: null, faq_schema: null }));
+    return (await m.listAutoseoPostsPublic(true)).map((post) => ({ ...post, content_html: null, faq_schema: null }));
   } catch {
     return [];
   }
@@ -590,13 +590,10 @@ export const publicAutoseoPost = createServerFn({
     slug: String(input?.slug ?? "").slice(0, 200),
   }))
   .handler(async ({ data }): Promise<AutoseoPost | null> => {
-    try {
-      const m = await import("./autoseo-blog.server");
+    const m = await import("./autoseo-blog.server");
 
-      return await m.getAutoseoPost(data.slug);
-    } catch {
-      return null;
-    }
+    // null means "not eligible" (404). A failed lookup throws a generic error (5xx), never a 404 or a weaker query.
+    return m.getAutoseoPostPublic(data.slug);
   });
 
 /* -------------------------------------------------------------------------- */
