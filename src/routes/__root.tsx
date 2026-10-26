@@ -9,7 +9,7 @@ import {
   Scripts,
   type ErrorComponentProps,
 } from "@tanstack/react-router";
-import { useEffect, useLayoutEffect, type ReactNode } from "react";
+import { useEffect, useLayoutEffect, useRef, type ReactNode } from "react";
 
 import appCss from "../styles.css?url";
 import { reportLovableError } from "../lib/lovable-error-reporting";
@@ -21,6 +21,13 @@ import { AnalyticsConsentManager } from "@/components/AnalyticsConsentManager";
 import { captureAttribution } from "@/lib/attribution";
 import { configureAnalytics, trackMetaPageView, trackPageView } from "@/lib/analytics";
 import { beginVisit, trackPath } from "@/lib/visitor-personalization";
+import {
+  CHAT_WIDGET_HIDE_CSS,
+  createBrowserChatWidgetEnv,
+  createChatWidgetManager,
+  isChatWidgetAllowed,
+  type ChatWidgetManager,
+} from "@/lib/chat-widget";
 
 const useIsomorphicLayoutEffect = typeof window === "undefined" ? useEffect : useLayoutEffect;
 
@@ -141,8 +148,16 @@ function RootComponent() {
   const isAdmin = pathname.startsWith("/admin");
 
   const searchStr = useRouterState({ select: (s) => s.location.searchStr });
+  // The chat widget never runs on account, finance, staff or sign-in routes. If it is already running when the
+  // visitor arrives on one, the page is reloaded to unload it, and that render must not be counted as a visit.
+  const chatAllowed = isChatWidgetAllowed(pathname, searchStr);
+  const chatManager = useRef<ChatWidgetManager | null>(null);
+  if (typeof window !== "undefined" && !chatManager.current) {
+    chatManager.current = createChatWidgetManager(createBrowserChatWidgetEnv());
+  }
+  const chatReloading = chatManager.current?.needsReload(chatAllowed) ?? false;
   // Admin hero-editor preview frame loads "/" — never count it as a visit.
-  const skipTracking = isAdmin || searchStr.includes("heroPreview=1");
+  const skipTracking = isAdmin || searchStr.includes("heroPreview=1") || chatReloading;
   useIsomorphicLayoutEffect(() => {
     configureAnalytics(pathname, !skipTracking);
     if (!skipTracking) {
@@ -162,46 +177,15 @@ function RootComponent() {
   }, [pathname, skipTracking]);
 
   useEffect(() => {
-    const widgetId = "6a43bb0bbd10bf7f08bff1e7";
-    const selector = `script[data-widget-id="${widgetId}"]`;
+    // Chat is not a conversion tracker: its start is delayed so Meta/attribution event timing is unchanged.
+    chatManager.current?.sync(chatAllowed);
+  }, [chatAllowed]);
 
-    if (isAdmin) {
-      document.querySelector(selector)?.remove();
-      return;
-    }
-
-    if (document.querySelector(selector)) return;
-    // Chat is not a conversion tracker: keep its initialization out of the
-    // first render while leaving Meta/attribution event timing unchanged.
-    let cancelled = false;
-    const timer = window.setTimeout(() => {
-      if (cancelled || document.querySelector(selector)) return;
-      const script = document.createElement("script");
-      script.src = "https://widgets.leadconnectorhq.com/loader.js";
-      script.async = true;
-      script.dataset["resourcesUrl"] = "https://widgets.leadconnectorhq.com/chat-widget/loader.js";
-      script.dataset["widgetId"] = widgetId;
-      document.body.appendChild(script);
-    }, 1500);
-    return () => {
-      cancelled = true;
-      window.clearTimeout(timer);
-    };
-  }, [isAdmin]);
+  useEffect(() => () => chatManager.current?.dispose(), []);
 
   return (
     <QueryClientProvider client={queryClient}>
-      {isAdmin && (
-        <style>{`
-          #chat-widget-container,
-          #lc_chat_widget,
-          [data-widget-id="6a43bb0bbd10bf7f08bff1e7"],
-          iframe[src*="leadconnectorhq.com"],
-          iframe[src*="leadconnector"] {
-            display: none !important;
-          }
-        `}</style>
-      )}
+      {!chatAllowed && <style>{CHAT_WIDGET_HIDE_CSS}</style>}
       <AuthProvider>
         <div className="flex min-h-screen flex-col">
           {!isAdmin && <SiteHeader />}
