@@ -10,6 +10,7 @@ import { ctaButtonClass } from "@/lib/ui";
 import { useAuth } from "@/hooks/useAuth";
 import { mirrorLeadToLegacy } from "@/lib/legacy-mirror.functions";
 import { isGhlForwardedLeadType, sendLeadToGhl } from "@/lib/ghl-webhook.functions";
+import { newLeadId } from "@/lib/lead-id";
 import { getAttributionDetails, mergeAttributionDetails } from "@/lib/attribution";
 import { getLeadFormType, recordFormStart, recordLeadSubmission, withLeadEventId } from "@/lib/analytics";
 import type { Database } from "@/integrations/supabase/types";
@@ -96,7 +97,10 @@ export function LeadForm({
     }
     // Opaque ID for browser/server event deduplication; added only to non-finance lead types.
     withLeadEventId(leadType, details);
+    // The row ID is chosen here so the server can be told which stored lead to forward.
+    const leadId = newLeadId();
     const { error } = await supabase.from("leads").insert({
+      id: leadId,
       lead_type: leadType,
       full_name,
       email,
@@ -127,18 +131,8 @@ export function LeadForm({
     }).catch(() => undefined);
     // Mirror to the CRM webhook, only after the database save succeeded.
     if (isGhlForwardedLeadType(leadType)) {
-      void sendLeadToGhl({
-        data: {
-          leadType,
-          fullName: full_name,
-          email,
-          phone,
-          message,
-          vehicleUrl: typeof window !== "undefined" ? window.location.href : null,
-          vehicle: vehicle ?? (vehicleId ? { id: vehicleId } : null),
-          details,
-        },
-      }).catch((err) => console.error("[ghl-webhook] client call failed", err));
+      // Only the saved lead's ID is sent: the server forwards the stored record, never data supplied here.
+      void sendLeadToGhl({ data: { leadId } }).catch(() => console.error("[ghl-webhook] client call failed"));
     }
     setDone(true);
   }

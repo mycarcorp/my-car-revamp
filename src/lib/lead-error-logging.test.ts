@@ -164,10 +164,11 @@ describe("sensitive data never reaches logs or error messages", () => {
   it("returns a generic result and logs nothing sensitive when the GHL server function throws", async () => {
     vi.stubGlobal("fetch", vi.fn(async () => { throw new TypeError(`fetch failed for ${SSN} ${EMAIL}`); }));
     const result = await deliverLeadToGhl({ ...lead, phone: "", message: "", vehicleUrl: "", vehicle: null });
-    expect(result).toEqual({ delivered: false, status: null });
+    expect(result).toEqual({ delivered: false, status: null, outcome: "unconfirmed" });
     expectClean(result);
     const text = loggedText(errorSpy, logSpy, warnSpy);
     expectClean(text);
-    expect(text).toContain("ghl-webhook.request");
+    expect(text).toContain("delivery failed");
+    expect(text).toContain("network");
   });
 });

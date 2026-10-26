@@ -98,7 +98,7 @@ describe("website lead routing to GoHighLevel", () => {
   describe("Contact", () => {
     it("sends a website_contact event with contact fields and attribution only", async () => {
       const result = await deliverLeadToGhl(input("contact", { ...attribution, ssn: SSN, lead_event_id: EVENT_ID, vehicle_vin: "1HGCM82633A004352" }));
-      expect(result).toEqual({ delivered: true, status: 200 });
+      expect(result).toEqual({ delivered: true, status: 200, outcome: "delivered" });
       const [payload] = bodies();
       expect(payload).toMatchObject({
         event_type: "website_contact",
@@ -293,17 +293,25 @@ describe("website lead routing to GoHighLevel", () => {
       expect(fetchMock).toHaveBeenCalledTimes(4);
     });
 
-    it("allows another attempt after a failed delivery, so a lead is never blocked by a failure", async () => {
-      fetchMock.mockResolvedValueOnce(new Response("{}", { status: 503 }));
-      expect(await deliverLeadToGhl(input("contact", { lead_event_id: EVENT_ID }))).toEqual({ delivered: false, status: 503 });
-      expect(await deliverLeadToGhl(input("contact", { lead_event_id: EVENT_ID }))).toEqual({ delivered: true, status: 200 });
+    it("allows another attempt after GHL refuses a delivery (4xx), because it was not processed", async () => {
+      fetchMock.mockResolvedValueOnce(new Response("{}", { status: 422 }));
+      expect(await deliverLeadToGhl(input("contact", { lead_event_id: EVENT_ID }))).toEqual({ delivered: false, status: 422, outcome: "rejected" });
+      expect(await deliverLeadToGhl(input("contact", { lead_event_id: EVENT_ID }))).toEqual({ delivered: true, status: 200, outcome: "delivered" });
       expect(fetchMock).toHaveBeenCalledTimes(2);
     });
 
-    it("also releases the ID when the request throws", async () => {
+    it("does not repeat an unconfirmed delivery (5xx), because GHL may already have processed it", async () => {
+      fetchMock.mockResolvedValueOnce(new Response("{}", { status: 503 }));
+      expect(await deliverLeadToGhl(input("contact", { lead_event_id: EVENT_ID }))).toEqual({ delivered: false, status: 503, outcome: "unconfirmed" });
+      await deliverLeadToGhl(input("contact", { lead_event_id: EVENT_ID }));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
+    });
+
+    it("does not repeat a delivery whose request failed in transit", async () => {
       fetchMock.mockRejectedValueOnce(new TypeError(`fetch failed for ${EMAIL}`));
-      expect(await deliverLeadToGhl(input("contact", { lead_event_id: EVENT_ID }))).toEqual({ delivered: false, status: null });
-      expect(await deliverLeadToGhl(input("contact", { lead_event_id: EVENT_ID }))).toEqual({ delivered: true, status: 200 });
+      expect(await deliverLeadToGhl(input("contact", { lead_event_id: EVENT_ID }))).toEqual({ delivered: false, status: null, outcome: "unconfirmed" });
+      await deliverLeadToGhl(input("contact", { lead_event_id: EVENT_ID }));
+      expect(fetchMock).toHaveBeenCalledTimes(1);
     });
   });
 
