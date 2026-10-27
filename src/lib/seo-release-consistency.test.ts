@@ -150,7 +150,7 @@ describe("SEO changes cannot interfere with tracking, consent or forms", () => {
     };
     walk("src");
     for (const file of importers) {
-      expect(file, file).toMatch(/^src\/(routes\/|components\/VehicleCard\.tsx|lib\/(vehicle-seo|sitemap-cache\.server)\.ts)/);
+      expect(file, file).toMatch(/^src\/(routes\/|components\/VehicleCard\.tsx|lib\/(vehicle-seo|sitemap-cache\.server|seo-content-agent)\.ts)/);
       expect(file).not.toMatch(/analytics|attribution|consent|ghl|lead|LeadForm|chat-widget/i);
     }
     expect(importers.length).toBeGreaterThan(3);

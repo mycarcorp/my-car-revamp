@@ -30,6 +30,7 @@ import { useAuth } from "@/hooks/useAuth";
 import { listLeads } from "@/lib/admin-leads.functions";
 import { FunnelMonitor, HealthBadge, LeadGoalPanel } from "@/components/admin/MarketingFunnel";
 import { ChannelReportPanel, SocialDashboard } from "@/components/admin/MarketingChannels";
+import { ContentAgentPanel } from "@/components/admin/MarketingContentPlan";
 import { computeHealth } from "@/lib/marketing-health";
 import {
   DEALERSHIP_TIMEZONE,
@@ -120,6 +121,7 @@ const TABS = [
   ["leadgoal", "Daily Leads", Users],
   ["channels", "Channel Report", BarChart3],
   ["social", "Social Channels", Globe],
+  ["contentplan", "Content Plan", FileText],
   ["seo", "Search Performance", Activity],
   ["gsc", "Google Search", Search],
   ["inspection", "Check a Page on Google", Search],
@@ -753,6 +755,9 @@ function Marketing() {
           </TabsContent>
           <TabsContent value="social">
             <SocialDashboard leads={leadsQuery.data ?? null} loading={leadsQuery.isPending} />
+          </TabsContent>
+          <TabsContent value="contentplan">
+            <ContentAgentPanel accessToken={session?.access_token ?? ""} userLabel={user?.email ?? ""} />
           </TabsContent>
           <TabsContent value="seo">
             <Section
