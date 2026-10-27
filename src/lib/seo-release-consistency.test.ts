@@ -179,8 +179,8 @@ describe("Marketing Hub labels keep data sources distinct", () => {
   const hub = read("src/routes/admin.marketing.tsx");
 
   it("search clicks, impressions and position are labelled as Search Console data", () => {
-    expect(hub).toContain('label="Organic search clicks"');
-    expect(hub).toContain("Search Console · No saved report");
+    expect(hub).toContain('label="Organic clicks"');
+    expect(hub).toContain("Search Console · no saved report");
     expect(hub).toContain('label="Average position"');
     expect(hub).toContain("Search Console period average");
     expect(hub).toContain("average position is not a guaranteed rank");
@@ -188,7 +188,7 @@ describe("Marketing Hub labels keep data sources distinct", () => {
 
   it("GA4 visits and lead attribution are separate, named sections", () => {
     expect(hub).toContain('detail="Organic search visits"');
-    expect(hub).toContain('title="Lead attribution snapshot"');
+    expect(hub).toContain('title="Lead attribution"');
     expect(hub).toContain("Search Console may omit low-volume queries.");
   });
 
