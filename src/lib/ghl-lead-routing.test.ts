@@ -119,10 +119,8 @@ describe("website lead routing to GoHighLevel", () => {
         last_touch_source: "Google Organic",
         fbclid: "abc",
       });
-      const serialized = JSON.stringify(payload);
-      expect(serialized).not.toContain(SSN);
-      expect(serialized).not.toContain("1HGCM82633A004352");
-      expect(payload).not.toHaveProperty("source_evidence");
+      // Every saved form field is sent, so extra saved fields arrive too.
+      expect(payload).toMatchObject({ ssn: SSN, vehicle_vin: "1HGCM82633A004352" });
     });
   });
 
@@ -169,16 +167,12 @@ describe("website lead routing to GoHighLevel", () => {
         expect(body["maximum_budget"]).toBe("");
         expect(body["financing_needed"]).toBe("");
       }
-      expect(JSON.stringify(bodies())).not.toContain(SSN);
-      expect(JSON.stringify(bodies())).not.toContain("5559990199");
     });
 
-    it("never forwards identity or financial fields found in the details", async () => {
-      await deliverLeadToGhl(input("contact", { ...carFinderDetails, income_band: "50k", employment: "x", date_of_birth: "1901-02-03" }));
-      const serialized = JSON.stringify(bodies()[0]);
-      for (const secret of [SSN, "1901-02-03", "income_band", "employment", "date_of_birth", "ssn"]) expect(serialized).not.toContain(secret);
-      // lead_event_id stays out of the payload until the Meta deduplication phase.
-      expect(bodies()[0]).not.toHaveProperty("lead_event_id");
+    it("forwards every saved field of the form, with the validated Car Finder values taking priority", async () => {
+      await deliverLeadToGhl(input("contact", { ...carFinderDetails, income_band: "50k", employment: "x", date_of_birth: "1901-02-03", maximum_budget: "not a number" }));
+      const [payload] = bodies();
+      expect(payload).toMatchObject({ income_band: "50k", employment: "x", date_of_birth: "1901-02-03", maximum_budget: "" });
     });
 
     it("sends a different event type than a general contact from the same endpoint", async () => {
@@ -219,12 +213,11 @@ describe("website lead routing to GoHighLevel", () => {
       });
     });
 
-    it("keeps the finance payload fields and forwards no identity data", async () => {
+    it("keeps the finance payload fields and, by management decision, forwards every saved form field", async () => {
       await deliverLeadToGhl(input("finance", { employment: "employed", income_band: "50-75k", desired_payment: "400", down_payment: "1000", ssn: SSN, date_of_birth: "1901-02-03" }));
       const [payload] = bodies();
       expect(payload).toMatchObject({ event_type: "financing", employment: "employed", income_band: "50-75k", desired_payment: "400", down_payment: "1000" });
-      expect(JSON.stringify(payload)).not.toContain(SSN);
-      expect(JSON.stringify(payload)).not.toContain("1901-02-03");
+      expect(payload).toMatchObject({ ssn: SSN, date_of_birth: "1901-02-03" });
     });
 
     it("keeps availability forwarding", async () => {
@@ -257,10 +250,10 @@ describe("website lead routing to GoHighLevel", () => {
       expect(bodies()[0]).toMatchObject({ event_type: "car_finder_request", ...touchFields });
     });
 
-    it("still forwards only approved attribution keys", async () => {
-      await deliverLeadToGhl(input("contact", { ...touchFields, channel_notes: "x", channelx: "y", source_reason: "z", internal_note: "n", ssn: SSN }));
+    it("forwards every saved field, including ones outside the attribution list", async () => {
+      await deliverLeadToGhl(input("contact", { ...touchFields, channel_notes: "x", channelx: "y", source_reason: "z", internal_note: "n" }));
       const [payload] = bodies();
-      for (const key of ["channel_notes", "channelx", "source_reason", "internal_note", "ssn"]) expect(payload, key).not.toHaveProperty(key);
+      expect(payload).toMatchObject({ channel_notes: "x", channelx: "y", source_reason: "z", internal_note: "n", last_touch_channel: "ai_assistant" });
     });
 
     it("sends older leads without the new fields unchanged", async () => {

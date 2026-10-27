@@ -481,7 +481,8 @@ describe("stored lead delivery", () => {
       const finance = fakeBackend(makeRow({ lead_type: "finance", details: { employment: "employed", ssn: "900-12-3456" } }));
       await deliver();
       expect(finance.webhook.calls[0]).toMatchObject({ event_type: "financing", employment: "employed" });
-      expect(JSON.stringify(finance.webhook.calls[0])).not.toContain("900-12-3456");
+      // Every saved financing form field is forwarded by management decision.
+      expect(finance.webhook.calls[0]).toMatchObject({ ssn: "900-12-3456" });
     });
   });
 

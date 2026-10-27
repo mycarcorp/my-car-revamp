@@ -134,9 +134,9 @@ async function transition(
 
 function vehicleFrom(row: StoredLead, details: Record<string, unknown>) {
   const pick = (key: string) => (details[key] === undefined || details[key] === null ? null : String(details[key]));
-  if (!row.vehicle_id && !pick("vehicle_vin") && !pick("vehicle_make") && !pick("vehicle_stock_number")) return null;
+  if (!row.vehicle_id && !pick("vehicle_id") && !pick("vehicle_vin") && !pick("vehicle_make") && !pick("vehicle_stock_number")) return null;
   return {
-    id: row.vehicle_id,
+    id: row.vehicle_id ?? pick("vehicle_id"),
     vin: pick("vehicle_vin"),
     stock_number: pick("vehicle_stock_number"),
     year: pick("vehicle_year"),
@@ -147,10 +147,82 @@ function vehicleFrom(row: StoredLead, details: Record<string, unknown>) {
   };
 }
 
+export type InventoryVehicle = {
+  id: string;
+  vin: string;
+  stock_number: string;
+  year: number | string;
+  make: string;
+  model: string;
+  trim: string | null;
+  mileage: number | null;
+  price_cents: number | null;
+  slug: string;
+};
+
+/** Reads one vehicle from the public inventory by its ID. Read-only; returns null when it is not found. */
+export type VehicleLookup = (vehicleId: string) => Promise<InventoryVehicle | null>;
+
+const SITE_ORIGIN = "https://mycarcorp.com";
+
+async function inventoryVehicleLookup(vehicleId: string): Promise<InventoryVehicle | null> {
+  const { listPublicLegacyInventory } = await import("./legacy-inventory.server");
+  const data = await listPublicLegacyInventory({ page: 1, pageSize: 10000 });
+  const found = (data.vehicles ?? []).find((v) => v.id === vehicleId);
+  return found
+    ? { id: found.id, vin: found.vin, stock_number: found.stock_number, year: found.year, make: found.make, model: found.model, trim: found.trim ?? null, mileage: found.mileage ?? null, price_cents: found.price_cents == null ? null : Number(found.price_cents), slug: found.slug }
+    : null;
+}
+
+/**
+ * Adds the real inventory record for the chosen car to what is sent, so the car's details never depend on form fields.
+ * Nothing is written to the lead. If the lookup fails, the details saved with the lead are sent unchanged.
+ */
+export async function withInventoryVehicle(
+  row: Pick<StoredLead, "vehicle_id">,
+  details: Record<string, unknown>,
+  lookup: VehicleLookup,
+): Promise<Record<string, unknown>> {
+  const id = row.vehicle_id ?? detailString(details, "vehicle_id");
+  if (!id) return details;
+  let vehicle: InventoryVehicle | null = null;
+  try {
+    vehicle = await lookup(id);
+  } catch {
+    console.error("[ghl-delivery] vehicle lookup failed; sending the saved details");
+    return details;
+  }
+  if (!vehicle) return details;
+  const title = [vehicle.year, vehicle.make, vehicle.model, vehicle.trim].filter(Boolean).join(" ");
+  const inventoryPrice = vehicle.price_cents === null || !Number.isFinite(vehicle.price_cents) ? "" : String(vehicle.price_cents / 100);
+  // The price the customer used in the estimator is kept when they typed one in themselves.
+  const keepPrice = detailString(details, "vehicle_price_source") === "manual" && detailString(details, "vehicle_price") !== "";
+  return {
+    ...details,
+    vehicle_id: vehicle.id,
+    vehicle_vin: vehicle.vin,
+    vehicle_stock_number: vehicle.stock_number,
+    vehicle_year: String(vehicle.year),
+    vehicle_make: vehicle.make,
+    vehicle_model: vehicle.model,
+    vehicle_trim: vehicle.trim ?? "",
+    vehicle_title: title,
+    vehicle_of_interest: title,
+    vehicle_mileage: vehicle.mileage === null ? "" : String(vehicle.mileage),
+    vehicle_inventory_price: inventoryPrice,
+    vehicle_price: keepPrice ? detailString(details, "vehicle_price") : inventoryPrice || detailString(details, "vehicle_price"),
+    vehicle_url: `${SITE_ORIGIN}/inventory/${encodeURIComponent(vehicle.slug)}`,
+  };
+}
+
 /**
  * Forwards one stored lead to GHL at most once. Exported for tests; the public server function only passes the ID.
  */
-export async function deliverStoredLeadToGhl(leadId: string, now: () => Date = () => new Date()): Promise<StoredLeadResult> {
+export async function deliverStoredLeadToGhl(
+  leadId: string,
+  now: () => Date = () => new Date(),
+  lookupVehicle: VehicleLookup = inventoryVehicleLookup,
+): Promise<StoredLeadResult> {
   let creds: { url: string; key: string };
   try {
     creds = appAdminCreds();
@@ -199,7 +271,7 @@ export async function deliverStoredLeadToGhl(leadId: string, now: () => Date = (
       return { delivered: state === "delivered", state: "skipped", status: null };
     }
 
-    const details = claimed.details ?? {};
+    const details = await withInventoryVehicle(claimed, claimed.details ?? {}, lookupVehicle);
     const attempts = Number(detailString(details, "ghl_delivery_attempts") || "1");
     const result = await deliverLeadToGhl({
       leadType: claimed.lead_type,

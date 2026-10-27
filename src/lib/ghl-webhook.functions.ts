@@ -31,6 +31,50 @@ export function isGhlForwardedLeadType(leadType: string): boolean {
   return Object.prototype.hasOwnProperty.call(EVENT_TYPES, leadType);
 }
 
+/** Keys the website sets itself; a form field with one of these names can never replace them. */
+const RESERVED_KEYS = new Set(["event_type", "source", "submitted_at", "website_lead_id", "delivery_attempt", "full_name", "email", "phone", "message"]);
+
+const MAX_FLAT_KEYS = 150;
+
+/** Flattens a parsed JSON value into text fields named parent_child (arrays: parent_1_child). */
+function flattenInto(out: Record<string, string>, prefix: string, value: unknown, depth: number): void {
+  if (Object.keys(out).length >= MAX_FLAT_KEYS) return;
+  if (value === null || value === undefined) return;
+  if (typeof value === "object") {
+    if (depth >= 4) return;
+    const entries = Array.isArray(value) ? value.map((v, i) => [String(i + 1), v] as const) : Object.entries(value as Record<string, unknown>);
+    for (const [k, v] of entries) flattenInto(out, `${prefix}_${k.replace(/[^A-Za-z0-9]+/g, "_")}`, v, depth + 1);
+    return;
+  }
+  const text = String(value);
+  if (text !== "") out[prefix] = text.slice(0, 5000);
+}
+
+/**
+ * Every non-empty saved form field as text, except internal delivery state and the website's own fixed keys. A field
+ * that holds JSON (an address, an employer, a list of references) is sent both as the original text and as separate
+ * flat fields, for example current_address_street, so each part can be mapped in the CRM.
+ */
+export function allFormFields(details: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(details)) {
+    if (RESERVED_KEYS.has(key) || key.startsWith("ghl_delivery_")) continue;
+    if (value === null || value === undefined || typeof value === "object") continue;
+    const text = String(value);
+    if (text === "") continue;
+    out[key] = text.slice(0, 5000);
+    const trimmed = text.trim();
+    if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+      try {
+        flattenInto(out, key, JSON.parse(trimmed), 0);
+      } catch {
+        // Not JSON: the original text is already included.
+      }
+    }
+  }
+  return out;
+}
+
 /** Contact leads split into a general contact and a Car Finder request. */
 export function ghlEventTypeFor(leadType: string, details: Record<string, unknown> = {}): string | null {
   if (!isGhlForwardedLeadType(leadType)) return null;
@@ -216,6 +260,10 @@ export async function deliverLeadToGhl(data: GhlLeadData): Promise<GhlDeliveryRe
       ...vehicleFields,
     };
   }
+
+  // Every saved form field is sent for every form (management decision). The fixed fields built above win on a clash,
+  // which keeps validated values (for example the Car Finder budget) and the website's own keys intact.
+  payload = { ...allFormFields(d), ...payload };
 
   if (eventId) forwardedLeadEvents.add(eventId);
   try {
