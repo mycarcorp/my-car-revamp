@@ -98,6 +98,16 @@ describe("every financing form field is sent", () => {
       for (const body of calls) expect(body).toMatchObject({ ssn: SSN, id_number: ID_NUMBER, current_employer_1: formDetails.current_employer_1 });
     });
 
+    it("the form's own first and last name are sent as typed, not re-split from the full name", async () => {
+      await deliverLeadToGhl({ ...input({ ...formDetails, first_name: "Pat", last_name: "Example" }), fullName: "Pat Middle Example" });
+      expect(calls[0]).toMatchObject({ first_name: "Pat", last_name: "Example", full_name: "Pat Middle Example" });
+    });
+
+    it("without form name fields, the name is split from the full name as before", async () => {
+      await deliverLeadToGhl({ ...input({ lead_event_id: undefined }), fullName: "Pat Example" });
+      expect(calls[0]).toMatchObject({ first_name: "Pat", last_name: "Example" });
+    });
+
     it("fields that hold JSON (addresses, employers, references) also arrive as separate flat fields", async () => {
       await deliverLeadToGhl(input(formDetails));
       expect(calls[0]).toMatchObject({
