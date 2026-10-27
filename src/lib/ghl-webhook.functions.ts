@@ -264,6 +264,12 @@ export async function deliverLeadToGhl(data: GhlLeadData): Promise<GhlDeliveryRe
   // Every saved form field is sent for every form (management decision). The fixed fields built above win on a clash,
   // which keeps validated values (for example the Car Finder budget) and the website's own keys intact.
   payload = { ...allFormFields(d), ...payload };
+  // The form's own first and last name fields win over the split of the full name, so a middle name or suffix is not
+  // moved into the last name.
+  for (const key of ["first_name", "last_name"] as const) {
+    const typed = typeof d[key] === "string" ? (d[key] as string).trim() : "";
+    if (typed) payload[key] = typed;
+  }
 
   if (eventId) forwardedLeadEvents.add(eventId);
   try {
