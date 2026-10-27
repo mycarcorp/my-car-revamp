@@ -29,6 +29,7 @@ import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
 import { listLeads } from "@/lib/admin-leads.functions";
 import { FunnelMonitor, HealthBadge, LeadGoalPanel } from "@/components/admin/MarketingFunnel";
+import { ChannelReportPanel, SocialDashboard } from "@/components/admin/MarketingChannels";
 import { computeHealth } from "@/lib/marketing-health";
 import {
   DEALERSHIP_TIMEZONE,
@@ -117,6 +118,8 @@ const TABS = [
   ["overview", "Overview", BarChart3],
   ["funnel", "Lead Journey", GitBranch],
   ["leadgoal", "Daily Leads", Users],
+  ["channels", "Channel Report", BarChart3],
+  ["social", "Social Channels", Globe],
   ["seo", "Search Performance", Activity],
   ["gsc", "Google Search", Search],
   ["inspection", "Check a Page on Google", Search],
@@ -744,6 +747,12 @@ function Marketing() {
               canExport={Boolean(isStaff && leadsQuery.data?.length)}
               onExport={exportLeads}
             />
+          </TabsContent>
+          <TabsContent value="channels">
+            <ChannelReportPanel leads={leadsQuery.data ?? null} loading={leadsQuery.isPending} />
+          </TabsContent>
+          <TabsContent value="social">
+            <SocialDashboard leads={leadsQuery.data ?? null} loading={leadsQuery.isPending} />
           </TabsContent>
           <TabsContent value="seo">
             <Section

@@ -445,7 +445,7 @@ describe("Marketing Hub page", () => {
 
   it("every tab has a panel and a description, and every setTab target is a real tab", () => {
     const tabs = [...hub.matchAll(/^\s+\["([a-z]+)", "[^"]+", [A-Za-z0-9]+\],$/gm)].map((m) => m[1]!);
-    expect(tabs).toEqual(["overview", "funnel", "leadgoal", "seo", "gsc", "inspection", "keywords", "backlinks", "attribution", "analytics", "content", "health", "reports", "integrations"]);
+    expect(tabs).toEqual(["overview", "funnel", "leadgoal", "channels", "social", "seo", "gsc", "inspection", "keywords", "backlinks", "attribution", "analytics", "content", "health", "reports", "integrations"]);
     for (const tab of tabs) {
       expect(hub, `panel ${tab}`).toContain(`<TabsContent value="${tab}">`);
     }
