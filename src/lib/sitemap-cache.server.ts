@@ -8,6 +8,8 @@
 // Crawlers always receive valid XML. A cached copy can be served immediately,
 // and a slow/failing source will not intentionally produce an empty sitemap.
 
+import { getVehicleImages } from "./vehicle-seo";
+
 const SITE_ORIGIN = "https://mycarcorp.com";
 
 const FRESH_MS = 10 * 60 * 1000;
@@ -48,24 +50,41 @@ function isoDate(value: string | null | undefined): string | null {
   return Number.isNaN(d.getTime()) ? null : d.toISOString();
 }
 
+/** Most photos listed per vehicle; Google reads up to 1000, but the first few are the ones that matter. */
+export const MAX_SITEMAP_IMAGES_PER_VEHICLE = 10;
+
 /**
- * Build one sitemap URL entry.
+ * Build one sitemap URL entry. Image URLs (absolute https only) are added as image:image entries.
  */
-function urlEntry(path: string, lastmod: string | null, changefreq: string, priority: string) {
+export function urlEntry(path: string, lastmod: string | null, changefreq: string, priority: string, images: string[] = []) {
   const mod = lastmod ? `<lastmod>${escape(lastmod)}</lastmod>` : "";
+  const imgs = images
+    .filter((src) => /^https:\/\//i.test(src))
+    .map((src) => `<image:image><image:loc>${escape(src)}</image:loc></image:image>`)
+    .join("");
 
   return `<url><loc>${SITE_ORIGIN}${escape(
     path,
-  )}</loc>${mod}<changefreq>${changefreq}</changefreq><priority>${priority}</priority></url>`;
+  )}</loc>${mod}<changefreq>${changefreq}</changefreq><priority>${priority}</priority>${imgs}</url>`;
 }
 
 /**
  * Wrap URL entries in a valid sitemap document.
  */
-function wrap(entries: string[]): string {
+export function wrap(entries: string[]): string {
   const ns = "http://www.sitemaps.org/schemas/sitemap/0.9";
+  const imageNs = "http://www.google.com/schemas/sitemap-image/1.1";
 
-  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="${ns}">${entries.join("")}</urlset>`;
+  return `<?xml version="1.0" encoding="UTF-8"?>\n<urlset xmlns="${ns}" xmlns:image="${imageNs}">${entries.join("")}</urlset>`;
+}
+
+/**
+ * A modification time for a vehicle, only when the inventory row carries a real one. The received/created date is
+ * not a modification time (it never changes when a price or status is edited), so it is not used.
+ */
+export function vehicleLastmod(row: Record<string, unknown>): string | null {
+  const candidate = row["updated_at"] ?? row["modified_at"] ?? row["date_updated"] ?? null;
+  return typeof candidate === "string" ? isoDate(candidate) : null;
 }
 
 /**
@@ -165,6 +184,7 @@ async function collectVehicleUrls(): Promise<
   Array<{
     slug: string;
     lastmod: string | null;
+    images: string[];
   }>
 > {
   const { listPublicLegacyInventory } = await import("./legacy-inventory.server");
@@ -174,7 +194,7 @@ async function collectVehicleUrls(): Promise<
     pageSize: 10000,
   });
 
-  const bySlug = new Map<string, string | null>();
+  const bySlug = new Map<string, { lastmod: string | null; images: string[] }>();
 
   for (const vehicle of data.vehicles ?? []) {
     const slug = String(vehicle.slug ?? "").trim();
@@ -183,26 +203,20 @@ async function collectVehicleUrls(): Promise<
       continue;
     }
 
-    /*
-     * Different inventory sources may expose different timestamp
-     * fields. Use the best available real timestamp without
-     * fabricating one.
-     */
-    const row = vehicle as unknown as Record<string, unknown>;
-
-    const possibleLastmod =
-      row["updated_at"] ?? row["modified_at"] ?? row["date_updated"] ?? row["date_received"] ?? row["created_at"] ?? null;
-
-    const lastmod = typeof possibleLastmod === "string" ? isoDate(possibleLastmod) : null;
-
     if (!bySlug.has(slug)) {
-      bySlug.set(slug, lastmod);
+      bySlug.set(slug, {
+        lastmod: vehicleLastmod(vehicle as unknown as Record<string, unknown>),
+        images: getVehicleImages({ vehicle_photos: vehicle.vehicle_photos })
+          .filter((src) => src.startsWith("https://"))
+          .slice(0, MAX_SITEMAP_IMAGES_PER_VEHICLE),
+      });
     }
   }
 
-  return [...bySlug.entries()].map(([slug, lastmod]) => ({
+  return [...bySlug.entries()].map(([slug, info]) => ({
     slug,
-    lastmod,
+    lastmod: info.lastmod,
+    images: info.images,
   }));
 }
 
@@ -233,7 +247,7 @@ async function buildXml(): Promise<string> {
    */
   if (vehicleResult.status === "fulfilled") {
     for (const vehicle of vehicleResult.value) {
-      entries.push(urlEntry(`/inventory/${encodeURIComponent(vehicle.slug)}`, vehicle.lastmod, "daily", "0.8"));
+      entries.push(urlEntry(`/inventory/${encodeURIComponent(vehicle.slug)}`, vehicle.lastmod, "daily", "0.8", vehicle.images));
     }
   } else {
     console.error("[sitemap] vehicle URLs unavailable", vehicleResult.reason);

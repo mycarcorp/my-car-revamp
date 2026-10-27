@@ -22,10 +22,22 @@ import {
   Settings2,
   ClipboardList,
   Download,
+  GitBranch,
 } from "lucide-react";
 import { Bar, BarChart, CartesianGrid, Line, LineChart, Tooltip, XAxis, YAxis } from "recharts";
 import { toast } from "sonner";
 import { useAuth } from "@/hooks/useAuth";
+import { listLeads } from "@/lib/admin-leads.functions";
+import { FunnelMonitor, HealthBadge, LeadGoalPanel } from "@/components/admin/MarketingFunnel";
+import { ChannelReportPanel, SocialDashboard } from "@/components/admin/MarketingChannels";
+import { ContentAgentPanel } from "@/components/admin/MarketingContentPlan";
+import { computeHealth } from "@/lib/marketing-health";
+import {
+  DEALERSHIP_TIMEZONE,
+  buildLeadExportCsv,
+  buildLeadGoalReport,
+  groupChannelRows,
+} from "@/lib/marketing-lead-goal";
 import { AdminPageHeader } from "@/components/admin/AdminPageHeader";
 import { Button } from "@/components/ui/button";
 import { Badge } from "@/components/ui/badge";
@@ -105,18 +117,25 @@ export const Route = createFileRoute("/admin/marketing")({
 });
 const TABS = [
   ["overview", "Overview", BarChart3],
-  ["seo", "SEO Performance", Activity],
-  ["gsc", "Google Search Console", Search],
-  ["inspection", "URL Inspection", Search],
-  ["keywords", "Semrush Research", Globe],
-  ["backlinks", "Backlink Research", Link2],
-  ["attribution", "Lead Attribution", Users],
-  ["analytics", "Google Analytics", BarChart3],
-  ["content", "SEO Automation", FileText],
-  ["health", "Lighthouse & Website Health", CheckCircle2],
-  ["reports", "Reports", ClipboardList],
-  ["integrations", "Integrations & Settings", Settings2],
+  ["funnel", "Lead Journey", GitBranch],
+  ["leadgoal", "Daily Leads", Users],
+  ["channels", "Channel Report", BarChart3],
+  ["social", "Social Channels", Globe],
+  ["contentplan", "Content Plan", FileText],
+  ["seo", "Search Performance", Activity],
+  ["gsc", "Google Search", Search],
+  ["inspection", "Check a Page on Google", Search],
+  ["keywords", "Keyword Ideas", Globe],
+  ["backlinks", "Links to Our Site", Link2],
+  ["attribution", "Where Leads Come From", Users],
+  ["analytics", "Website Visitors", BarChart3],
+  ["content", "Blog Performance", FileText],
+  ["health", "Website Health", CheckCircle2],
+  ["reports", "Saved Reports", ClipboardList],
+  ["integrations", "Connections", Settings2],
 ] as const;
+const articleOrigin = (source: string) => (source === "AutoSEO" ? "Imported article" : "Editorial");
+const GOAL_RECORD_LIMIT = 2000;
 const date = (value: string | null | undefined) =>
   value ? new Date(value).toLocaleString() : "Not checked";
 const number = (value: number | null | undefined) => (value == null ? "—" : value.toLocaleString());
@@ -141,6 +160,21 @@ function Status({ report }: { report: ServiceReport }) {
       )}
       {report.state}
     </Badge>
+  );
+}
+function Unavailable({ report, name }: { report: ServiceReport; name: string }) {
+  if (report.state === "Connected") return null;
+  return (
+    <div role="status" className="mb-4 border-l-2 border-amber-500 bg-background p-3 text-xs">
+      <p className="font-semibold">
+        {name}: {report.state}
+      </p>
+      <p className="mt-1 text-muted-foreground">
+        {report.state === "Not Connected"
+          ? `${name} is not connected, so this section has no data. Nothing is estimated.`
+          : "The last refresh failed. Rows shown, if any, come from the last saved report."}
+      </p>
+    </div>
   );
 }
 function Empty({ children }: { children: React.ReactNode }) {
@@ -371,6 +405,51 @@ function Marketing() {
     website = snapshot.website.data,
     lighthouse = snapshot.lighthouse.data,
     research = snapshot.research.data;
+  const leadsQuery = useQuery({
+    queryKey: ["marketing", "goal-leads", user?.id],
+    queryFn: () => listLeads({ data: { accessToken: session?.access_token ?? "", limit: GOAL_RECORD_LIMIT } }),
+    enabled: Boolean(session?.access_token && isStaff),
+    staleTime: 60000,
+    retry: false,
+  });
+  const goalReport = useMemo(
+    () => (leadsQuery.data ? buildLeadGoalReport(leadsQuery.data, { recordLimit: GOAL_RECORD_LIMIT }) : null),
+    [leadsQuery.data],
+  );
+  const healthItems = useMemo(
+    () =>
+      computeHealth({
+        now: Date.now(),
+        search: snapshot.search,
+        website: snapshot.website,
+        leads: leadsQuery.data ?? null,
+        ga4:
+          ga4Query.isError
+            ? { state: "error", checkedAt: null }
+            : ga4?.status === "available"
+              ? { state: "ok", checkedAt: ga4.fetchedAt }
+              : ga4?.status === "unavailable"
+                ? { state: /not configured|missing|credentials/i.test(ga4.message ?? "") ? "not_configured" : "error", checkedAt: ga4.fetchedAt }
+                : { state: "unchecked", checkedAt: null },
+        // The Pixel ID is defined in src/lib/analytics.ts; whether events arrive cannot be seen from here.
+        metaPixelConfigured: true,
+      }),
+    [snapshot.search, snapshot.website, leadsQuery.data, ga4Query.isError, ga4],
+  );
+  const outcomes = attributionQuery.data?.outcomes;
+  const metricOrState = (state: string, value: number | null | undefined) =>
+    state === "Not Connected" ? "Not Connected" : value == null ? "No Data" : number(value);
+  const channelRows = groupChannelRows(attributionQuery.data?.bySource ?? []);
+  function exportLeads() {
+    if (!leadsQuery.data?.length) return;
+    const blob = new Blob([`\uFEFF${buildLeadExportCsv(leadsQuery.data)}`], { type: "text/csv;charset=utf-8" });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = url;
+    link.download = `mycar-leads-${new Date().toISOString().slice(0, 10)}.csv`;
+    link.click();
+    URL.revokeObjectURL(url);
+  }
   const keywordRows = useMemo(
     () =>
       (search?.keywords ?? []).filter((r) =>
@@ -563,140 +642,122 @@ function Marketing() {
           <TabsContent value="overview">
             <div className="grid gap-3 py-5 sm:grid-cols-2 xl:grid-cols-4">
               <Metric
-                label="Organic search clicks"
-                value={number(search?.totals?.clicks)}
-                detail={
-                  search?.startDate
-                    ? `${search.startDate} – ${search.endDate}`
-                    : "Search Console · No saved report"
-                }
-                icon={BarChart3}
+                label="Leads, last 30 days"
+                value={leadsQuery.isPending ? "…" : goalReport ? number(goalReport.total) : "No Data"}
+                detail="Website inquiries"
+                icon={Users}
               />
               <Metric
-                label="Search impressions"
-                value={number(search?.totals?.impressions)}
-                detail="Google organic web search"
+                label="Google search clicks"
+                value={metricOrState(snapshot.search.state, search?.totals?.clicks)}
+                detail="From Google Search"
                 icon={Search}
               />
               <Metric
-                label="Published articles"
-                value={website ? number(website.articles.length) : "—"}
-                detail="AutoSEO + My Car editorial"
-                icon={FileText}
+                label="Website visits"
+                value={ga4?.status === "available" && ga4.metrics ? number(ga4.metrics.sessions) : ga4Query.isPending ? "…" : ga4?.status === "unavailable" ? "Not Connected" : "No Data"}
+                detail="From Google Analytics"
+                icon={Globe}
               />
               <Metric
-                label="Recorded outreach acquired"
-                value={number(prospects.filter((p) => p.status === "Acquired").length)}
-                detail="Manual prospect records; not a backlink count"
-                icon={Link2}
+                label="Appointments booked"
+                value={outcomes?.confirmedAppointments.status === "available" ? number(outcomes.confirmedAppointments.count) : attributionQuery.isPending ? "…" : "No Data"}
+                detail="Confirmed"
+                icon={CalendarDays}
               />
             </div>
-            <Section
-              title="Lead attribution snapshot"
-              subtitle="Counts from saved lead records; no ad conversion totals are inferred."
-              actions={
-                <Button variant="outline" size="sm" onClick={() => setTab("attribution")}>
-                  View attribution
-                  <ArrowUpRight className="size-3.5" />
-                </Button>
-              }
-            >
-              {attributionQuery.isPending ? (
-                <div className="flex items-center gap-2 py-5 text-sm text-muted-foreground">
-                  <Loader2 className="size-4 animate-spin" />
-                  Loading lead source totals…
-                </div>
-              ) : attributionQuery.error ? (
-                <div
-                  role="alert"
-                  className="border-l-2 border-destructive bg-background p-4 text-sm"
-                >
-                  Lead attribution could not be loaded: {attributionQuery.error.message}
-                </div>
-              ) : attributionQuery.data ? (
-                <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
-                  {attributionQuery.data.bySource.slice(0, 4).map((row) => (
-                    <Metric
-                      key={`${row.source}-${row.evidence}`}
-                      label={`${row.source} · ${row.evidence}`}
-                      value={number(row.count)}
-                      detail={`${attributionQuery.data!.startDate} – ${attributionQuery.data!.endDate} · recorded leads`}
-                      icon={Users}
-                    />
-                  ))}
-                </div>
-              ) : (
-                <Empty>No lead attribution report is available.</Empty>
-              )}
-            </Section>
-            <Section
-              title="Monitoring pulse"
-              subtitle="Saved reports only · no background polling"
-              actions={
-                <Button variant="outline" size="sm" onClick={() => setTab("integrations")}>
-                  Manage integrations
-                  <ArrowUpRight className="size-3.5" />
-                </Button>
-              }
-            >
-              <div className="divide-y divide-border border-y border-border">
-                {(
-                  [
-                    ["Google Search Console", snapshot.search],
-                    ["Semrush research", snapshot.research],
-                    ["Lighthouse CI", snapshot.lighthouse],
-                    ["Website & AutoSEO", snapshot.website],
-                  ] as const
-                ).map(([name, report]) => (
-                  <div
-                    key={name}
-                    className="flex flex-wrap items-center justify-between gap-3 py-4"
-                  >
-                    <div>
-                      <div className="text-sm font-semibold">{name}</div>
-                      <p className="mt-1 text-xs text-muted-foreground">{date(report.checkedAt)}</p>
-                    </div>
-                    <Status report={report} />
-                  </div>
-                ))}
+            <div className="grid gap-4 lg:grid-cols-2">
+              <section className="rounded-lg border border-border bg-background p-4">
+                <h2 className="text-sm font-semibold">Leads per day</h2>
+                <p className="text-xs text-muted-foreground">Goal: 6–10 a day</p>
+                {goalReport && goalReport.total > 0 ? (
+                  <ChartContainer config={{ workable: { label: "Leads", color: "var(--color-primary)" } }} className="mt-3 aspect-auto h-56 w-full">
+                    <BarChart data={goalReport.daily} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tickFormatter={(d: string) => d.slice(5)} tickLine={false} axisLine={false} minTickGap={24} />
+                      <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={28} />
+                      <Tooltip content={<ChartTooltipContent />} />
+                      <Bar dataKey="workable" name="Leads" fill="var(--color-workable)" radius={[3, 3, 0, 0]} />
+                    </BarChart>
+                  </ChartContainer>
+                ) : (
+                  <Empty>{leadsQuery.isPending ? "Loading…" : "No lead data yet."}</Empty>
+                )}
+              </section>
+              <section className="rounded-lg border border-border bg-background p-4">
+                <h2 className="text-sm font-semibold">Where leads come from</h2>
+                <p className="text-xs text-muted-foreground">Last 30 days</p>
+                {goalReport && goalReport.bySource.length > 0 ? (
+                  <ChartContainer config={{ count: { label: "Leads", color: "var(--color-primary)" } }} className="mt-3 aspect-auto h-56 w-full">
+                    <BarChart data={goalReport.bySource} layout="vertical" margin={{ top: 4, right: 12, bottom: 4, left: 8 }}>
+                      <CartesianGrid horizontal={false} strokeDasharray="3 3" />
+                      <XAxis type="number" allowDecimals={false} tickLine={false} axisLine={false} />
+                      <YAxis type="category" dataKey="label" tickLine={false} axisLine={false} width={110} />
+                      <Tooltip content={<ChartTooltipContent />} />
+                      <Bar dataKey="count" name="Leads" fill="var(--color-count)" radius={[0, 3, 3, 0]} />
+                    </BarChart>
+                  </ChartContainer>
+                ) : (
+                  <Empty>{leadsQuery.isPending ? "Loading…" : "No lead data yet."}</Empty>
+                )}
+              </section>
+              <section className="rounded-lg border border-border bg-background p-4 lg:col-span-2">
+                <h2 className="text-sm font-semibold">Website visits per day</h2>
+                <p className="text-xs text-muted-foreground">From Google Analytics</p>
+                {ga4?.daily?.length ? (
+                  <ChartContainer config={{ sessions: { label: "Visits", color: "var(--color-primary)" } }} className="mt-3 aspect-auto h-56 w-full">
+                    <LineChart data={ga4.daily} margin={{ top: 8, right: 8, bottom: 4, left: 0 }}>
+                      <CartesianGrid vertical={false} strokeDasharray="3 3" />
+                      <XAxis dataKey="date" tickLine={false} axisLine={false} minTickGap={32} />
+                      <YAxis allowDecimals={false} tickLine={false} axisLine={false} width={36} />
+                      <Tooltip content={<ChartTooltipContent />} />
+                      <Line type="monotone" dataKey="sessions" name="Visits" stroke="var(--color-sessions)" strokeWidth={2} dot={false} />
+                    </LineChart>
+                  </ChartContainer>
+                ) : (
+                  <Empty>{ga4Query.isPending ? "Loading…" : "No visit data available."}</Empty>
+                )}
+              </section>
+            </div>
+            <div className="mt-4 flex flex-wrap items-center justify-between gap-3 rounded-lg border border-border bg-background p-4">
+              <div className="flex flex-wrap items-center gap-3 text-sm">
+                <span className="font-semibold">Status</span>
+                {(["green", "yellow", "red", "gray"] as const).map((state) => {
+                  const n = healthItems.filter((i) => i.state === state).length;
+                  return n ? (
+                    <span key={state} className="inline-flex items-center gap-1.5">
+                      <HealthBadge state={state} />
+                      <span className="text-xs text-muted-foreground">{n}</span>
+                    </span>
+                  ) : null;
+                })}
               </div>
-            </Section>
-            <Section
-              title="Recent publications"
-              actions={
-                <Button variant="ghost" size="sm" onClick={() => setTab("content")}>
-                  All articles
-                  <ArrowUpRight className="size-3.5" />
-                </Button>
-              }
-            >
-              {articles.length ? (
-                <div className="divide-y divide-border">
-                  {articles.slice(0, 5).map((a) => (
-                    <div key={a.slug} className="flex items-center justify-between gap-3 py-3">
-                      <div className="min-w-0">
-                        <p className="text-sm font-medium">{a.title}</p>
-                        <p className="mt-1 text-xs text-muted-foreground">
-                          {a.source} · {date(a.publishedAt)}
-                        </p>
-                      </div>
-                      <Button asChild size="icon" variant="ghost">
-                        <a
-                          href={`/blog/${encodeURIComponent(a.slug)}`}
-                          target="_blank"
-                          rel="noreferrer"
-                          aria-label={`View ${a.title}`}
-                        >
-                          <ArrowUpRight className="size-4" />
-                        </a>
-                      </Button>
-                    </div>
-                  ))}
-                </div>
-              ) : (
-                <Empty>Refresh Website & AutoSEO to read the existing publications.</Empty>
-              )}
-            </Section>
+              <Button variant="outline" size="sm" onClick={() => setTab("funnel")}>
+                See details
+                <ArrowUpRight className="size-3.5" />
+              </Button>
+            </div>
+          </TabsContent>
+          <TabsContent value="funnel">
+            <FunnelMonitor items={healthItems} onOpenTab={setTab} />
+          </TabsContent>
+          <TabsContent value="leadgoal">
+            <LeadGoalPanel
+              report={goalReport}
+              loading={leadsQuery.isPending}
+              error={leadsQuery.error ? "the lead service did not respond" : null}
+              canExport={Boolean(isStaff && leadsQuery.data?.length)}
+              onExport={exportLeads}
+            />
+          </TabsContent>
+          <TabsContent value="channels">
+            <ChannelReportPanel leads={leadsQuery.data ?? null} loading={leadsQuery.isPending} />
+          </TabsContent>
+          <TabsContent value="social">
+            <SocialDashboard leads={leadsQuery.data ?? null} loading={leadsQuery.isPending} />
+          </TabsContent>
+          <TabsContent value="contentplan">
+            <ContentAgentPanel accessToken={session?.access_token ?? ""} userLabel={user?.email ?? ""} />
           </TabsContent>
           <TabsContent value="seo">
             <Section
@@ -823,8 +884,9 @@ function Marketing() {
           <TabsContent value="inspection">
             <Section
               title="Google Search Console URL Inspection"
-              subtitle="Inspects one URL against the currently selected verified Search Console property."
+              subtitle="Asks Google how it sees one URL: indexed or not, last crawl time and any problems. It does not report how many people visited the page; use Google Analytics for that."
             >
+              <Unavailable report={snapshot.search} name="Google Search Console" />
               {propertyPicker}
               <form
                 onSubmit={(event) => void inspectPage(event)}
@@ -904,6 +966,7 @@ function Marketing() {
               subtitle="Provider estimates · US database · available within your plan"
               actions={refreshButton("research")}
             >
+              <Unavailable report={snapshot.research} name="Semrush" />
               <ProviderTable data={research?.keywords} />
             </Section>
             <Section
@@ -1051,7 +1114,7 @@ function Marketing() {
                     ["Google Search Console", snapshot.search, "search"],
                     ["Semrush Research", snapshot.research, "research"],
                     ["GitHub Lighthouse", snapshot.lighthouse, "lighthouse"],
-                    ["Website & AutoSEO", snapshot.website, "website"],
+                    ["Website health", snapshot.website, "website"],
                   ] as const
                 ).map(([name, report, service]) => (
                   <div
@@ -1595,6 +1658,7 @@ function Marketing() {
               subtitle="Semrush Authority Score is not Ahrefs Domain Rating; values are not interchangeable."
               actions={refreshButton("research")}
             >
+              <Unavailable report={snapshot.research} name="Semrush" />
               <ProviderTable data={research?.domains} />
             </Section>
             <Section title="Provider-discovered backlinks">
@@ -1684,14 +1748,14 @@ function Marketing() {
           </TabsContent>
           <TabsContent value="content">
             <Section
-              title="SEO Automation"
-              subtitle="Manage AutoSEO quality checks, review, and publishing in the existing Blog workspace."
+              title="Blog performance"
+              subtitle="Published blog articles on mycarcorp.com. Articles already published stay live."
               actions={
                 <div className="flex gap-2">
                   {refreshButton("website")}
                   <Button asChild variant="outline" size="sm">
                     <Link to="/admin/blog">
-                      Open Blog & AutoSEO
+                      Open Blog workspace
                       <ArrowUpRight className="size-3.5" />
                     </Link>
                   </Button>
@@ -1699,26 +1763,10 @@ function Marketing() {
               }
             >
               <div className="mb-5 flex flex-wrap items-center gap-3 border-y border-border py-4">
-                <Badge variant="outline">
-                  {website?.autoSeoTokenConfigured
-                    ? "AutoSEO token configured"
-                    : "AutoSEO not checked"}
-                </Badge>
+                <Badge variant="outline">{website ? `${number(website.articles.length)} published articles` : "Not checked"}</Badge>
                 <span className="text-xs text-muted-foreground">
-                  Quality rules, duplicate-intent checks, review, and publish controls remain in the existing workflow.
+                  Counts and dates come from the website&apos;s published articles. Article views and rankings are in Google Analytics and Search Console.
                 </span>
-              </div>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div className="border-y border-border py-4">
-                  <p className="text-sm font-semibold">AutoSEO pipeline</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Existing generated-article queue and editorial tools.</p>
-                  <Button asChild variant="link" size="sm" className="mt-2 h-auto p-0"><Link to="/admin/blog">Open article workspace<ArrowUpRight className="size-3.5" /></Link></Button>
-                </div>
-                <div className="border-y border-border py-4">
-                  <p className="text-sm font-semibold">Quality checks & publishing</p>
-                  <p className="mt-1 text-xs text-muted-foreground">Existing approval, quality scan, quality rules, and publish status controls.</p>
-                  <Button asChild variant="link" size="sm" className="mt-2 h-auto p-0"><Link to="/admin/blog">Review controls<ArrowUpRight className="size-3.5" /></Link></Button>
-                </div>
               </div>
               <Input
                 aria-label="Search published articles"
@@ -1734,7 +1782,7 @@ function Marketing() {
                       <div>
                         <p className="text-sm font-semibold">{a.title}</p>
                         <p className="mt-1 text-xs text-muted-foreground">
-                          {a.source} · {date(a.publishedAt)}
+                          {articleOrigin(a.source)} · {date(a.publishedAt)}
                         </p>
                       </div>
                       <Button asChild variant="outline" size="sm">
@@ -1766,7 +1814,7 @@ function Marketing() {
                     ["Google Search Console", "search", snapshot.search],
                     ["GitHub · Lighthouse CI", "lighthouse", snapshot.lighthouse],
                     ["Semrush", "research", snapshot.research],
-                    ["Website & AutoSEO", "website", snapshot.website],
+                    ["Website health", "website", snapshot.website],
                   ] as const
                 ).map(([name, service, report]) => (
                   <div

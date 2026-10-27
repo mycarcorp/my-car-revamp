@@ -176,7 +176,11 @@ export function SiteFooter() {
         </div>
 
         <div>
-          <h3 className="text-sm font-semibold uppercase tracking-wide">Areas we serve</h3>
+          <h3 className="text-sm font-semibold uppercase tracking-wide">
+            <Link to="/locations" className="hover:text-primary">
+              Areas we serve
+            </Link>
+          </h3>
 
           <ul className="mt-4 space-y-2 text-sm text-muted-foreground">
             {(areas ?? []).slice(0, 6).map((area) => (

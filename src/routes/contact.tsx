@@ -1,4 +1,4 @@
-import { createFileRoute } from "@tanstack/react-router";
+import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery } from "@tanstack/react-query";
 import { CarFront, Clock3, Headphones, Mail, MapPin, Phone, ShieldCheck, type LucideIcon } from "lucide-react";
 import { LeadForm } from "@/components/LeadForm";
@@ -225,6 +225,20 @@ function ContactPage() {
 
                   <p className="mt-1 text-xs leading-5 text-slate-300">
                     Tell us the make and model in your message and we&apos;ll check the lot.
+                  </p>
+
+                  <p className="mt-2 text-xs leading-5 text-slate-300">
+                    <Link to="/search" className="font-semibold text-white underline-offset-2 hover:underline">
+                      Browse used cars
+                    </Link>
+                    {" · "}
+                    <Link to="/sell" className="font-semibold text-white underline-offset-2 hover:underline">
+                      Sell or trade
+                    </Link>
+                    {" · "}
+                    <Link to="/schedule" className="font-semibold text-white underline-offset-2 hover:underline">
+                      Schedule a visit
+                    </Link>
                   </p>
                 </div>
               </div>

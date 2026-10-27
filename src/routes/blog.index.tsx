@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { ctaButtonClass } from "@/lib/ui";
+import { uniqueArticleLinks } from "@/lib/blog-seo";
 import { formatDate } from "@/lib/format";
 import { publicBlogSummaryList } from "@/lib/legacy-blog.functions";
 import { publicAutoseoSummaryList, type AutoseoPost } from "@/lib/autoseo-blog.functions";
@@ -420,6 +421,8 @@ function BlogIndex() {
 
   const topics = Array.from(new Set(cards.map((c) => c.category).filter(Boolean))) as string[];
 
+  const allLinks = uniqueArticleLinks(cards);
+
   const heroImage =
     featured?.image ?? "https://images.unsplash.com/photo-1492144534655-ae79c964c9d7?auto=format&fit=crop&w=1800&q=85";
 
@@ -686,6 +689,22 @@ function BlogIndex() {
               </div>
             )}
           </div>
+        )}
+
+        {/* Every article as a plain link, so articles beyond the first page are reachable without JavaScript. */}
+        {allLinks.length > PAGE + 1 && (
+          <details className="mt-12 rounded-xl border border-border bg-card p-5">
+            <summary className="cursor-pointer font-display text-lg font-semibold">Browse all {allLinks.length} articles</summary>
+            <ul className="mt-4 grid gap-x-8 gap-y-2 text-sm sm:grid-cols-2">
+              {allLinks.map((c) => (
+                <li key={c.key} className="min-w-0 break-words">
+                  <Link to="/blog/$slug" params={{ slug: c.slug }} className="text-primary hover:underline">
+                    {c.title}
+                  </Link>
+                </li>
+              ))}
+            </ul>
+          </details>
         )}
 
         {/* INTERNAL SEO LINKS */}

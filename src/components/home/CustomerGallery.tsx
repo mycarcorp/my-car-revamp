@@ -102,7 +102,9 @@ function Slide({ item, active }: { item: GalleryItem; active: boolean }) {
         <video
           ref={video}
           src={item.url}
-          preload="metadata"
+          // Only the slide in view loads video data, so off-screen reels cost no bandwidth.
+          preload={active ? "metadata" : "none"}
+          aria-label={item.title ? `Video: ${item.title}` : "Customer video"}
           playsInline
           controls={playing}
           onEnded={() => setPlaying(false)}

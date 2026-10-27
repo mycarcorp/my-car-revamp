@@ -1,5 +1,6 @@
 import { createServerFn } from "@tanstack/react-start";
 import { logSafeError } from "./safe-log";
+import type { GhlPostOutcome } from "./ghl-webhook.server";
 
 /** Website lead types that mirror to GoHighLevel, mapped to their event_type. */
 const EVENT_TYPES: Record<string, string> = {
@@ -28,6 +29,50 @@ function carFinderFinancingPreference(value: unknown): string {
 /** True for lead types the website mirrors to GoHighLevel. Finance-adjacent and CEO-owned flows have their own senders. */
 export function isGhlForwardedLeadType(leadType: string): boolean {
   return Object.prototype.hasOwnProperty.call(EVENT_TYPES, leadType);
+}
+
+/** Keys the website sets itself; a form field with one of these names can never replace them. */
+const RESERVED_KEYS = new Set(["event_type", "source", "submitted_at", "website_lead_id", "delivery_attempt", "full_name", "email", "phone", "message"]);
+
+const MAX_FLAT_KEYS = 150;
+
+/** Flattens a parsed JSON value into text fields named parent_child (arrays: parent_1_child). */
+function flattenInto(out: Record<string, string>, prefix: string, value: unknown, depth: number): void {
+  if (Object.keys(out).length >= MAX_FLAT_KEYS) return;
+  if (value === null || value === undefined) return;
+  if (typeof value === "object") {
+    if (depth >= 4) return;
+    const entries = Array.isArray(value) ? value.map((v, i) => [String(i + 1), v] as const) : Object.entries(value as Record<string, unknown>);
+    for (const [k, v] of entries) flattenInto(out, `${prefix}_${k.replace(/[^A-Za-z0-9]+/g, "_")}`, v, depth + 1);
+    return;
+  }
+  const text = String(value);
+  if (text !== "") out[prefix] = text.slice(0, 5000);
+}
+
+/**
+ * Every non-empty saved form field as text, except internal delivery state and the website's own fixed keys. A field
+ * that holds JSON (an address, an employer, a list of references) is sent both as the original text and as separate
+ * flat fields, for example current_address_street, so each part can be mapped in the CRM.
+ */
+export function allFormFields(details: Record<string, unknown>): Record<string, string> {
+  const out: Record<string, string> = {};
+  for (const [key, value] of Object.entries(details)) {
+    if (RESERVED_KEYS.has(key) || key.startsWith("ghl_delivery_")) continue;
+    if (value === null || value === undefined || typeof value === "object") continue;
+    const text = String(value);
+    if (text === "") continue;
+    out[key] = text.slice(0, 5000);
+    const trimmed = text.trim();
+    if ((trimmed.startsWith("{") && trimmed.endsWith("}")) || (trimmed.startsWith("[") && trimmed.endsWith("]"))) {
+      try {
+        flattenInto(out, key, JSON.parse(trimmed), 0);
+      } catch {
+        // Not JSON: the original text is already included.
+      }
+    }
+  }
+  return out;
 }
 
 /** Contact leads split into a general contact and a Car Finder request. */
@@ -78,29 +123,24 @@ export type GhlLeadInput = {
   details?: Record<string, unknown>;
 };
 
+const LEAD_ID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 /**
  * Fire-and-forget mirror of a saved lead to the GoHighLevel incoming webhook.
- * Runs only after the Supabase insert succeeded; never fails the submission.
+ * The caller supplies only the ID of a lead it just saved. The server loads that stored lead, forwards it at most
+ * once (delivery state is kept on the lead itself) and never forwards caller-supplied contact data, so this
+ * endpoint cannot be used to push arbitrary records into GHL. Never fails the submission.
  */
 export const sendLeadToGhl = createServerFn({ method: "POST" })
-  .inputValidator((input: GhlLeadInput) => {
-    const leadType = str(input?.leadType);
-    if (!isGhlForwardedLeadType(leadType)) throw new Error("Unsupported lead type");
-    return {
-      leadType,
-      fullName: str(input?.fullName),
-      email: str(input?.email),
-      phone: str(input?.phone),
-      message: str(input?.message),
-      vehicleUrl: str(input?.vehicleUrl),
-      vehicle: (input?.vehicle ?? null) as GhlLeadInput["vehicle"],
-      details:
-        input?.details && typeof input.details === "object"
-          ? (input.details as Record<string, unknown>)
-          : {},
-    };
+  .inputValidator((input: { leadId: string }) => {
+    const leadId = typeof input?.leadId === "string" ? input.leadId.trim() : "";
+    if (!LEAD_ID.test(leadId)) throw new Error("Invalid lead");
+    return { leadId: leadId.toLowerCase() };
   })
-  .handler(({ data }) => deliverLeadToGhl(data));
+  .handler(async ({ data }) => {
+    const { deliverStoredLeadToGhl } = await import("./ghl-delivery.server");
+    return deliverStoredLeadToGhl(data.leadId);
+  });
 
 type GhlLeadData = {
   leadType: string;
@@ -111,16 +151,25 @@ type GhlLeadData = {
   vehicleUrl: string;
   vehicle: GhlLeadInput["vehicle"];
   details: Record<string, unknown>;
+  /** The stored lead's ID: sent to GHL as website_lead_id so a repeat can be recognised there. */
+  leadId?: string;
+  attempt?: number;
+};
+
+export type GhlDeliveryResult = {
+  delivered: boolean;
+  status: number | null;
+  outcome: GhlPostOutcome;
 };
 
 /** Exported so error handling can be tested without the Start runtime. */
-export async function deliverLeadToGhl(data: GhlLeadData): Promise<{ delivered: boolean; status: number | null }> {
+export async function deliverLeadToGhl(data: GhlLeadData): Promise<GhlDeliveryResult> {
   const event_type = ghlEventTypeFor(data.leadType, data.details)!;
   const d = data.details;
   const v = data.vehicle ?? {};
   const rawEventId = d["lead_event_id"];
   const eventId = typeof rawEventId === "string" && LEAD_EVENT_ID.test(rawEventId) ? rawEventId : null;
-  if (eventId && forwardedLeadEvents.has(eventId)) return { delivered: true, status: null };
+  if (eventId && forwardedLeadEvents.has(eventId)) return { delivered: true, status: null, outcome: "delivered" };
 
   const base: Record<string, unknown> = {
     event_type,
@@ -131,12 +180,13 @@ export async function deliverLeadToGhl(data: GhlLeadData): Promise<{ delivered: 
     phone: data.phone,
     message: data.message,
     submitted_at: new Date().toISOString(),
+    ...(data.leadId ? { website_lead_id: data.leadId, delivery_attempt: String(data.attempt ?? 1) } : {}),
   };
   // Attribution fields (lead_source, utm_*, click IDs, first_/last_touch_*).
   for (const [k, val] of Object.entries(d)) {
     if (
-      /^(lead_source|lead_medium|utm_|referrer$|landing_page$|conversion_page$|first_touch_|last_touch_)/.test(k) ||
-      ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "li_fat_id", "rdt_cid"].includes(k)
+      /^(lead_source|lead_medium|channel$|utm_|referrer$|landing_page$|conversion_page$|first_touch_|last_touch_)/.test(k) ||
+      ["fbclid", "gclid", "gbraid", "wbraid", "ttclid", "li_fat_id", "rdt_cid", "msclkid"].includes(k)
     ) {
       base[k] = str(val);
     }
@@ -211,17 +261,21 @@ export async function deliverLeadToGhl(data: GhlLeadData): Promise<{ delivered: 
     };
   }
 
+  // Every saved form field is sent for every form (management decision). The fixed fields built above win on a clash,
+  // which keeps validated values (for example the Car Finder budget) and the website's own keys intact.
+  payload = { ...allFormFields(d), ...payload };
+
   if (eventId) forwardedLeadEvents.add(eventId);
   try {
-    const { postToGhl } = await import("./ghl-webhook.server");
-    const status = await postToGhl(payload);
-    const delivered = status >= 200 && status < 300;
-    if (!delivered && eventId) forwardedLeadEvents.delete(eventId);
+    const { postToGhlTimed } = await import("./ghl-webhook.server");
+    const { status, outcome } = await postToGhlTimed(payload);
+    // Only a refusal (4xx) frees the guard: an unconfirmed delivery may already have been processed, so a repeat
+    // could create a duplicate contact or alert.
+    if (outcome === "rejected" && eventId) forwardedLeadEvents.delete(eventId);
     if (eventId && forwardedLeadEvents.size > 500) forwardedLeadEvents.clear();
-    return { delivered, status };
+    return { delivered: outcome === "delivered", status, outcome };
   } catch (error) {
-    if (eventId) forwardedLeadEvents.delete(eventId);
     logSafeError("ghl-webhook.request", error);
-    return { delivered: false, status: null };
+    return { delivered: false, status: null, outcome: "unconfirmed" };
   }
 }

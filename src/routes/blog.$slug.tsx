@@ -5,6 +5,9 @@ import { publicAutoseoSummaryList, publicAutoseoPost, type AutoseoPost } from "@
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
 import { escapeHtml, normalizeCta, normalizeHeadingStyles, sanitizeHtml, type HeadingStyle } from "@/lib/blog-content";
 import { normalizeArticleLists } from "@/lib/article-lists";
+import { buildBlogPostingJsonLd, buildBreadcrumbJsonLd, jsonLdScript } from "@/lib/seo";
+import { articleBreadcrumb, articleSeoTitle, blogCtaLinks } from "@/lib/blog-seo";
+import logoUrl from "@/assets/mycar-logo.png";
 
 const ORIGIN = "https://mycarcorp.com";
 
@@ -389,7 +392,7 @@ export const Route = createFileRoute("/blog/$slug")({
 
       const canonicalUrl = `${ORIGIN}/blog/${a.slug}`;
 
-      const title = `${a.title} | MyCar`;
+      const title = articleSeoTitle(a.title);
 
       const description =
         a.meta_description ??
@@ -458,24 +461,20 @@ export const Route = createFileRoute("/blog/$slug")({
       }
 
       const scripts: Array<Record<string, string>> = [
-        {
-          type: "application/ld+json",
-          children: JSON.stringify({
-            "@context": "https://schema.org",
-            "@type": "Article",
-            headline: a.title,
-            image: a.hero_image_url ?? undefined,
-            datePublished: a.published_at ?? undefined,
-            dateModified: a.updated_at ?? a.published_at ?? undefined,
-            description,
-            mainEntityOfPage: canonicalUrl,
-            publisher: {
-              "@type": "Organization",
-              name: "MyCar",
-              url: ORIGIN,
+        jsonLdScript(
+          buildBlogPostingJsonLd(
+            {
+              url: canonicalUrl,
+              headline: a.title,
+              description,
+              image: a.hero_image_url,
+              datePublished: a.published_at,
+              dateModified: a.updated_at,
             },
-          }),
-        },
+            logoUrl,
+          ),
+        ),
+        jsonLdScript(buildBreadcrumbJsonLd(articleBreadcrumb(a.title, a.slug))),
       ];
 
       const faqs = faqList(a);
@@ -516,7 +515,7 @@ export const Route = createFileRoute("/blog/$slug")({
 
     const p = loaderData.post;
 
-    const title = (p.meta_title as string) || `${p.title} | MyCar`;
+    const title = (p.meta_title as string) || articleSeoTitle(p.title);
 
     const description =
       (p.meta_description as string) || p.excerpt || `${p.title} — from the MyCar team in Fredericksburg, VA.`;
@@ -571,6 +570,23 @@ export const Route = createFileRoute("/blog/$slug")({
           rel: "canonical",
           href: url,
         },
+      ],
+      scripts: [
+        jsonLdScript(
+          buildBlogPostingJsonLd(
+            {
+              url,
+              headline: p.title,
+              description,
+              image: p.image_url,
+              datePublished: p.published_at,
+              dateModified: p.updated_at,
+              authorName: p.author_name,
+            },
+            logoUrl,
+          ),
+        ),
+        jsonLdScript(buildBreadcrumbJsonLd(articleBreadcrumb(p.title, params.slug))),
       ],
     };
   },
@@ -629,9 +645,7 @@ function AutoseoArticle({ article, related }: { article: AutoseoPost; related: A
         }}
       />
 
-      <Link to="/blog" className="cursor-pointer text-sm font-semibold text-muted-foreground hover:text-primary">
-        ← Back to all articles
-      </Link>
+      <ArticleBreadcrumb title={article.title} />
 
       {article.hero_image_url && (
         <img
@@ -674,12 +688,15 @@ function AutoseoArticle({ article, related }: { article: AutoseoPost; related: A
         <section className="mt-12">
           <h2 className="font-display text-2xl font-bold">Frequently Asked Questions</h2>
 
-          <Accordion type="single" collapsible defaultValue="faq-0" className="mt-4">
+          {/* Answers are rendered in the page HTML even while collapsed; this rule keeps closed ones hidden on screen. */}
+          <style dangerouslySetInnerHTML={{ __html: '.faq-accordion [role="region"][data-state="closed"]{display:none}' }} />
+
+          <Accordion type="single" collapsible defaultValue="faq-0" className="faq-accordion mt-4">
             {faqs.map((f, i) => (
               <AccordionItem key={`${i}-${f.question}`} value={`faq-${i}`}>
                 <AccordionTrigger className="cursor-pointer text-left font-semibold">{f.question}</AccordionTrigger>
 
-                <AccordionContent className="text-sm leading-6 text-muted-foreground">{f.answer}</AccordionContent>
+                <AccordionContent forceMount className="text-sm leading-6 text-muted-foreground">{f.answer}</AccordionContent>
               </AccordionItem>
             ))}
           </Accordion>
@@ -726,7 +743,59 @@ function AutoseoArticle({ article, related }: { article: AutoseoPost; related: A
           </div>
         </section>
       )}
+
+      <ArticleNextSteps title={article.title} keywords={article.meta_keywords} tags={article.tags} description={article.meta_description} />
     </article>
+  );
+}
+
+/** Visible breadcrumb trail; matches the BreadcrumbList structured data. */
+function ArticleBreadcrumb({ title }: { title: string }) {
+  return (
+    <nav aria-label="Breadcrumb" className="text-sm text-muted-foreground">
+      <Link to="/" className="hover:text-primary">
+        Home
+      </Link>
+      <span className="px-2" aria-hidden="true">
+        /
+      </span>
+      <Link to="/blog" className="hover:text-primary">
+        Blog
+      </Link>
+      <span className="px-2" aria-hidden="true">
+        /
+      </span>
+      <span className="font-medium text-foreground">{title}</span>
+    </nav>
+  );
+}
+
+/** End-of-article links chosen from the article's own topic; the article body is never changed. */
+function ArticleNextSteps({
+  title,
+  keywords,
+  tags,
+  description,
+}: {
+  title: string;
+  keywords?: string | null;
+  tags?: string | null;
+  description?: string | null;
+}) {
+  const links = blogCtaLinks({ title, keywords, tags, description });
+  return (
+    <nav aria-label="Next steps" className="mt-14 rounded-xl border border-border bg-card p-5 text-sm">
+      <h2 className="font-display text-lg font-bold">Ready for your next vehicle?</h2>
+      <ul className="mt-3 space-y-2">
+        {links.map((link) => (
+          <li key={link.to}>
+            <Link to={link.to} className="font-semibold text-primary hover:underline">
+              {link.label}
+            </Link>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }
 
@@ -796,9 +865,7 @@ function LegacyPost() {
       />
 
       <div className="mx-auto max-w-6xl px-4 pt-8 sm:px-8 lg:px-12">
-        <Link to="/blog" className="cursor-pointer text-sm font-semibold text-muted-foreground hover:text-primary">
-          ← All articles
-        </Link>
+        <ArticleBreadcrumb title={post.title} />
 
         <div className="relative mt-6 aspect-[16/7] min-h-[280px] overflow-hidden rounded-2xl bg-muted">
           {post.image_url && (
@@ -879,6 +946,10 @@ function LegacyPost() {
           {post.author_name ? ` · ${post.author_name}` : ""}
 
           {post.read_time ? ` · ${post.read_time} min read` : ""}
+        </div>
+
+        <div className="max-w-[720px]">
+          <ArticleNextSteps title={post.title} description={post.meta_description} />
         </div>
       </div>
     </article>
