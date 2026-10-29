@@ -9,7 +9,7 @@ import { formatUsd, formatMiles, formatDate } from "@/lib/format";
 export const Route = createFileRoute("/approve/$token")({
   head: () => ({
     meta: [
-      { title: "Review your repair — My Car Care" },
+      { title: "Review your repair — My Car Care Services" },
       { name: "robots", content: "noindex,nofollow" },
       { name: "referrer", content: "no-referrer" },
     ],
@@ -112,7 +112,7 @@ function ApprovePage() {
 
   return (
     <Shell>
-      <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-[#6e6e73]">My Car Care · RO {a.roNo}</p>
+      <p className="text-[13px] font-semibold uppercase tracking-[0.08em] text-[#6e6e73]">My Car Care Services · RO {a.roNo}</p>
       <h1 className="mt-2 text-[34px] font-semibold leading-[1.1] tracking-tight sm:text-[44px]">
         {done ? "Thank you" : "Your estimate is ready"}
         {a.customerFirstName ? `, ${a.customerFirstName}.` : "."}
