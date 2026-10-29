@@ -367,7 +367,7 @@ describe("with the real TanStack Router and route tree", () => {
     const paths = [...new Set([...tree.matchAll(/fullPath: '([^']+)'/g)].map((match) => match[1]!))];
     expect(paths.length).toBeGreaterThan(20);
     const sample = (path: string) => path.replace(/\$[A-Za-z]*/g, "sample");
-    const sensitiveRoots = ["/admin", "/staff", "/my", "/account", "/finance", "/lease-to-own/apply", "/lease-to-own/portal", "/auth", "/reset-password"];
+    const sensitiveRoots = ["/admin", "/staff", "/my", "/account", "/finance", "/lease-to-own/apply", "/lease-to-own/portal", "/auth", "/reset-password", "/approve"];
     const isSensitive = (path: string) => sensitiveRoots.some((root) => path === root || path.startsWith(`${root}/`));
     const publicRoutes = paths.filter((path) => !isSensitive(path) && !path.startsWith("/api/")).sort();
     // Public pages where chat is intentionally available. Add a route here only after deciding it holds no sensitive data.

@@ -30,6 +30,7 @@ import { Route as AdminInventoryRouteImport } from './routes/admin.inventory'
 import { Route as AdminMarketingRouteImport } from './routes/admin.marketing'
 import { Route as AdminSettingsRouteImport } from './routes/admin.settings'
 import { Route as AdminTransactionsRouteImport } from './routes/admin.transactions'
+import { Route as ApproveTokenRouteImport } from './routes/approve.$token'
 import { Route as AuthCallbackRouteImport } from './routes/auth.callback'
 import { Route as BlogIndexRouteImport } from './routes/blog.index'
 import { Route as BlogSlugRouteImport } from './routes/blog.$slug'
@@ -44,9 +45,12 @@ import { Route as StaffDmsRouteImport } from './routes/staff.dms'
 import { Route as AdminBlogIndexRouteImport } from './routes/admin.blog.index'
 import { Route as AdminBlogNewRouteImport } from './routes/admin.blog.new'
 import { Route as ApiPublicReceiveArticleRouteImport } from './routes/api/public/receive-article'
+import { Route as ApiPublicReconApprovalsRouteImport } from './routes/api/public/recon-approvals'
+import { Route as ApiPublicReconSyncRouteImport } from './routes/api/public/recon-sync'
 import { Route as MyPurchasesIndexRouteImport } from './routes/my.purchases.index'
 import { Route as MyPurchasesIdRouteImport } from './routes/my.purchases.$id'
 import { Route as AdminBlogIdEditRouteImport } from './routes/admin.blog.$id.edit'
+import { Route as ApiPublicApprovalMediaSplatRouteImport } from './routes/api/public/approval-media.$'
 import { Route as ApiPublicJobsMarketingRefreshRouteImport } from './routes/api/public/jobs/marketing-refresh'
 import { Route as ApiPublicVehiclePhotosSplatRouteImport } from './routes/api/public/vehicle-photos.$'
 
@@ -155,6 +159,11 @@ const AdminTransactionsRoute = AdminTransactionsRouteImport.update({
   path: '/transactions',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApproveTokenRoute = ApproveTokenRouteImport.update({
+  id: '/approve/$token',
+  path: '/approve/$token',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const AuthCallbackRoute = AuthCallbackRouteImport.update({
   id: '/callback',
   path: '/callback',
@@ -225,6 +234,16 @@ const ApiPublicReceiveArticleRoute = ApiPublicReceiveArticleRouteImport.update({
   path: '/api/public/receive-article',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicReconApprovalsRoute = ApiPublicReconApprovalsRouteImport.update({
+  id: '/api/public/recon-approvals',
+  path: '/api/public/recon-approvals',
+  getParentRoute: () => rootRouteImport,
+} as any)
+const ApiPublicReconSyncRoute = ApiPublicReconSyncRouteImport.update({
+  id: '/api/public/recon-sync',
+  path: '/api/public/recon-sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MyPurchasesIndexRoute = MyPurchasesIndexRouteImport.update({
   id: '/purchases/',
   path: '/purchases/',
@@ -240,6 +259,12 @@ const AdminBlogIdEditRoute = AdminBlogIdEditRouteImport.update({
   path: '/blog/$id/edit',
   getParentRoute: () => AdminRoute,
 } as any)
+const ApiPublicApprovalMediaSplatRoute =
+  ApiPublicApprovalMediaSplatRouteImport.update({
+    id: '/api/public/approval-media/$',
+    path: '/api/public/approval-media/$',
+    getParentRoute: () => rootRouteImport,
+  } as any)
 const ApiPublicJobsMarketingRefreshRoute =
   ApiPublicJobsMarketingRefreshRouteImport.update({
     id: '/api/public/jobs/marketing-refresh',
@@ -274,6 +299,7 @@ export interface FileRoutesByFullPath {
   '/admin/marketing': typeof AdminMarketingRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
+  '/approve/$token': typeof ApproveTokenRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
@@ -288,10 +314,13 @@ export interface FileRoutesByFullPath {
   '/my/': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/api/public/recon-approvals': typeof ApiPublicReconApprovalsRoute
+  '/api/public/recon-sync': typeof ApiPublicReconSyncRoute
   '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/my/purchases/': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
+  '/api/public/approval-media/$': typeof ApiPublicApprovalMediaSplatRoute
   '/api/public/jobs/marketing-refresh': typeof ApiPublicJobsMarketingRefreshRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
@@ -314,6 +343,7 @@ export interface FileRoutesByTo {
   '/admin/marketing': typeof AdminMarketingRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
+  '/approve/$token': typeof ApproveTokenRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
@@ -328,10 +358,13 @@ export interface FileRoutesByTo {
   '/my': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/api/public/recon-approvals': typeof ApiPublicReconApprovalsRoute
+  '/api/public/recon-sync': typeof ApiPublicReconSyncRoute
   '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog': typeof AdminBlogIndexRoute
   '/my/purchases': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
+  '/api/public/approval-media/$': typeof ApiPublicApprovalMediaSplatRoute
   '/api/public/jobs/marketing-refresh': typeof ApiPublicJobsMarketingRefreshRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
@@ -357,6 +390,7 @@ export interface FileRoutesById {
   '/admin/marketing': typeof AdminMarketingRoute
   '/admin/settings': typeof AdminSettingsRoute
   '/admin/transactions': typeof AdminTransactionsRoute
+  '/approve/$token': typeof ApproveTokenRoute
   '/auth/callback': typeof AuthCallbackRoute
   '/blog/$slug': typeof BlogSlugRoute
   '/inventory/$slug': typeof InventorySlugRoute
@@ -371,10 +405,13 @@ export interface FileRoutesById {
   '/my/': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/api/public/recon-approvals': typeof ApiPublicReconApprovalsRoute
+  '/api/public/recon-sync': typeof ApiPublicReconSyncRoute
   '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/my/purchases/': typeof MyPurchasesIndexRoute
   '/admin/blog/$id/edit': typeof AdminBlogIdEditRoute
+  '/api/public/approval-media/$': typeof ApiPublicApprovalMediaSplatRoute
   '/api/public/jobs/marketing-refresh': typeof ApiPublicJobsMarketingRefreshRoute
   '/api/public/vehicle-photos/$': typeof ApiPublicVehiclePhotosSplatRoute
 }
@@ -401,6 +438,7 @@ export interface FileRouteTypes {
     | '/admin/marketing'
     | '/admin/settings'
     | '/admin/transactions'
+    | '/approve/$token'
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
@@ -415,10 +453,13 @@ export interface FileRouteTypes {
     | '/my/'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/api/public/recon-approvals'
+    | '/api/public/recon-sync'
     | '/my/purchases/$id'
     | '/admin/blog/'
     | '/my/purchases/'
     | '/admin/blog/$id/edit'
+    | '/api/public/approval-media/$'
     | '/api/public/jobs/marketing-refresh'
     | '/api/public/vehicle-photos/$'
   fileRoutesByTo: FileRoutesByTo
@@ -441,6 +482,7 @@ export interface FileRouteTypes {
     | '/admin/marketing'
     | '/admin/settings'
     | '/admin/transactions'
+    | '/approve/$token'
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
@@ -455,10 +497,13 @@ export interface FileRouteTypes {
     | '/my'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/api/public/recon-approvals'
+    | '/api/public/recon-sync'
     | '/my/purchases/$id'
     | '/admin/blog'
     | '/my/purchases'
     | '/admin/blog/$id/edit'
+    | '/api/public/approval-media/$'
     | '/api/public/jobs/marketing-refresh'
     | '/api/public/vehicle-photos/$'
   id:
@@ -483,6 +528,7 @@ export interface FileRouteTypes {
     | '/admin/marketing'
     | '/admin/settings'
     | '/admin/transactions'
+    | '/approve/$token'
     | '/auth/callback'
     | '/blog/$slug'
     | '/inventory/$slug'
@@ -497,10 +543,13 @@ export interface FileRouteTypes {
     | '/my/'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/api/public/recon-approvals'
+    | '/api/public/recon-sync'
     | '/my/purchases/$id'
     | '/admin/blog/'
     | '/my/purchases/'
     | '/admin/blog/$id/edit'
+    | '/api/public/approval-media/$'
     | '/api/public/jobs/marketing-refresh'
     | '/api/public/vehicle-photos/$'
   fileRoutesById: FileRoutesById
@@ -520,6 +569,7 @@ export interface RootRouteChildren {
   SellRoute: typeof SellRoute
   SitemapDotxmlRoute: typeof SitemapDotxmlRoute
   TermsRoute: typeof TermsRoute
+  ApproveTokenRoute: typeof ApproveTokenRoute
   BlogSlugRoute: typeof BlogSlugRoute
   InventorySlugRoute: typeof InventorySlugRoute
   LeaseToOwnApplyRoute: typeof LeaseToOwnApplyRoute
@@ -530,6 +580,9 @@ export interface RootRouteChildren {
   LeaseToOwnIndexRoute: typeof LeaseToOwnIndexRoute
   LocationsIndexRoute: typeof LocationsIndexRoute
   ApiPublicReceiveArticleRoute: typeof ApiPublicReceiveArticleRoute
+  ApiPublicReconApprovalsRoute: typeof ApiPublicReconApprovalsRoute
+  ApiPublicReconSyncRoute: typeof ApiPublicReconSyncRoute
+  ApiPublicApprovalMediaSplatRoute: typeof ApiPublicApprovalMediaSplatRoute
   ApiPublicJobsMarketingRefreshRoute: typeof ApiPublicJobsMarketingRefreshRoute
   ApiPublicVehiclePhotosSplatRoute: typeof ApiPublicVehiclePhotosSplatRoute
 }
@@ -683,6 +736,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof AdminTransactionsRouteImport
       parentRoute: typeof AdminRoute
     }
+    '/approve/$token': {
+      id: '/approve/$token'
+      path: '/approve/$token'
+      fullPath: '/approve/$token'
+      preLoaderRoute: typeof ApproveTokenRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/auth/callback': {
       id: '/auth/callback'
       path: '/callback'
@@ -781,6 +841,20 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicReceiveArticleRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/recon-approvals': {
+      id: '/api/public/recon-approvals'
+      path: '/api/public/recon-approvals'
+      fullPath: '/api/public/recon-approvals'
+      preLoaderRoute: typeof ApiPublicReconApprovalsRouteImport
+      parentRoute: typeof rootRouteImport
+    }
+    '/api/public/recon-sync': {
+      id: '/api/public/recon-sync'
+      path: '/api/public/recon-sync'
+      fullPath: '/api/public/recon-sync'
+      preLoaderRoute: typeof ApiPublicReconSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/my/purchases/': {
       id: '/my/purchases/'
       path: '/purchases'
@@ -801,6 +875,13 @@ declare module '@tanstack/react-router' {
       fullPath: '/admin/blog/$id/edit'
       preLoaderRoute: typeof AdminBlogIdEditRouteImport
       parentRoute: typeof AdminRoute
+    }
+    '/api/public/approval-media/$': {
+      id: '/api/public/approval-media/$'
+      path: '/api/public/approval-media/$'
+      fullPath: '/api/public/approval-media/$'
+      preLoaderRoute: typeof ApiPublicApprovalMediaSplatRouteImport
+      parentRoute: typeof rootRouteImport
     }
     '/api/public/jobs/marketing-refresh': {
       id: '/api/public/jobs/marketing-refresh'
@@ -886,6 +967,7 @@ const rootRouteChildren: RootRouteChildren = {
   SellRoute: SellRoute,
   SitemapDotxmlRoute: SitemapDotxmlRoute,
   TermsRoute: TermsRoute,
+  ApproveTokenRoute: ApproveTokenRoute,
   BlogSlugRoute: BlogSlugRoute,
   InventorySlugRoute: InventorySlugRoute,
   LeaseToOwnApplyRoute: LeaseToOwnApplyRoute,
@@ -896,6 +978,9 @@ const rootRouteChildren: RootRouteChildren = {
   LeaseToOwnIndexRoute: LeaseToOwnIndexRoute,
   LocationsIndexRoute: LocationsIndexRoute,
   ApiPublicReceiveArticleRoute: ApiPublicReceiveArticleRoute,
+  ApiPublicReconApprovalsRoute: ApiPublicReconApprovalsRoute,
+  ApiPublicReconSyncRoute: ApiPublicReconSyncRoute,
+  ApiPublicApprovalMediaSplatRoute: ApiPublicApprovalMediaSplatRoute,
   ApiPublicJobsMarketingRefreshRoute: ApiPublicJobsMarketingRefreshRoute,
   ApiPublicVehiclePhotosSplatRoute: ApiPublicVehiclePhotosSplatRoute,
 }

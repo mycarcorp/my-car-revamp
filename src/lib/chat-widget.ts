@@ -38,6 +38,7 @@ export const CHAT_EXCLUDED_ROUTES = [
   "/lease-to-own/portal",
   "/auth",
   "/reset-password",
+  "/approve",
 ] as const;
 
 function normalizePath(pathname: string): string {

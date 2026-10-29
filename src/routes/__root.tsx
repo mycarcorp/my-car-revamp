@@ -156,6 +156,8 @@ function RootComponent() {
   const { queryClient } = Route.useRouteContext();
   const pathname = useRouterState({ select: (s) => s.location.pathname });
   const isAdmin = pathname.startsWith("/admin");
+  // Customer approval links carry a private token: no site chrome and no analytics on them.
+  const isApproval = pathname.startsWith("/approve/");
 
   const searchStr = useRouterState({ select: (s) => s.location.searchStr });
   // The chat widget never runs on account, finance, staff or sign-in routes. If it is already running when the
@@ -167,7 +169,7 @@ function RootComponent() {
   }
   const chatReloading = chatManager.current?.needsReload(chatAllowed) ?? false;
   // Admin hero-editor preview frame loads "/" — never count it as a visit.
-  const skipTracking = isAdmin || searchStr.includes("heroPreview=1") || chatReloading;
+  const skipTracking = isAdmin || isApproval || searchStr.includes("heroPreview=1") || chatReloading;
   useIsomorphicLayoutEffect(() => {
     configureAnalytics(pathname, !skipTracking);
     if (!skipTracking) {
@@ -198,12 +200,12 @@ function RootComponent() {
       {!chatAllowed && <style>{CHAT_WIDGET_HIDE_CSS}</style>}
       <AuthProvider>
         <div className="flex min-h-screen flex-col">
-          {!isAdmin && <SiteHeader />}
+          {!isAdmin && !isApproval && <SiteHeader />}
           <main className="flex-1">
             {/* Required: nested routes render here. */}
             <Outlet />
           </main>
-          {!isAdmin && <SiteFooter />}
+          {!isAdmin && !isApproval && <SiteFooter />}
         </div>
         <Toaster />
       </AuthProvider>
