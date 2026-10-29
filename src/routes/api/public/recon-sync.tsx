@@ -1,5 +1,4 @@
 import { createFileRoute } from "@tanstack/react-router";
-import { supabaseAdmin } from "@/integrations/supabase/client.server";
 import { PHOTO_BUCKET, photoPublicUrl, photoStoragePath } from "@/lib/admin-inventory";
 import { VIN_RE } from "@/lib/inventory-csv";
 import { mapReconVehicle, type ReconVehicle } from "@/lib/recon-sync";
@@ -30,7 +29,14 @@ const MAX_BODY_BYTES = 8 * 1024 * 1024;
 const PHOTO_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const methodNotAllowed = () => json({ error: "Method not allowed" }, 405);
 
+async function db() {
+  // Live project client; loaded inside handlers so it never reaches the browser bundle.
+  const { appAdmin } = await import("@/lib/app-admin.server");
+  return appAdmin();
+}
+
 async function setStatus(vin: string, status: "sold" | "draft") {
+  const supabaseAdmin = await db();
   const { data, error } = await supabaseAdmin.from("vehicles").update({ status, last_synced_at: new Date().toISOString() }).eq("vin", vin).select("id");
   if (error) return json({ error: "Could not update the vehicle" }, 500);
   if (!data?.length) return json({ error: "Vehicle not found on the website" }, 404);
@@ -61,6 +67,7 @@ export const Route = createFileRoute("/api/public/recon-sync")({
           return json({ error: "Invalid JSON payload" }, 400);
         }
 
+        const supabaseAdmin = await db();
         const event = String(body["event"] ?? "");
         const vin = String(body["vin"] ?? (body["vehicle"] as ReconVehicle | undefined)?.vin ?? "").trim().toUpperCase();
         if (!VIN_RE.test(vin)) return json({ error: "A valid 17-character VIN is required" }, 400);
