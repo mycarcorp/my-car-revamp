@@ -57,3 +57,6 @@ export async function openLeaseDocument(accessToken: string, documentId: number)
     toast.error(leaseErrorMessage(error));
   }
 }
+
+/** DOM id of one applicant's form field, e.g. "lto-co_buyer-email". */
+export const applicantFieldId = (role: string, field: string) => `lto-${role}-${field}`;

@@ -19,21 +19,21 @@ import { formatSsnInput, ssnTestMockError } from "@/lib/lease-to-own";
  * it cannot be submitted, stored or sent anywhere. Vite removes the mock from
  * production builds.
  */
-export function SecureSsnField() {
+export function SecureSsnField({ id = "lto-ssn" }: { id?: string }) {
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="lto-ssn">
+      <Label htmlFor={id}>
         SSN / Taxpayer ID (ITIN){" "}
         <span aria-hidden="true" className="text-destructive">
           *
         </span>
       </Label>
       {import.meta.env.DEV ? (
-        <SsnTestMock />
+        <SsnTestMock id={id} />
       ) : (
         <>
           <div
-            id="lto-ssn"
+            id={id}
             className="flex h-9 items-center rounded-md border border-dashed border-border bg-muted/50 px-3 text-xs font-semibold text-muted-foreground"
           >
             Integration required — not collected online yet
@@ -49,7 +49,7 @@ export function SecureSsnField() {
 }
 
 /** Development-only, non-persistent mock. Never rendered in production builds. */
-function SsnTestMock() {
+function SsnTestMock({ id }: { id: string }) {
   const [value, setValue] = useState("");
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -60,7 +60,7 @@ function SsnTestMock() {
     <>
       <div className="relative">
         <Input
-          id="lto-ssn"
+          id={id}
           // Not named and outside the form's state: the value cannot be submitted.
           form="lto-ssn-test-mock"
           type={visible ? "text" : "password"}
@@ -78,7 +78,7 @@ function SsnTestMock() {
             setError(ssnTestMockError(value));
           }}
           aria-invalid={Boolean(error) || undefined}
-          aria-describedby="lto-ssn-mock-note"
+          aria-describedby={`${id}-mock-note`}
           className="border-dashed border-[#F7941D] pr-10 font-mono"
         />
         <button
@@ -96,7 +96,7 @@ function SsnTestMock() {
         </p>
       )}
       <p
-        id="lto-ssn-mock-note"
+        id={`${id}-mock-note`}
         className="flex items-start gap-1.5 text-xs font-semibold text-accent-text"
       >
         <FlaskConical className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />

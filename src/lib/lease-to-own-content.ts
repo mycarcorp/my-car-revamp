@@ -7,7 +7,7 @@
  * it. Until a claim is approved, the public page shows the qualified wording and
  * the original text is visible only to signed-in staff (review mode).
  */
-import type { PackageEstimate } from "./lease-to-own";
+import type { LeaseConsentType, PackageEstimate } from "./lease-to-own";
 import { SERVICE_LOCATION, TITLE_BUYOUT, getLeaseTier, paymentLabel, usd } from "./lease-to-own";
 
 export type ReviewReason =
@@ -153,6 +153,19 @@ export const REVIEW_CLAIMS = {
     reference: "VA Dealer Lic. #48477 • (833) 866-9227 • mycarcorporation@gmail.com",
     reason: "legal_term",
     note: "Reference contact details differ from the live site; confirm before use in agreements.",
+  },
+  prequalHeading: {
+    id: "prequalHeading",
+    reference: "GET PRE QUALIFIED — FOR ALL CREDIT TYPE",
+    reason: "absolute_promise",
+    note: "Owner-requested heading. Confirm it reads as an invitation to apply, not a promise that every credit type qualifies.",
+  },
+  prequalBanks: {
+    id: "prequalBanks",
+    reference:
+      "We work with a variety of banks to get you the right monthly payments and terms, regardless of what your credit type. It is easy to get pre-approved.",
+    reason: "financial_claim",
+    note: "Not shown: Lease to Own payments are set by My Car's packages, no bank network is documented, and pre-approval is a later staff decision.",
   },
 } satisfies Record<string, ReviewClaim>;
 
@@ -392,6 +405,64 @@ export const CALCULATOR_ASSUMPTIONS = [
   "Estimated vehicle value assumes 15% depreciation per year. This is an illustration, not an appraisal.",
   "Estimated equity = estimated vehicle value − remaining scheduled payments (including the buyout). It can be negative early in the term.",
 ];
+
+// ============================================================
+// PRE-QUALIFICATION APPLICATION
+// ============================================================
+
+export const PREQUAL = {
+  /** Owner-requested heading (see REVIEW_CLAIMS.prequalHeading). */
+  heading: "GET PRE QUALIFIED — FOR ALL CREDIT TYPE",
+  subheading:
+    "Every credit type is welcome to apply. Tell us about yourself, any co-buyer and the vehicle you want. Applying is not a credit decision, and nothing is approved automatically.",
+  claims: ["prequalHeading", "prequalBanks"] as ReviewClaimId[],
+} as const;
+
+/**
+ * Consent wording, versioned. Every version below is a DRAFT placeholder: none
+ * has been approved by counsel (TCPA, FCRA, GLBA). The version and a hash of
+ * the exact text are stored with each choice, so changing any wording means
+ * bumping its version. Production submission stays blocked until every
+ * required consent's wording is approved (see consentWordingApproved).
+ */
+export const LEASE_CONSENT_WORDING: Record<
+  LeaseConsentType,
+  { label: string; text: string; version: string; approved: boolean; required: boolean }
+> = {
+  marketing_sms: {
+    label: "Marketing text messages (optional)",
+    text: "I agree to receive recurring marketing text messages from My Car Business Services LLC about vehicles, offers and promotions at the cell number provided. Consent is not a condition of any purchase or lease. Message and data rates may apply. Reply STOP to cancel or HELP for help.",
+    version: "draft-2026-10-28",
+    approved: false,
+    required: false,
+  },
+  transactional_sms: {
+    label: "Application and account text messages (optional)",
+    text: "I agree to receive text messages from My Car Business Services LLC about this application and any resulting account, such as status updates, document requests and appointment reminders, at the cell number provided. These are not marketing messages. Message and data rates may apply. Reply STOP to cancel.",
+    version: "draft-2026-10-28",
+    approved: false,
+    required: false,
+  },
+  credit_authorization: {
+    label: "Credit and pre-qualification authorization (required)",
+    text: "I authorize My Car Business Services LLC to review this application and, when an approved credit provider is in place, to obtain my consumer credit report and verify the information I provided in order to evaluate me for the Lease to Own program. No credit report is requested when I submit this form.",
+    version: "draft-2026-10-28",
+    approved: false,
+    required: true,
+  },
+  application_certification: {
+    label: "Application certification and privacy acknowledgment (required)",
+    text: "I certify that the information in this application is true and complete, that I am the person named, and that I have read the My Car Privacy Policy describing how my information is collected, used and shared.",
+    version: "draft-2026-10-28",
+    approved: false,
+    required: true,
+  },
+};
+
+/** True only when every required consent uses counsel-approved wording. */
+export function consentWordingApproved(): boolean {
+  return Object.values(LEASE_CONSENT_WORDING).every((c) => !c.required || c.approved);
+}
 
 // ============================================================
 // AGREEMENT DRAFTS (E-SIGN ROOM)

@@ -10,12 +10,12 @@ import {
   estimatePayoffDate,
   isValidTaxpayerId,
   licenseNumberError,
-  normalizeApplicantInput,
+  normalizeApplicantProfile,
   ssnTestMockError,
   normalizeLicenseNumber,
   US_STATES,
   rideshareSpend,
-  validateApplicant,
+  validateApplicantProfile,
   validateDocumentFile,
 } from "./lease-to-own";
 import { AGREEMENTS, agreementDraft } from "./lease-to-own-content";
@@ -87,33 +87,64 @@ describe("comparison chart series", () => {
 describe("applicant validation", () => {
   const today = new Date("2026-10-24T12:00:00Z");
   const valid = {
-    fullLegalName: "Jordan Q Sample",
-    dateOfBirth: "1990-05-01",
-    cellPhone: "(540) 555-0100",
+    ...EMPTY_APPLICANT,
+    firstName: "Jordan",
+    lastName: "Sample",
     email: "jordan@example.com",
+    cellPhone: "(540) 555-0100",
+    dateOfBirth: "1990-05-01",
     driversLicenseNumber: "T12345678",
     driversLicenseState: "VA",
     street: "100 Example St",
     city: "Fredericksburg",
     state: "VA",
     zip: "22408",
+    housingType: "rent",
+    monthlyHousingPayment: "1,250",
+    employmentStatus: "Employed - Full-Time",
+    employerName: "Example Co",
+    jobTitle: "Technician",
+    employerPhone: "540-555-0199",
+    monthlyIncome: "4200",
+    yearsAtJob: "3",
   };
 
   it("accepts a complete application", () => {
-    expect(validateApplicant(valid, today)).toEqual({});
+    expect(validateApplicantProfile(valid, today)).toEqual({});
   });
 
   it("flags every required field when empty", () => {
-    const errors = validateApplicant(EMPTY_APPLICANT, today);
-    expect(Object.keys(errors).sort()).toEqual(Object.keys(EMPTY_APPLICANT).sort());
+    const errors = validateApplicantProfile(EMPTY_APPLICANT, today);
+    expect(Object.keys(errors).sort()).toEqual(
+      [
+        "firstName",
+        "lastName",
+        "email",
+        "cellPhone",
+        "dateOfBirth",
+        "driversLicenseNumber",
+        "driversLicenseState",
+        "street",
+        "city",
+        "state",
+        "zip",
+        "housingType",
+        "monthlyHousingPayment",
+        "employmentStatus",
+        "monthlyIncome",
+      ].sort(),
+    );
   });
 
-  it("rejects minors and invalid dates", () => {
+  it("rejects minors, future and invalid dates of birth", () => {
     expect(ageOn("2010-01-01", today)).toBe(16);
     expect(ageOn("1990-02-31", today)).toBeNull();
     expect(
-      validateApplicant({ ...valid, dateOfBirth: "2010-01-01" }, today).dateOfBirth,
-    ).toBeTruthy();
+      validateApplicantProfile({ ...valid, dateOfBirth: "2010-01-01" }, today).dateOfBirth,
+    ).toMatch(/18/);
+    expect(
+      validateApplicantProfile({ ...valid, dateOfBirth: "2027-01-01" }, today).dateOfBirth,
+    ).toMatch(/future/);
   });
 
   it("validates SSN and ITIN formats", () => {
@@ -200,7 +231,10 @@ describe("driver's license number", () => {
   });
 
   it("keeps license number and issuing state as separate, separately validated fields", () => {
-    const errors = validateApplicant({ ...EMPTY_APPLICANT, driversLicenseNumber: "T12345678" });
+    const errors = validateApplicantProfile({
+      ...EMPTY_APPLICANT,
+      driversLicenseNumber: "T12345678",
+    });
     expect(errors.driversLicenseNumber).toBeUndefined();
     expect(errors.driversLicenseState).toBeTruthy();
     expect(US_STATES).toContain("DC");
@@ -210,20 +244,21 @@ describe("driver's license number", () => {
 
 describe("SSN / ITIN is never part of the ordinary application", () => {
   it("drops any ssn sent with application input, so it cannot be stored", () => {
-    const normalized = normalizeApplicantInput({
-      fullLegalName: "  Pat   Example ",
+    const normalized = normalizeApplicantProfile({
+      firstName: "  Pat   Ann ",
       ssn: "987-65-4320",
       taxpayerId: "987654320",
       driversLicenseNumber: "t12-345 678",
     });
     expect(Object.keys(normalized)).not.toContain("ssn");
+    expect(Object.keys(normalized)).not.toContain("taxpayerId");
     expect(JSON.stringify(normalized)).not.toMatch(/98765432/);
-    expect(normalized.fullLegalName).toBe("Pat Example");
+    expect(normalized.firstName).toBe("Pat Ann");
     expect(normalized.driversLicenseNumber).toBe("T12345678");
   });
 
   it("does not require an SSN to validate the rest of the form", () => {
-    expect(validateApplicant(EMPTY_APPLICANT)).not.toHaveProperty("ssn");
+    expect(validateApplicantProfile(EMPTY_APPLICANT)).not.toHaveProperty("ssn");
   });
 
   it("test-only mock accepts only the SSA-reserved fictional range", () => {

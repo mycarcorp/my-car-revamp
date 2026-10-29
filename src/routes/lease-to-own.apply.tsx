@@ -1,6 +1,6 @@
 import { createFileRoute, Link } from "@tanstack/react-router";
 import { useQuery, useQueryClient } from "@tanstack/react-query";
-import { useEffect, useMemo, useState } from "react";
+import { Suspense, lazy, useEffect, useMemo, useState } from "react";
 import { Check, ChevronLeft, ChevronRight, Lock, Phone } from "lucide-react";
 
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,8 @@ import {
   LEASE_TIERS,
   TITLE_BUYOUT,
   VEHICLE_VALUE,
+  APPLICANT_ROLE_LABELS,
+  applicantDocumentStatuses,
   applicationStatusLabel,
   clampVehicleValue,
   documentsReadyForSigning,
@@ -27,16 +29,17 @@ import {
   isLeaseTierKey,
   paymentLabel,
   usd,
-  type LeaseDocStatus,
-  type LeaseDocType,
   type LeaseTierKey,
   type PackageEstimate,
 } from "@/lib/lease-to-own";
 import { AGREEMENTS, ESTIMATE_DISCLAIMER } from "@/lib/lease-to-own-content";
 import {
+  buyerApplicantId,
   getLeaseIntegrationStatus,
   getMyLeaseApplication,
+  type LeaseApplicantSummary,
   type LeaseApplicationSummary,
+  type LeaseConsentSummary,
   type LeaseVehicleSnapshot,
   type MyLeaseApplication,
 } from "@/lib/lease-to-own.functions";
@@ -47,9 +50,35 @@ import {
   rememberLeaseApplyReturn,
 } from "@/lib/lease-to-own-client";
 import { vehicleBySlugQuery } from "@/lib/queries";
+import {
+  isLeaseDemoStage,
+  leaseDemoEnabled,
+  visibleDemoStage,
+  type LeaseDemoStage,
+} from "@/lib/lease-to-own-demo";
 import { cn } from "@/lib/utils";
 
-type ApplySearch = { tier: LeaseTierKey; value: number; vehicle?: string };
+// Local Development Test Mode (UI preview only; see lease-to-own-demo.ts). The
+// literal import.meta.env.DEV is false in production builds, so this is null and
+// the demo module is dropped from the bundle even if the flag is set.
+const demoModule =
+  import.meta.env.DEV && leaseDemoEnabled(import.meta.env)
+    ? import("@/components/lease-to-own/LeaseDemoWorkflow")
+    : null;
+const LeaseDemoBanner = demoModule
+  ? lazy(() => demoModule.then((m) => ({ default: m.LeaseDemoBanner })))
+  : null;
+const LeaseDemoWorkflow = demoModule
+  ? lazy(() => demoModule.then((m) => ({ default: m.LeaseDemoWorkflow })))
+  : null;
+
+type ApplySearch = {
+  tier: LeaseTierKey;
+  value: number;
+  vehicle?: string;
+  /** Local Demo Mode screen; ignored unless Demo Mode is on. */
+  demo?: LeaseDemoStage;
+};
 
 export const Route = createFileRoute("/lease-to-own/apply")({
   ssr: false,
@@ -62,6 +91,9 @@ export const Route = createFileRoute("/lease-to-own/apply")({
       tier: isLeaseTierKey(search["tier"]) ? search["tier"] : DEFAULT_TIER,
       value: clampVehicleValue(search["value"] ?? VEHICLE_VALUE.default),
       ...(vehicle ? { vehicle } : {}),
+      ...(import.meta.env.DEV && demoModule && isLeaseDemoStage(search["demo"])
+        ? { demo: search["demo"] }
+        : {}),
     };
   },
   head: () => ({
@@ -77,7 +109,7 @@ export const Route = createFileRoute("/lease-to-own/apply")({
   component: ApplyPage,
 });
 
-const STEPS = ["Credit Form", "Document Uploads", "E-Sign Room", "Activation"] as const;
+const STEPS = ["Pre-Qualification", "Document Uploads", "E-Sign Room", "Activation"] as const;
 type StepNumber = 1 | 2 | 3 | 4;
 
 /** Rebuilds the estimate from the amounts the server stored with the application. */
@@ -109,6 +141,21 @@ function ApplyPage() {
   const token = session?.access_token ?? "";
   const [signInOpen, setSignInOpen] = useState(false);
   const [chosenStep, setChosenStep] = useState<StepNumber | null>(null);
+  // Local Demo Mode only: the screen comes from ?demo= (so Back works); the
+  // simulated admin review and deal completion live in page memory and reset on reload.
+  const [demoApproved, setDemoApproved] = useState(false);
+  const [demoCompleted, setDemoCompleted] = useState(false);
+  const demoStage = search.demo ? visibleDemoStage(search.demo, demoApproved, demoCompleted) : null;
+  const demoOpen = Boolean(demoModule && demoStage);
+  const goDemo = (stage: LeaseDemoStage | null) => {
+    void navigate({
+      search: (prev) => {
+        const { demo: _drop, ...rest } = prev;
+        return stage ? { ...rest, demo: stage } : rest;
+      },
+    });
+    window.scrollTo({ top: 0 });
+  };
 
   const integrations = useQuery({
     queryKey: ["lease-integrations"],
@@ -136,6 +183,12 @@ function ApplyPage() {
       vin: v.vin,
       title: vehicleTitle(v),
       price: v.price_cents / 100,
+      stockNumber: v.stock_number,
+      year: v.year,
+      make: v.make,
+      model: v.model,
+      exteriorColor: v.exterior_color,
+      interiorColor: v.interior_color,
     };
   }, [vehicleQuery.data]);
 
@@ -150,11 +203,10 @@ function ApplyPage() {
     ? estimateFromApplication(application)
     : estimatePackage(search.tier, vehicleValue);
 
-  const docStatuses = Object.fromEntries(
-    documents
-      .filter((d) => d.source === "customer" && d.status !== "pending")
-      .map((d) => [d.doc_type, d.status]),
-  ) as Partial<Record<LeaseDocType, LeaseDocStatus>>;
+  // The Buyer's required documents unlock the next step; Co-Buyer documents are extra.
+  const docStatuses = appQuery.data
+    ? applicantDocumentStatuses(documents, buyerApplicantId(appQuery.data), true)
+    : {};
   const docsReady = Boolean(application) && documentsReadyForSigning(docStatuses);
   const agreementsExecuted =
     Boolean(application) &&
@@ -178,7 +230,8 @@ function ApplyPage() {
   const progress = (Object.values(completed).filter(Boolean).length / STEPS.length) * 100;
 
   useEffect(() => {
-    if (docsReady) trackLeaseEvent("lease_to_own_application_step_completed", { step: 2 });
+    if (docsReady && !demoModule)
+      trackLeaseEvent("lease_to_own_application_step_completed", { step: 2 });
   }, [docsReady]);
 
   function setApplication(next: MyLeaseApplication) {
@@ -292,32 +345,89 @@ function ApplyPage() {
       </nav>
 
       <div className="mt-6 rounded-xl border border-border bg-card p-5 shadow-[var(--shadow-card)] sm:p-8">
-        {step === 1 && (
-          <StepHeader
-            title="Virginia Consumer Credit & Lease Application"
-            body="Your details pre-fill your agreements and client account. Fields marked * are required."
-          >
-            {application ? (
-              <SubmittedApplication application={application} />
-            ) : (
+        {step === 1 &&
+          (application ? (
+            <StepHeader
+              title="Application received"
+              body="This is your receipt. Our team reviews every application; you'll see status changes here and in your portal."
+            >
+              <SubmittedApplication
+                application={application}
+                applicants={appQuery.data?.applicants ?? []}
+                consents={appQuery.data?.consents ?? []}
+              />
+            </StepHeader>
+          ) : (
+            <section aria-labelledby="lto-step-title">
               <>
-                {accountNotice && <div className="mb-6">{accountNotice}</div>}
-                <TierPicker
-                  value={search.tier}
-                  onChange={(tier) => {
-                    void navigate({ search: (prev) => ({ ...prev, tier }), replace: true });
-                    trackLeaseEvent("lease_to_own_tier_selected", { tier }, false);
-                  }}
-                />
-                <div className="mt-6">
+                {LeaseDemoBanner && LeaseDemoWorkflow && (
+                  <Suspense fallback={null}>
+                    {demoStage ? (
+                      <LeaseDemoWorkflow
+                        stage={demoStage}
+                        approved={demoApproved}
+                        vehicleValue={estimate.vehicleValue}
+                        downPayment={estimate.downPayment}
+                        onApprove={() => {
+                          setDemoApproved(true);
+                          goDemo("contracts");
+                        }}
+                        onViewContracts={() => goDemo("contracts")}
+                        onComplete={() => {
+                          setDemoCompleted(true);
+                          goDemo("portal");
+                        }}
+                        onExit={() => goDemo(null)}
+                      />
+                    ) : (
+                      <div className="mb-6">
+                        <LeaseDemoBanner onPreview={() => goDemo("result")} />
+                      </div>
+                    )}
+                  </Suspense>
+                )}
+                {/* Stays mounted (hidden) during the demo so typed entries are kept. */}
+                <div hidden={demoOpen}>
                   <ApplicantStep
+                    onDemoSubmit={demoModule ? () => goDemo("result") : undefined}
+                    intro={
+                      <>
+                        {accountNotice && <div className="mb-6">{accountNotice}</div>}
+                        <TierPicker
+                          value={search.tier}
+                          onChange={(tier) => {
+                            void navigate({
+                              search: (prev) => ({ ...prev, tier }),
+                              replace: true,
+                            });
+                            if (!demoModule)
+                              trackLeaseEvent("lease_to_own_tier_selected", { tier }, false);
+                          }}
+                        />
+                      </>
+                    }
                     accessToken={token}
                     defaultEmail={user?.email ?? ""}
                     defaultName={profileName(user)}
                     tier={search.tier}
-                    vehicleValue={vehicleValue}
+                    estimate={estimate}
                     vehicle={vehicle}
+                    vehicleLoading={vehicleQuery.isLoading && Boolean(search.vehicle)}
+                    onSelectVehicle={(slug) =>
+                      void navigate({
+                        search: (prev) => {
+                          const { vehicle: _drop, ...rest } = prev;
+                          return slug ? { ...rest, vehicle: slug } : rest;
+                        },
+                        replace: true,
+                      })
+                    }
                     secureCollection={integrations.data?.secureCollection ?? false}
+                    consentsAllowed={
+                      (integrations.data?.consentWordingApproved ||
+                        integrations.data?.draftConsentsAllowed) ??
+                      false
+                    }
                     integrationsLoading={integrations.isLoading}
                     onRequireAccount={requireAccount}
                     onSubmitted={() => {
@@ -328,18 +438,18 @@ function ApplyPage() {
                   />
                 </div>
               </>
-            )}
-          </StepHeader>
-        )}
+            </section>
+          ))}
 
         {step === 2 && application && (
           <StepHeader
             title="Document Uploads"
-            body="All five documents are required before your agreements can be prepared."
+            body="All five Buyer documents are required before your agreements can be prepared."
           >
             <DocumentsStep
               accessToken={token}
               applicationId={application.id}
+              applicants={appQuery.data?.applicants ?? []}
               documents={documents}
               locked={["declined", "withdrawn"].includes(application.status)}
               onUpdated={setApplication}
@@ -544,25 +654,87 @@ function StepHeader({
   );
 }
 
-function SubmittedApplication({ application }: { application: LeaseApplicationSummary }) {
+/** Receipt for a confirmed, saved application. Never states an approval. */
+function SubmittedApplication({
+  application,
+  applicants,
+  consents,
+}: {
+  application: LeaseApplicationSummary;
+  applicants: LeaseApplicantSummary[];
+  consents: LeaseConsentSummary[];
+}) {
+  const reference = `LTO-${String(application.id).padStart(6, "0")}`;
   return (
-    <div className="space-y-3 text-sm">
-      <div className="flex flex-wrap items-center gap-2">
+    <div className="space-y-5 text-sm">
+      <div className="flex flex-wrap items-center gap-x-4 gap-y-2 rounded-lg border border-primary/20 bg-primary/5 px-4 py-3">
+        <p>
+          <span className="text-muted-foreground">Reference:</span>{" "}
+          <strong className="font-mono">{reference}</strong>
+        </p>
+        <p>
+          <span className="text-muted-foreground">Received:</span>{" "}
+          <strong>
+            {new Date(application.submitted_at).toLocaleString("en-US", {
+              dateStyle: "medium",
+              timeStyle: "short",
+            })}
+          </strong>
+        </p>
         <StatusPill tone="info">{applicationStatusLabel(application.status)}</StatusPill>
-        <span className="text-muted-foreground">
-          Submitted{" "}
-          {new Date(application.submitted_at).toLocaleDateString("en-US", { dateStyle: "medium" })}
-        </span>
       </div>
-      <dl className="grid gap-x-6 gap-y-2 sm:grid-cols-2">
-        <div>
-          <dt className="text-muted-foreground">Name</dt>
-          <dd className="font-semibold">{application.full_legal_name}</dd>
-        </div>
-        <div>
-          <dt className="text-muted-foreground">Email</dt>
-          <dd className="font-semibold">{application.email}</dd>
-        </div>
+      <p className="text-muted-foreground">
+        Your pre-qualification application is saved to your MyCar account. It has not been approved
+        or declined — our team reviews it after your documents are in, and any decision will appear
+        here.
+      </p>
+
+      <dl className="grid gap-x-6 gap-y-3 sm:grid-cols-2">
+        {(applicants.length
+          ? applicants
+          : [
+              {
+                id: 0,
+                role: "buyer" as const,
+                participation_status: "account_holder",
+                first_name: application.full_legal_name,
+                last_name: "",
+                email: application.email,
+                ssn_collection_status: "not_collected",
+              },
+            ]
+        ).map((applicant) => {
+          const mine = consents.filter((c) => c.applicant_id === applicant.id);
+          const latest = (type: string) => mine.find((c) => c.consent_type === type);
+          return (
+            <div key={applicant.role} className="rounded-lg border border-border p-3">
+              <dt className="text-xs font-semibold uppercase tracking-wide text-muted-foreground">
+                {APPLICANT_ROLE_LABELS[applicant.role]}
+              </dt>
+              <dd className="mt-1 space-y-1">
+                <p className="font-semibold">
+                  {applicant.first_name} {applicant.last_name}
+                </p>
+                <p className="text-muted-foreground">{applicant.email}</p>
+                {applicant.role === "co_buyer" &&
+                  applicant.participation_status === "pending_confirmation" && (
+                    <p className="text-xs font-medium text-accent-text">
+                      Co-Buyer confirmation pending — we'll contact them to confirm their
+                      participation and consent.
+                    </p>
+                  )}
+                {mine.length > 0 && (
+                  <p className="text-xs text-muted-foreground">
+                    Credit authorization:{" "}
+                    {latest("credit_authorization")?.accepted ? "given" : "not given"}
+                    {" · "}Marketing texts: {latest("marketing_sms")?.accepted ? "yes" : "no"}
+                    {" · "}Account texts: {latest("transactional_sms")?.accepted ? "yes" : "no"}
+                  </p>
+                )}
+              </dd>
+            </div>
+          );
+        })}
         <div>
           <dt className="text-muted-foreground">Address</dt>
           <dd className="font-semibold">
@@ -578,7 +750,8 @@ function SubmittedApplication({ application }: { application: LeaseApplicationSu
         </div>
       </dl>
       <p className="text-muted-foreground">
-        To change submitted details or your package, call us at (540) 426-3322.
+        Next: upload your documents. To change submitted details or your package, call us at (540)
+        426-3322.
       </p>
     </div>
   );

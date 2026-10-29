@@ -15,19 +15,21 @@ import { Progress } from "@/components/ui/progress";
 import { trackLeaseEvent } from "@/lib/analytics";
 import {
   ACCEPTED_DOC_EXTENSIONS,
+  APPLICANT_ROLE_LABELS,
   DOC_STATUS_LABELS,
   LEASE_DOCUMENTS,
   validateDocumentFile,
+  type ApplicantRole,
   type LeaseDocStatus,
   type LeaseDocType,
 } from "@/lib/lease-to-own";
-import {
-  completeLeaseDocumentUpload,
-  startLeaseDocumentUpload,
-  type LeaseDocumentRow,
-  type MyLeaseApplication,
+import type {
+  LeaseApplicantSummary,
+  LeaseDocumentRow,
+  MyLeaseApplication,
 } from "@/lib/lease-to-own.functions";
-import { leaseErrorMessage, uploadToSignedUrl } from "@/lib/lease-to-own-client";
+import { leaseErrorMessage, uploadLeaseDocument } from "@/lib/lease-to-own-client";
+import { cn } from "@/lib/utils";
 import { STATUS_TONES } from "./helpers";
 import { StatusPill } from "./shared";
 
@@ -42,31 +44,70 @@ const ICONS: Record<LeaseDocType, typeof IdCard> = {
 export function DocumentsStep({
   accessToken,
   applicationId,
+  applicants,
   documents,
   locked,
   onUpdated,
 }: {
   accessToken: string;
   applicationId: number;
+  applicants: LeaseApplicantSummary[];
   documents: LeaseDocumentRow[];
   locked: boolean;
   onUpdated: (next: MyLeaseApplication) => void;
 }) {
+  const [role, setRole] = useState<ApplicantRole>("buyer");
+  const coBuyer = applicants.find((a) => a.role === "co_buyer") ?? null;
+  const activeRole: ApplicantRole = coBuyer ? role : "buyer";
+  const applicantId = applicants.find((a) => a.role === activeRole)?.id ?? null;
+  // The Buyer also owns documents uploaded before Co-Buyers existed (no applicant).
   const latest = new Map<string, LeaseDocumentRow>();
-  for (const doc of documents)
-    if (doc.source === "customer" && doc.status !== "pending" && !latest.has(doc.doc_type))
+  for (const doc of documents) {
+    const mine =
+      doc.applicant_id === applicantId || (activeRole === "buyer" && doc.applicant_id === null);
+    if (mine && doc.source === "customer" && doc.status !== "pending" && !latest.has(doc.doc_type))
       latest.set(doc.doc_type, doc);
+  }
 
   return (
     <div className="space-y-4">
+      {coBuyer && (
+        <div
+          role="tablist"
+          aria-label="Whose documents"
+          className="flex gap-1 border-b border-border"
+        >
+          {(["buyer", "co_buyer"] as const).map((r) => (
+            <button
+              key={r}
+              type="button"
+              role="tab"
+              aria-selected={activeRole === r}
+              onClick={() => setRole(r)}
+              className={cn(
+                "rounded-t-md px-5 py-2 text-sm font-bold",
+                activeRole === r
+                  ? "bg-primary text-primary-foreground"
+                  : "bg-muted text-muted-foreground",
+              )}
+            >
+              {APPLICANT_ROLE_LABELS[r]}
+            </button>
+          ))}
+        </div>
+      )}
       <p className="text-sm text-muted-foreground">
-        Upload all five documents. Accepted: PDF, JPG, PNG, HEIC or WEBP up to 10 MB each. Files go
-        to private storage that only you and authorized My Car staff can open.
+        {activeRole === "buyer"
+          ? "Upload all five Buyer documents."
+          : `Upload documents for ${coBuyer?.first_name ?? "the Co-Buyer"} if our team asks for them.`}{" "}
+        Accepted: PDF, JPG, PNG, HEIC or WEBP up to 10 MB each. Files go to private storage that
+        only you and authorized My Car staff can open.
       </p>
       <ul className="grid gap-4 md:grid-cols-2">
         {LEASE_DOCUMENTS.map((doc, index) => (
           <DocumentRow
-            key={doc.key}
+            key={`${activeRole}-${doc.key}`}
+            applicantRole={activeRole}
             className={index === LEASE_DOCUMENTS.length - 1 ? "md:col-span-2" : undefined}
             accessToken={accessToken}
             applicationId={applicationId}
@@ -86,6 +127,7 @@ export function DocumentsStep({
 function DocumentRow({
   accessToken,
   applicationId,
+  applicantRole,
   docType,
   label,
   description,
@@ -96,6 +138,7 @@ function DocumentRow({
 }: {
   accessToken: string;
   applicationId: number;
+  applicantRole: ApplicantRole;
   docType: LeaseDocType;
   label: string;
   description: string;
@@ -121,11 +164,14 @@ function DocumentRow({
     setError(null);
     setProgress(0);
     try {
-      const { documentId, uploadUrl } = await startLeaseDocumentUpload({
-        data: { accessToken, applicationId, docType, mime: file.type, size: file.size },
+      const next = await uploadLeaseDocument({
+        accessToken,
+        applicationId,
+        applicantRole,
+        docType,
+        file,
+        onProgress: setProgress,
       });
-      await uploadToSignedUrl(uploadUrl, file, setProgress);
-      const next = await completeLeaseDocumentUpload({ data: { accessToken, documentId } });
       onUpdated(next);
       trackLeaseEvent("lease_to_own_document_upload_completed", { document_type: docType });
       toast.success(`${label} uploaded.`);
@@ -137,7 +183,7 @@ function DocumentRow({
     }
   }
 
-  const inputId = `lto-doc-${docType}`;
+  const inputId = `lto-doc-${applicantRole}-${docType}`;
   return (
     <li className={`rounded-xl border border-border bg-card p-4 ${className ?? ""}`}>
       <div className="flex items-start justify-between gap-3">

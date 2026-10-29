@@ -4,12 +4,20 @@ import {
   APP_SUPABASE_URL,
 } from "@/integrations/supabase/runtime-config";
 import {
+  LEASE_CONSENTS_PENDING_APPROVAL,
   LEASE_SECURE_COLLECTION_UNAVAILABLE,
   LEASE_SETUP_PENDING,
   clampVehicleValue,
   isLeaseTierKey,
+  type ApplicantRole,
+  type LeaseDocType,
   type LeaseTierKey,
 } from "./lease-to-own";
+import {
+  completeLeaseDocumentUpload,
+  startLeaseDocumentUpload,
+  type MyLeaseApplication,
+} from "./lease-to-own.functions";
 
 export function isLeaseSetupPending(error: unknown): boolean {
   return error instanceof Error && error.message.includes(LEASE_SETUP_PENDING);
@@ -22,6 +30,9 @@ export function leaseErrorMessage(error: unknown): string {
   }
   if (error.message.includes(LEASE_SECURE_COLLECTION_UNAVAILABLE)) {
     return "Secure collection of SSNs and license numbers isn't available yet, so nothing was submitted. Please call us at (540) 426-3322.";
+  }
+  if (error.message.includes(LEASE_CONSENTS_PENDING_APPROVAL)) {
+    return "Online pre-qualification opens once our application disclosures are finalized. Nothing was submitted. Please call us at (540) 426-3322.";
   }
   return error.message;
 }
@@ -52,6 +63,28 @@ export function uploadToSignedUrl(
     xhr.onerror = () => reject(new Error("Upload failed. Check your connection and try again."));
     xhr.send(body);
   });
+}
+
+/**
+ * Uploads one document through the existing private flow: the server issues a
+ * one-time signed URL for the caller's own application, the file goes straight
+ * to private storage, and the server confirms the stored object before the
+ * document counts as uploaded. Returns the server's view of the application.
+ */
+export async function uploadLeaseDocument(input: {
+  accessToken: string;
+  applicationId: number;
+  applicantRole: ApplicantRole;
+  docType: LeaseDocType;
+  file: File;
+  onProgress: (percent: number) => void;
+}): Promise<MyLeaseApplication> {
+  const { accessToken, applicationId, applicantRole, docType, file } = input;
+  const { documentId, uploadUrl } = await startLeaseDocumentUpload({
+    data: { accessToken, applicationId, applicantRole, docType, mime: file.type, size: file.size },
+  });
+  await uploadToSignedUrl(uploadUrl, file, input.onProgress);
+  return completeLeaseDocumentUpload({ data: { accessToken, documentId } });
 }
 
 // ------------------------------------------------------------

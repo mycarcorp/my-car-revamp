@@ -356,79 +356,6 @@ export const US_STATES = [
   "WY",
 ] as const;
 
-/**
- * Fields collected by the ordinary application form. SSN/ITIN is deliberately
- * NOT part of this type: it may only be collected through an approved secure
- * identity provider's hosted field, which returns a reference instead.
- */
-export type ApplicantInput = {
-  fullLegalName: string;
-  dateOfBirth: string;
-  cellPhone: string;
-  email: string;
-  driversLicenseNumber: string;
-  driversLicenseState: string;
-  street: string;
-  city: string;
-  state: string;
-  zip: string;
-};
-
-export const EMPTY_APPLICANT: ApplicantInput = {
-  fullLegalName: "",
-  dateOfBirth: "",
-  cellPhone: "",
-  email: "",
-  driversLicenseNumber: "",
-  driversLicenseState: "",
-  street: "",
-  city: "",
-  state: "",
-  zip: "",
-};
-
-export type ApplicantErrors = Partial<Record<keyof ApplicantInput, string>>;
-
-export const digitsOnly = (value: string) => value.replace(/\D/g, "");
-
-export function formatSsnInput(value: string): string {
-  const d = digitsOnly(value).slice(0, 9);
-  if (d.length <= 3) return d;
-  if (d.length <= 5) return `${d.slice(0, 3)}-${d.slice(3)}`;
-  return `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`;
-}
-
-export function formatPhoneInput(value: string): string {
-  const d = digitsOnly(value).slice(0, 10);
-  if (d.length <= 3) return d;
-  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
-  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
-}
-
-/**
- * Normalizes untrusted applicant input. Unknown keys (including any `ssn`) are
- * dropped, so a raw SSN can never reach storage through this path.
- */
-export function normalizeApplicantInput(raw: unknown): ApplicantInput {
-  const a = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
-  const text = (key: string, max: number) =>
-    String(a[key] ?? "")
-      .trim()
-      .slice(0, max);
-  return {
-    fullLegalName: text("fullLegalName", 160).replace(/\s+/g, " "),
-    dateOfBirth: text("dateOfBirth", 10),
-    cellPhone: digitsOnly(text("cellPhone", 20)),
-    email: text("email", 255).toLowerCase(),
-    driversLicenseNumber: normalizeLicenseNumber(text("driversLicenseNumber", 40)).slice(0, 20),
-    driversLicenseState: text("driversLicenseState", 2).toUpperCase(),
-    street: text("street", 255),
-    city: text("city", 120),
-    state: text("state", 2).toUpperCase(),
-    zip: text("zip", 10),
-  };
-}
-
 // ------------------------------------------------------------
 // SSN / ITIN — provider-only collection
 // ------------------------------------------------------------
@@ -510,32 +437,597 @@ export function licenseNumberError(value: string): string | null {
   return null;
 }
 
-export function validateApplicant(input: ApplicantInput, today = new Date()): ApplicantErrors {
-  const errors: ApplicantErrors = {};
-  const name = input.fullLegalName.trim();
-  if (name.length < 3 || !/\s/.test(name))
-    errors.fullLegalName = "Enter your full legal name (first and last).";
-  else if (name.length > 160) errors.fullLegalName = "Name is too long.";
+// ------------------------------------------------------------
+// Pre-qualification applicants (Buyer and optional Co-Buyer)
+// ------------------------------------------------------------
 
-  const age = ageOn(input.dateOfBirth, today);
+export type ApplicantRole = "buyer" | "co_buyer";
+export const APPLICANT_ROLE_LABELS: Record<ApplicantRole, string> = {
+  buyer: "Buyer",
+  co_buyer: "Co-Buyer",
+};
+
+/** Existing program rule (applicants must be adults). Change only with management approval. */
+export const MIN_APPLICANT_AGE = 18;
+/**
+ * The license number and issuing state were required before the Buyer/Co-Buyer
+ * form and still are; issue and expiration dates are optional. Flip this only
+ * with management approval.
+ */
+export const LICENSE_REQUIRED = true;
+
+/** Same housing choices as the /finance application. */
+export const HOUSING_TYPES = [
+  { value: "rent", label: "Rent" },
+  { value: "own", label: "Own" },
+  { value: "mortgage", label: "Mortgage" },
+  { value: "family", label: "Family" },
+  { value: "military", label: "Military" },
+  { value: "other", label: "Other" },
+] as const;
+
+/**
+ * Same employment statuses as the /finance application. `employer` says whether
+ * employer details apply; statuses without an employer collect income only, so
+ * retired, unemployed and other applicants are never forced to invent a job.
+ * These are form rules, not qualification rules.
+ */
+export const EMPLOYMENT_STATUSES = [
+  { value: "Employed - Full-Time", employer: true },
+  { value: "Employed - Part-Time", employer: true },
+  { value: "Temporary / Seasonal", employer: true },
+  { value: "Active Military", employer: true },
+  { value: "Self-Employed", employer: true },
+  { value: "SSI / Retired", employer: false },
+  { value: "Unemployed", employer: false },
+  { value: "Other", employer: false },
+] as const;
+
+export function employmentNeedsEmployer(status: string): boolean {
+  return EMPLOYMENT_STATUSES.find((s) => s.value === status)?.employer ?? true;
+}
+
+/**
+ * Fields collected for each applicant by the ordinary form. SSN/ITIN is
+ * deliberately NOT part of this type: it may only be collected through an
+ * approved secure identity provider's hosted field, which returns a reference.
+ */
+export type ApplicantProfile = {
+  firstName: string;
+  lastName: string;
+  email: string;
+  cellPhone: string;
+  homePhone: string;
+  dateOfBirth: string;
+  driversLicenseNumber: string;
+  driversLicenseState: string;
+  driversLicenseIssueDate: string;
+  driversLicenseExpiryDate: string;
+  street: string;
+  unit: string;
+  city: string;
+  state: string;
+  zip: string;
+  housingType: string;
+  monthlyHousingPayment: string;
+  hasPreviousAddress: boolean;
+  previousStreet: string;
+  previousCity: string;
+  previousState: string;
+  previousZip: string;
+  employmentStatus: string;
+  employerName: string;
+  jobTitle: string;
+  employerPhone: string;
+  monthlyIncome: string;
+  yearsAtJob: string;
+  monthsAtJob: string;
+  incomeSource: string;
+  hasPreviousEmployment: boolean;
+  previousEmployerName: string;
+  previousJobTitle: string;
+  previousEmployerPhone: string;
+  previousYearsAtJob: string;
+  previousMonthsAtJob: string;
+};
+
+/** The text fields of an applicant (everything except the two "add previous" switches). */
+export type ApplicantField = {
+  [K in keyof ApplicantProfile]: ApplicantProfile[K] extends string ? K : never;
+}[keyof ApplicantProfile];
+export type ApplicantErrors = Partial<Record<ApplicantField, string>>;
+
+export const EMPTY_APPLICANT: ApplicantProfile = {
+  firstName: "",
+  lastName: "",
+  email: "",
+  cellPhone: "",
+  homePhone: "",
+  dateOfBirth: "",
+  driversLicenseNumber: "",
+  driversLicenseState: "",
+  driversLicenseIssueDate: "",
+  driversLicenseExpiryDate: "",
+  street: "",
+  unit: "",
+  city: "",
+  state: "",
+  zip: "",
+  housingType: "",
+  monthlyHousingPayment: "",
+  hasPreviousAddress: false,
+  previousStreet: "",
+  previousCity: "",
+  previousState: "",
+  previousZip: "",
+  employmentStatus: "",
+  employerName: "",
+  jobTitle: "",
+  employerPhone: "",
+  monthlyIncome: "",
+  yearsAtJob: "",
+  monthsAtJob: "",
+  incomeSource: "",
+  hasPreviousEmployment: false,
+  previousEmployerName: "",
+  previousJobTitle: "",
+  previousEmployerPhone: "",
+  previousYearsAtJob: "",
+  previousMonthsAtJob: "",
+};
+
+export const digitsOnly = (value: string) => value.replace(/\D/g, "");
+
+export function formatSsnInput(value: string): string {
+  const d = digitsOnly(value).slice(0, 9);
+  if (d.length <= 3) return d;
+  if (d.length <= 5) return `${d.slice(0, 3)}-${d.slice(3)}`;
+  return `${d.slice(0, 3)}-${d.slice(3, 5)}-${d.slice(5)}`;
+}
+
+/** 10-digit US number; a leading country code 1 is dropped. */
+export function normalizePhone(value: string): string {
+  const d = digitsOnly(value);
+  return (d.length === 11 && d.startsWith("1") ? d.slice(1) : d).slice(0, 10);
+}
+
+export function formatPhoneInput(value: string): string {
+  const d = normalizePhone(value);
+  if (d.length <= 3) return d;
+  if (d.length <= 6) return `(${d.slice(0, 3)}) ${d.slice(3)}`;
+  return `(${d.slice(0, 3)}) ${d.slice(3, 6)}-${d.slice(6)}`;
+}
+
+/** North American numbers: 10 digits, area code and exchange don't start with 0 or 1. */
+export function isValidUsPhone(value: string): boolean {
+  return /^[2-9]\d{2}[2-9]\d{6}$/.test(normalizePhone(value));
+}
+
+/** Whole dollars or dollars and cents ("1,250", "1250.50"). Null when not a valid amount. */
+export function parseMoney(value: string): number | null {
+  const cleaned = value.replace(/[$,\s]/g, "");
+  if (!/^\d{1,9}(\.\d{1,2})?$/.test(cleaned)) return null;
+  return Number(cleaned);
+}
+
+/** Leading three ZIP digits for each state (USPS sectional centers), including known cross-border prefixes. */
+const STATE_ZIP3: Record<string, Array<[number, number]>> = {
+  AL: [[350, 369]],
+  AK: [[995, 999]],
+  AZ: [[850, 865]],
+  AR: [[716, 729]],
+  CA: [[900, 961]],
+  CO: [[800, 816]],
+  CT: [[60, 69]],
+  DE: [[197, 199]],
+  DC: [
+    [200, 200],
+    [202, 205],
+    [569, 569],
+  ],
+  FL: [[320, 349]],
+  GA: [
+    [300, 319],
+    [398, 399],
+  ],
+  HI: [[967, 968]],
+  ID: [[832, 838]],
+  IL: [[600, 629]],
+  IN: [[460, 479]],
+  IA: [[500, 528]],
+  KS: [[660, 679]],
+  KY: [[400, 427]],
+  LA: [[700, 714]],
+  ME: [[39, 49]],
+  MD: [[206, 219]],
+  MA: [
+    [10, 27],
+    [55, 55],
+  ],
+  MI: [[480, 499]],
+  MN: [[550, 567]],
+  MS: [[386, 397]],
+  MO: [[630, 658]],
+  MT: [[590, 599]],
+  NE: [[680, 693]],
+  NV: [[889, 898]],
+  NH: [[30, 38]],
+  NJ: [[70, 89]],
+  NM: [[870, 884]],
+  NY: [
+    [5, 5],
+    [63, 63],
+    [100, 149],
+  ],
+  NC: [[270, 289]],
+  ND: [[580, 588]],
+  OH: [[430, 459]],
+  OK: [
+    [730, 732],
+    [734, 749],
+  ],
+  OR: [[970, 979]],
+  PA: [[150, 196]],
+  RI: [[28, 29]],
+  SC: [[290, 299]],
+  SD: [[570, 577]],
+  TN: [[370, 385]],
+  TX: [
+    [733, 733],
+    [750, 799],
+    [885, 885],
+  ],
+  UT: [[840, 847]],
+  VT: [[50, 59]],
+  VA: [
+    [201, 201],
+    [220, 246],
+  ],
+  WA: [[980, 994]],
+  WV: [[247, 268]],
+  WI: [[530, 549]],
+  WY: [
+    [820, 831],
+    [834, 834],
+  ],
+};
+
+export const isValidZip = (zip: string) => /^\d{5}(-?\d{4})?$/.test(zip.trim());
+
+/** True/false when the state's ZIP prefixes are known; null when they can't be checked. */
+export function zipMatchesState(zip: string, state: string): boolean | null {
+  const ranges = STATE_ZIP3[state];
+  if (!ranges || !isValidZip(zip)) return null;
+  const prefix = Number(zip.trim().slice(0, 3));
+  return ranges.some(([from, to]) => prefix >= from && prefix <= to);
+}
+
+const isIsoDate = (value: string) => {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [y, m, d] = value.split("-").map(Number) as [number, number, number];
+  const date = new Date(Date.UTC(y, m - 1, d));
+  return date.getUTCFullYear() === y && date.getUTCMonth() === m - 1 && date.getUTCDate() === d;
+};
+
+/**
+ * Normalizes one untrusted applicant. Unknown keys (including any `ssn`) are
+ * dropped, so a raw SSN can never reach storage through this path. Fields that
+ * belong to a hidden section (no previous address, no employer) are cleared.
+ */
+export function normalizeApplicantProfile(raw: unknown): ApplicantProfile {
+  const a = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const text = (key: keyof ApplicantProfile, max: number) =>
+    String(a[key] ?? "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .slice(0, max);
+  const upper2 = (key: keyof ApplicantProfile) => text(key, 2).toUpperCase();
+  const hasPreviousAddress = a["hasPreviousAddress"] === true;
+  const hasPreviousEmployment = a["hasPreviousEmployment"] === true;
+  const employmentStatus = text("employmentStatus", 60);
+  const employer = employmentNeedsEmployer(employmentStatus);
+  const ifPrev = (on: boolean, value: string) => (on ? value : "");
+  return {
+    firstName: text("firstName", 80),
+    lastName: text("lastName", 80),
+    email: text("email", 255).toLowerCase(),
+    cellPhone: normalizePhone(text("cellPhone", 20)),
+    homePhone: normalizePhone(text("homePhone", 20)),
+    dateOfBirth: text("dateOfBirth", 10),
+    driversLicenseNumber: normalizeLicenseNumber(text("driversLicenseNumber", 40)).slice(0, 20),
+    driversLicenseState: upper2("driversLicenseState"),
+    driversLicenseIssueDate: text("driversLicenseIssueDate", 10),
+    driversLicenseExpiryDate: text("driversLicenseExpiryDate", 10),
+    street: text("street", 255),
+    unit: text("unit", 40),
+    city: text("city", 120),
+    state: upper2("state"),
+    zip: text("zip", 10),
+    housingType: text("housingType", 20),
+    monthlyHousingPayment: text("monthlyHousingPayment", 16),
+    hasPreviousAddress,
+    previousStreet: ifPrev(hasPreviousAddress, text("previousStreet", 255)),
+    previousCity: ifPrev(hasPreviousAddress, text("previousCity", 120)),
+    previousState: ifPrev(hasPreviousAddress, upper2("previousState")),
+    previousZip: ifPrev(hasPreviousAddress, text("previousZip", 10)),
+    employmentStatus,
+    employerName: ifPrev(employer, text("employerName", 160)),
+    jobTitle: ifPrev(employer, text("jobTitle", 120)),
+    employerPhone: ifPrev(employer, normalizePhone(text("employerPhone", 20))),
+    monthlyIncome: text("monthlyIncome", 16),
+    yearsAtJob: ifPrev(employer, text("yearsAtJob", 2)),
+    monthsAtJob: ifPrev(employer, text("monthsAtJob", 2)),
+    incomeSource: ifPrev(!employer, text("incomeSource", 120)),
+    hasPreviousEmployment,
+    previousEmployerName: ifPrev(hasPreviousEmployment, text("previousEmployerName", 160)),
+    previousJobTitle: ifPrev(hasPreviousEmployment, text("previousJobTitle", 120)),
+    previousEmployerPhone: ifPrev(
+      hasPreviousEmployment,
+      normalizePhone(text("previousEmployerPhone", 20)),
+    ),
+    previousYearsAtJob: ifPrev(hasPreviousEmployment, text("previousYearsAtJob", 2)),
+    previousMonthsAtJob: ifPrev(hasPreviousEmployment, text("previousMonthsAtJob", 2)),
+  };
+}
+
+function wholeNumberError(value: string, max: number, label: string): string | null {
+  if (!/^\d{1,2}$/.test(value.trim()) || Number(value) > max) return `Enter ${label} (0–${max}).`;
+  return null;
+}
+
+/** Validates one applicant. Every message is safe to show next to its field. */
+export function validateApplicantProfile(p: ApplicantProfile, today = new Date()): ApplicantErrors {
+  const errors: ApplicantErrors = {};
+  const todayIso = today.toISOString().slice(0, 10);
+
+  if (!p.firstName.trim()) errors.firstName = "Enter a first name.";
+  if (!p.lastName.trim()) errors.lastName = "Enter a last name.";
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(p.email.trim()))
+    errors.email = "Enter a valid email address.";
+  if (!isValidUsPhone(p.cellPhone)) errors.cellPhone = "Enter a valid 10-digit cell phone number.";
+  if (p.homePhone.trim() && !isValidUsPhone(p.homePhone))
+    errors.homePhone = "Enter a valid 10-digit phone number or leave it blank.";
+
+  const age = ageOn(p.dateOfBirth, today);
   if (age === null) errors.dateOfBirth = "Enter a valid date of birth.";
-  else if (age < 18) errors.dateOfBirth = "Applicants must be at least 18 years old.";
+  else if (p.dateOfBirth > todayIso) errors.dateOfBirth = "Date of birth can't be in the future.";
+  else if (age < MIN_APPLICANT_AGE)
+    errors.dateOfBirth = `Applicants must be at least ${MIN_APPLICANT_AGE} years old.`;
   else if (age > 120) errors.dateOfBirth = "Enter a valid date of birth.";
 
-  if (digitsOnly(input.cellPhone).length !== 10)
-    errors.cellPhone = "Enter a 10-digit cell phone number.";
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(input.email.trim()))
-    errors.email = "Enter a valid email address.";
+  const anyLicense =
+    p.driversLicenseNumber ||
+    p.driversLicenseState ||
+    p.driversLicenseIssueDate ||
+    p.driversLicenseExpiryDate;
+  if (LICENSE_REQUIRED || anyLicense) {
+    const dlError = licenseNumberError(p.driversLicenseNumber);
+    if (dlError) errors.driversLicenseNumber = dlError;
+    if (!isState(p.driversLicenseState)) errors.driversLicenseState = "Select the issuing state.";
+  }
+  if (p.driversLicenseIssueDate) {
+    if (!isIsoDate(p.driversLicenseIssueDate))
+      errors.driversLicenseIssueDate = "Enter a valid issue date.";
+    else if (p.driversLicenseIssueDate > todayIso)
+      errors.driversLicenseIssueDate = "Issue date can't be in the future.";
+    else if (isIsoDate(p.dateOfBirth) && p.driversLicenseIssueDate < p.dateOfBirth)
+      errors.driversLicenseIssueDate = "Issue date can't be before the date of birth.";
+  }
+  if (p.driversLicenseExpiryDate) {
+    if (!isIsoDate(p.driversLicenseExpiryDate))
+      errors.driversLicenseExpiryDate = "Enter a valid expiration date.";
+    else if (
+      isIsoDate(p.driversLicenseIssueDate) &&
+      p.driversLicenseExpiryDate < p.driversLicenseIssueDate
+    )
+      errors.driversLicenseExpiryDate = "Expiration date can't be before the issue date.";
+  }
 
-  const dlError = licenseNumberError(input.driversLicenseNumber);
-  if (dlError) errors.driversLicenseNumber = dlError;
-  if (!isState(input.driversLicenseState)) errors.driversLicenseState = "Select the issuing state.";
+  addressErrors(errors, p.street, p.city, p.state, p.zip, {
+    street: "street",
+    city: "city",
+    state: "state",
+    zip: "zip",
+  });
+  if (!HOUSING_TYPES.some((h) => h.value === p.housingType))
+    errors.housingType = "Select a housing type.";
+  if (parseMoney(p.monthlyHousingPayment) === null)
+    errors.monthlyHousingPayment = "Enter the monthly amount (enter 0 if none).";
+  if (p.hasPreviousAddress)
+    addressErrors(errors, p.previousStreet, p.previousCity, p.previousState, p.previousZip, {
+      street: "previousStreet",
+      city: "previousCity",
+      state: "previousState",
+      zip: "previousZip",
+    });
 
-  if (input.street.trim().length < 3) errors.street = "Enter your street address.";
-  if (input.city.trim().length < 2) errors.city = "Enter your city.";
-  if (!isState(input.state)) errors.state = "Select your state.";
-  if (!/^\d{5}(-\d{4})?$/.test(input.zip.trim())) errors.zip = "Enter a 5-digit ZIP code.";
+  if (!EMPLOYMENT_STATUSES.some((s) => s.value === p.employmentStatus))
+    errors.employmentStatus = "Select an employment status.";
+  else if (employmentNeedsEmployer(p.employmentStatus)) {
+    if (!p.employerName.trim()) errors.employerName = "Enter the employer name.";
+    if (!p.jobTitle.trim()) errors.jobTitle = "Enter a title or position.";
+    if (!isValidUsPhone(p.employerPhone))
+      errors.employerPhone = "Enter a valid 10-digit employer phone number.";
+    const years = wholeNumberError(p.yearsAtJob, 60, "years at this job");
+    if (years) errors.yearsAtJob = years;
+    if (p.monthsAtJob.trim()) {
+      const months = wholeNumberError(p.monthsAtJob, 11, "months");
+      if (months) errors.monthsAtJob = months;
+    }
+  }
+  if (parseMoney(p.monthlyIncome) === null)
+    errors.monthlyIncome = "Enter monthly gross income before taxes (enter 0 if none).";
+
+  if (p.hasPreviousEmployment) {
+    if (!p.previousEmployerName.trim())
+      errors.previousEmployerName = "Enter the previous employer name.";
+    if (!p.previousJobTitle.trim()) errors.previousJobTitle = "Enter the previous title.";
+    if (p.previousEmployerPhone.trim() && !isValidUsPhone(p.previousEmployerPhone))
+      errors.previousEmployerPhone = "Enter a valid 10-digit phone number or leave it blank.";
+    if (p.previousYearsAtJob.trim()) {
+      const years = wholeNumberError(p.previousYearsAtJob, 60, "years");
+      if (years) errors.previousYearsAtJob = years;
+    }
+    if (p.previousMonthsAtJob.trim()) {
+      const months = wholeNumberError(p.previousMonthsAtJob, 11, "months");
+      if (months) errors.previousMonthsAtJob = months;
+    }
+  }
   return errors;
+}
+
+function addressErrors(
+  errors: ApplicantErrors,
+  street: string,
+  city: string,
+  state: string,
+  zip: string,
+  keys: {
+    street: ApplicantField;
+    city: ApplicantField;
+    state: ApplicantField;
+    zip: ApplicantField;
+  },
+) {
+  if (street.trim().length < 3) errors[keys.street] = "Enter the street address.";
+  if (city.trim().length < 2) errors[keys.city] = "Enter the city.";
+  if (!isState(state)) errors[keys.state] = "Select the state.";
+  if (!isValidZip(zip)) errors[keys.zip] = "Enter a 5-digit ZIP code.";
+  else if (zipMatchesState(zip, state) === false)
+    errors[keys.zip] = "This ZIP code doesn't match the selected state.";
+}
+
+/** A Co-Buyer must be reachable on their own: their email can't be the Buyer's. */
+export function coBuyerErrors(buyer: ApplicantProfile, coBuyer: ApplicantProfile): ApplicantErrors {
+  const errors: ApplicantErrors = {};
+  if (
+    coBuyer.email.trim() &&
+    coBuyer.email.trim().toLowerCase() === buyer.email.trim().toLowerCase()
+  )
+    errors.email = "The Co-Buyer needs their own email address.";
+  return errors;
+}
+
+// ------------------------------------------------------------
+// Interested vehicle and optional trade-in
+// ------------------------------------------------------------
+
+/** What the applicant would like when no in-stock vehicle is chosen. Never prices anything. */
+export type VehiclePreferences = {
+  year: string;
+  make: string;
+  model: string;
+  exteriorColor: string;
+  interiorColor: string;
+};
+export const EMPTY_VEHICLE_PREFERENCES: VehiclePreferences = {
+  year: "",
+  make: "",
+  model: "",
+  exteriorColor: "",
+  interiorColor: "",
+};
+
+export type TradeIn = {
+  year: string;
+  make: string;
+  model: string;
+  mileage: string;
+  payoff: string;
+};
+export const EMPTY_TRADE_IN: TradeIn = { year: "", make: "", model: "", mileage: "", payoff: "" };
+export type TradeInErrors = Partial<Record<keyof TradeIn, string>>;
+
+export function normalizeVehiclePreferences(raw: unknown): VehiclePreferences {
+  const a = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const text = (key: keyof VehiclePreferences, max: number) =>
+    String(a[key] ?? "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .slice(0, max);
+  return {
+    year: text("year", 4),
+    make: text("make", 60),
+    model: text("model", 80),
+    exteriorColor: text("exteriorColor", 60),
+    interiorColor: text("interiorColor", 60),
+  };
+}
+
+export function validateVehiclePreferences(
+  p: VehiclePreferences,
+  today = new Date(),
+): Partial<Record<keyof VehiclePreferences, string>> {
+  if (p.year && !isModelYear(p.year, today)) return { year: "Enter a 4-digit model year." };
+  return {};
+}
+
+export function normalizeTradeIn(raw: unknown): TradeIn {
+  const a = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  const text = (key: keyof TradeIn, max: number) =>
+    String(a[key] ?? "")
+      .trim()
+      .replace(/\s+/g, " ")
+      .slice(0, max);
+  return {
+    year: text("year", 4),
+    make: text("make", 60),
+    model: text("model", 80),
+    mileage: digitsOnly(text("mileage", 12)).slice(0, 7),
+    payoff: text("payoff", 16),
+  };
+}
+
+const isModelYear = (year: string, today: Date) =>
+  /^\d{4}$/.test(year) && Number(year) >= 1950 && Number(year) <= today.getUTCFullYear() + 2;
+
+export function validateTradeIn(t: TradeIn, today = new Date()): TradeInErrors {
+  const errors: TradeInErrors = {};
+  if (!isModelYear(t.year, today)) errors.year = "Enter the trade-in's 4-digit model year.";
+  if (!t.make.trim()) errors.make = "Enter the make.";
+  if (!t.model.trim()) errors.model = "Enter the model.";
+  if (t.mileage && !/^\d{1,7}$/.test(t.mileage)) errors.mileage = "Enter mileage in whole miles.";
+  if (t.payoff && parseMoney(t.payoff) === null)
+    errors.payoff = "Enter the amount still owed, or leave it blank.";
+  return errors;
+}
+
+// ------------------------------------------------------------
+// Consents (wording lives in lease-to-own-content.ts)
+// ------------------------------------------------------------
+
+export const LEASE_CONSENT_TYPES = [
+  "marketing_sms",
+  "transactional_sms",
+  "credit_authorization",
+  "application_certification",
+] as const;
+export type LeaseConsentType = (typeof LEASE_CONSENT_TYPES)[number];
+export type ConsentChoices = Record<LeaseConsentType, boolean>;
+
+/** Optional consents start unchecked and are never required to apply. */
+export const REQUIRED_CONSENTS: readonly LeaseConsentType[] = [
+  "credit_authorization",
+  "application_certification",
+];
+
+export const EMPTY_CONSENTS: ConsentChoices = {
+  marketing_sms: false,
+  transactional_sms: false,
+  credit_authorization: false,
+  application_certification: false,
+};
+
+/** Only literal `true` counts as consent; anything else is a "no". */
+export function normalizeConsents(raw: unknown): ConsentChoices {
+  const a = (raw && typeof raw === "object" ? raw : {}) as Record<string, unknown>;
+  return Object.fromEntries(
+    LEASE_CONSENT_TYPES.map((type) => [type, a[type] === true]),
+  ) as ConsentChoices;
+}
+
+export function missingRequiredConsents(choices: ConsentChoices): LeaseConsentType[] {
+  return REQUIRED_CONSENTS.filter((type) => !choices[type]);
 }
 
 // ============================================================
@@ -633,6 +1125,34 @@ export function validateDocumentFile(file: { type: string; size: number }): stri
   return null;
 }
 
+export function isApplicantRole(value: unknown): value is ApplicantRole {
+  return value === "buyer" || value === "co_buyer";
+}
+
+/**
+ * Current status of each customer document for one applicant (newest first in
+ * `documents`). The Buyer also owns unassigned rows, which predate Co-Buyers.
+ */
+export function applicantDocumentStatuses(
+  documents: ReadonlyArray<{
+    doc_type: string;
+    status: LeaseDocStatus;
+    source: string;
+    applicant_id: number | null;
+  }>,
+  applicantId: number | null,
+  isBuyer: boolean,
+): Partial<Record<LeaseDocType, LeaseDocStatus>> {
+  const out: Partial<Record<LeaseDocType, LeaseDocStatus>> = {};
+  for (const doc of documents) {
+    if (doc.source !== "customer" || doc.status === "pending" || !isLeaseDocType(doc.doc_type))
+      continue;
+    const mine = doc.applicant_id === applicantId || (isBuyer && doc.applicant_id === null);
+    if (mine && !out[doc.doc_type]) out[doc.doc_type] = doc.status;
+  }
+  return out;
+}
+
 /** Signing may start only when every required document is on file and none was rejected. */
 export function documentsReadyForSigning(
   statuses: Partial<Record<LeaseDocType, LeaseDocStatus>>,
@@ -669,6 +1189,10 @@ export function applicationStatusLabel(status: string): string {
 export const LEASE_SETUP_PENDING = "LEASE_SETUP_PENDING";
 /** Thrown by the server when driver's license encryption is not configured. */
 export const LEASE_SECURE_COLLECTION_UNAVAILABLE = "LEASE_SECURE_COLLECTION_UNAVAILABLE";
+/** Thrown by the production server until counsel approves the required consent wording. */
+export const LEASE_CONSENTS_PENDING_APPROVAL = "LEASE_CONSENTS_PENDING_APPROVAL";
+/** Version of the Buyer / Co-Buyer pre-qualification form, stored with each application. */
+export const PREQUAL_FORM_VERSION = "prequal-2026-10";
 
 export const SERVICE_LOCATION = "4720 Harrison Rd, Fredericksburg, VA 22408";
 export const MAINTENANCE_TIME_WINDOWS = [
