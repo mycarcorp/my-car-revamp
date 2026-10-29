@@ -199,7 +199,7 @@ const BODY_MAP: Record<string, BodyStyle> = {
   van: "Van",
 };
 
-function inferBodyStyle(...values: string[]): BodyStyle | null {
+export function inferBodyStyle(...values: string[]): BodyStyle | null {
   const text = values.map(normalizeHeaderName).join(" ");
   if (/convertible|roadster|cabrio/.test(text)) return "Convertible";
   if (/coupe/.test(text)) return "Coupe";

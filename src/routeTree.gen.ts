@@ -44,6 +44,7 @@ import { Route as StaffDmsRouteImport } from './routes/staff.dms'
 import { Route as AdminBlogIndexRouteImport } from './routes/admin.blog.index'
 import { Route as AdminBlogNewRouteImport } from './routes/admin.blog.new'
 import { Route as ApiPublicReceiveArticleRouteImport } from './routes/api/public/receive-article'
+import { Route as ApiPublicReconSyncRouteImport } from './routes/api/public/recon-sync'
 import { Route as MyPurchasesIndexRouteImport } from './routes/my.purchases.index'
 import { Route as MyPurchasesIdRouteImport } from './routes/my.purchases.$id'
 import { Route as AdminBlogIdEditRouteImport } from './routes/admin.blog.$id.edit'
@@ -225,6 +226,11 @@ const ApiPublicReceiveArticleRoute = ApiPublicReceiveArticleRouteImport.update({
   path: '/api/public/receive-article',
   getParentRoute: () => rootRouteImport,
 } as any)
+const ApiPublicReconSyncRoute = ApiPublicReconSyncRouteImport.update({
+  id: '/api/public/recon-sync',
+  path: '/api/public/recon-sync',
+  getParentRoute: () => rootRouteImport,
+} as any)
 const MyPurchasesIndexRoute = MyPurchasesIndexRouteImport.update({
   id: '/purchases/',
   path: '/purchases/',
@@ -288,6 +294,7 @@ export interface FileRoutesByFullPath {
   '/my/': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/api/public/recon-sync': typeof ApiPublicReconSyncRoute
   '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/my/purchases/': typeof MyPurchasesIndexRoute
@@ -328,6 +335,7 @@ export interface FileRoutesByTo {
   '/my': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/api/public/recon-sync': typeof ApiPublicReconSyncRoute
   '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog': typeof AdminBlogIndexRoute
   '/my/purchases': typeof MyPurchasesIndexRoute
@@ -371,6 +379,7 @@ export interface FileRoutesById {
   '/my/': typeof MyIndexRoute
   '/admin/blog/new': typeof AdminBlogNewRoute
   '/api/public/receive-article': typeof ApiPublicReceiveArticleRoute
+  '/api/public/recon-sync': typeof ApiPublicReconSyncRoute
   '/my/purchases/$id': typeof MyPurchasesIdRoute
   '/admin/blog/': typeof AdminBlogIndexRoute
   '/my/purchases/': typeof MyPurchasesIndexRoute
@@ -415,6 +424,7 @@ export interface FileRouteTypes {
     | '/my/'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/api/public/recon-sync'
     | '/my/purchases/$id'
     | '/admin/blog/'
     | '/my/purchases/'
@@ -455,6 +465,7 @@ export interface FileRouteTypes {
     | '/my'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/api/public/recon-sync'
     | '/my/purchases/$id'
     | '/admin/blog'
     | '/my/purchases'
@@ -497,6 +508,7 @@ export interface FileRouteTypes {
     | '/my/'
     | '/admin/blog/new'
     | '/api/public/receive-article'
+    | '/api/public/recon-sync'
     | '/my/purchases/$id'
     | '/admin/blog/'
     | '/my/purchases/'
@@ -530,6 +542,7 @@ export interface RootRouteChildren {
   LeaseToOwnIndexRoute: typeof LeaseToOwnIndexRoute
   LocationsIndexRoute: typeof LocationsIndexRoute
   ApiPublicReceiveArticleRoute: typeof ApiPublicReceiveArticleRoute
+  ApiPublicReconSyncRoute: typeof ApiPublicReconSyncRoute
   ApiPublicJobsMarketingRefreshRoute: typeof ApiPublicJobsMarketingRefreshRoute
   ApiPublicVehiclePhotosSplatRoute: typeof ApiPublicVehiclePhotosSplatRoute
 }
@@ -781,6 +794,13 @@ declare module '@tanstack/react-router' {
       preLoaderRoute: typeof ApiPublicReceiveArticleRouteImport
       parentRoute: typeof rootRouteImport
     }
+    '/api/public/recon-sync': {
+      id: '/api/public/recon-sync'
+      path: '/api/public/recon-sync'
+      fullPath: '/api/public/recon-sync'
+      preLoaderRoute: typeof ApiPublicReconSyncRouteImport
+      parentRoute: typeof rootRouteImport
+    }
     '/my/purchases/': {
       id: '/my/purchases/'
       path: '/purchases'
@@ -896,6 +916,7 @@ const rootRouteChildren: RootRouteChildren = {
   LeaseToOwnIndexRoute: LeaseToOwnIndexRoute,
   LocationsIndexRoute: LocationsIndexRoute,
   ApiPublicReceiveArticleRoute: ApiPublicReceiveArticleRoute,
+  ApiPublicReconSyncRoute: ApiPublicReconSyncRoute,
   ApiPublicJobsMarketingRefreshRoute: ApiPublicJobsMarketingRefreshRoute,
   ApiPublicVehiclePhotosSplatRoute: ApiPublicVehiclePhotosSplatRoute,
 }
