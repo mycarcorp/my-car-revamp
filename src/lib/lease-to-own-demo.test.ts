@@ -146,6 +146,9 @@ describe("demo isolation", () => {
       "src/lib/delivery-checklist-fields.ts",
       "src/components/lease-to-own/AcknowledgmentInitials.tsx",
       "src/components/lease-to-own/DeliveryChecklistEditor.tsx",
+      "src/lib/insurance-agreement.ts",
+      "src/lib/insurance-agreement-fields.ts",
+      "src/components/lease-to-own/InsuranceAgreementEditor.tsx",
     ]) {
       const imports = readFileSync(file, "utf8")
         .split("\n")

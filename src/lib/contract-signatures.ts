@@ -24,6 +24,7 @@ import {
 } from "./credit-application";
 import { DELIVERY_CHECKLIST_SIGNATURES } from "./delivery-checklist";
 import { GPS_DISCLOSURE_SIGNATURES } from "./gps-disclosure";
+import { INSURANCE_AGREEMENT_SIGNATURES } from "./insurance-agreement";
 import { CONTRACT_TEMPLATES, type ContractId, type DealContract } from "./lease-contracts";
 import {
   creditInsuranceElected,
@@ -83,7 +84,9 @@ export function signatureSlotsFor(contractId: ContractId, deal: Deal): ContractS
             ? GPS_DISCLOSURE_SIGNATURES
             : contractId === "delivery_checklist"
               ? DELIVERY_CHECKLIST_SIGNATURES
-              : null;
+              : contractId === "insurance_agreement"
+                ? INSURANCE_AGREEMENT_SIGNATURES
+                : null;
   if (confirmed)
     return confirmed.filter(applies).map((s) => ({
       ...s,

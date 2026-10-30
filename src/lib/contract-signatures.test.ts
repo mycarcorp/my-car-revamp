@@ -67,8 +67,8 @@ describe("signature locations", () => {
     expect(requiredSignerRoles(solo)).toEqual(["buyer", "dealer"]);
   });
 
-  it("Forms 6–10 use placeholder Buyer/Co-Buyer locations and never a dealer line yet", () => {
-    const slots = signatureSlotsFor("insurance_agreement", deal());
+  it("Forms 7–10 use placeholder Buyer/Co-Buyer locations and never a dealer line yet", () => {
+    const slots = signatureSlotsFor("abuse_notice", deal());
     expect(slots.map((s) => s.role)).toEqual(["buyer", "co_buyer"]);
     expect(slots.every((s) => !s.locationConfirmed)).toBe(true);
   });

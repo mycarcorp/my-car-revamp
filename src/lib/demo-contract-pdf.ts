@@ -33,6 +33,7 @@ import {
 import { itemApplies } from "./acknowledgments";
 import { DELIVERY_INITIAL_ROLES, DELIVERY_STATEMENTS, purchaserNames } from "./delivery-checklist";
 import { GPS_PROVISION_INITIAL_ROLES, GPS_PROVISIONS, gpsCreditorName } from "./gps-disclosure";
+import { insuranceCreditor, verificationStatus } from "./insurance-agreement";
 import type { ContractTemplate } from "./lease-contracts";
 import { formatCents } from "./money";
 import {
@@ -1182,6 +1183,80 @@ export function deliveryChecklistDemoPages(
       ...sig("dc-representative", 40, y - 60),
       {
         text: "Customer Delivery Checklist - structural preview. Approved template required.",
+        size: 7,
+        x: 40,
+        y: 40,
+      },
+    ],
+  ];
+}
+
+// ------------------------------------------------------------
+// Form 6 — Agreement to Provide Insurance: 1-page structural preview
+// ------------------------------------------------------------
+
+export function insuranceAgreementDemoPages(
+  deal: Deal,
+  signatures: DemoSignatures = {},
+): PdfItem[][] {
+  const slots = new Map(signatureSlotsFor("insurance_agreement", deal).map((s) => [s.id, s]));
+  const sig = (id: string, x: number, y: number) => {
+    const slot = slots.get(id);
+    return slot ? signatureBlock(slot, deal, signatures, x + 10, y, 160, 26) : [];
+  };
+  const creditor = insuranceCreditor(deal);
+  const coverage = (key: string) => {
+    const s = text(deal, `ins.cov.${key}`);
+    return s === "confirmed" || s === "reported" ? "X" : s ? "-" : "?";
+  };
+  const c = column(40, 532, 740);
+  c.line("AGREEMENT TO PROVIDE INSURANCE", { bold: true, size: 12, indent: 150 });
+  if (creditor.status === "confirmed") {
+    c.line(`To: ${creditor.name}`, { bold: true });
+    c.line(creditor.street, { indent: 18 });
+    c.line(creditor.cityStateZip, { indent: 18 });
+  } else c.line("To: [creditor / loss payee pending confirmation]", { bold: true });
+  c.legal("Insurance requirement and loss-payable endorsement");
+  c.legal("Lender-placed insurance if not obtained or maintained");
+  c.line(
+    text(deal, "vehicle.vin")
+      ? `Vehicle Insured: Year ${v(deal, "vehicle.year")}  Make ${v(deal, "vehicle.make")}  Model ${v(deal, "vehicle.model")}`
+      : "Vehicle Insured: Vehicle Not Assigned",
+  );
+  c.line(`VIN: ${v(deal, "vehicle.vin")}`);
+  c.line(
+    `Purchaser(s): ${[fullName(deal, "buyer"), deal.coBuyerIncluded ? fullName(deal, "coBuyer") : ""].filter(Boolean).join(" and ") || "-"}`,
+  );
+  c.line(`Address: ${v(deal, "buyer.street")}`);
+  c.line(
+    `City/State/Zip: ${v(deal, "buyer.city")}, ${text(deal, "buyer.state")} ${text(deal, "buyer.zip")}`,
+  );
+  c.line(`Insurance Agent: ${v(deal, "ins.agentName")}`);
+  c.line(`Phone: ${v(deal, "ins.agentPhone")}    Policy #: ${v(deal, "insurance.policyNumber")}`);
+  c.line(`Insurance Company: ${v(deal, "insurance.company")}`);
+  c.line(`Effective Date From: ${v(deal, "ins.effectiveFrom")}  To: ${v(deal, "ins.effectiveTo")}`);
+  c.line(
+    `Coverage: [${coverage("fireTheft")}] Fire, Theft   [${coverage("comprehensive")}] Comprehensive, Deductible $ ${amtText(deal, "ins.compDeductible").replace("$ ", "")}`,
+  );
+  c.line(
+    `          [${coverage("collision")}] Collision, Deductible $ ${amtText(deal, "ins.collisionDeductible").replace("$ ", "")}`,
+  );
+  c.line(`Verification: ${verificationStatus(deal)}  ([?] = unknown, information required)`, {
+    size: 6,
+  });
+  const y = c.y - 34;
+  return [
+    [
+      { text: DEMO_WATERMARK, bold: true, size: 8, x: 40, y: 772 },
+      ...c.items,
+      { text: "Signed: Purchaser(s)", bold: true, size: 7, x: 40, y: y + 34 },
+      ...sig("ins-purchaser", 40, y),
+      ...sig("ins-copurchaser", 316, y),
+      { text: "Signed: Dealer", bold: true, size: 7, x: 40, y: y - 26 },
+      ...sig("ins-dealer", 40, y - 60),
+      ...legalBox("Note to customer (agent verification)", 40, y - 100, 532, 14),
+      {
+        text: "Agreement to Provide Insurance - structural preview. Approved template required.",
         size: 7,
         x: 40,
         y: 40,

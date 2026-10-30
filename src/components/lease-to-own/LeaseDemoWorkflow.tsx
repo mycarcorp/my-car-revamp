@@ -34,6 +34,7 @@ import {
   DEMO_DEAL,
   deliveryChecklistDemoPages,
   gpsDisclosureDemoPages,
+  insuranceAgreementDemoPages,
   demoContractLines,
   retailInstallmentDemoPages,
 } from "@/lib/demo-contract-pdf";
@@ -60,6 +61,7 @@ import { BillOfSaleEditor } from "./BillOfSaleEditor";
 import { CreditApplicationEditor } from "./CreditApplicationEditor";
 import { DeliveryChecklistEditor } from "./DeliveryChecklistEditor";
 import { GpsDisclosureEditor } from "./GpsDisclosureEditor";
+import { InsuranceAgreementEditor } from "./InsuranceAgreementEditor";
 import { RetailInstallmentEditor } from "./RetailInstallmentEditor";
 import { ContractSignatureBlocks, type SignatureBlockEntry } from "./ContractSignatureBlocks";
 import { ContractSuite } from "./ContractSuite";
@@ -335,6 +337,9 @@ function DemoContracts({
         delivery_checklist: pdfUrl(
           buildDemoPdfPages(deliveryChecklistDemoPages(deal, signatures, ackInitials)),
         ),
+        insurance_agreement: pdfUrl(
+          buildDemoPdfPages(insuranceAgreementDemoPages(deal, signatures)),
+        ),
       };
       made = Object.values(next);
       setFormUrls(next);
@@ -543,6 +548,21 @@ function DemoContracts({
             }}
             {...initialHandlers("delivery_checklist")}
             signatureState={{
+              buyer: Boolean(signatures.buyer),
+              co_buyer: Boolean(signatures.co_buyer),
+              dealer: Boolean(signatures.dealer),
+            }}
+          />
+        ) : c.id === "insurance_agreement" ? (
+          <InsuranceAgreementEditor
+            deal={deal}
+            actor={actor}
+            onEdit={onEdit}
+            renderSignatures={(ids) => {
+              const entries = blockEntries("insurance_agreement", (s) => ids.includes(s.id));
+              return entries.length ? <ContractSignatureBlocks entries={entries} /> : null;
+            }}
+            signed={{
               buyer: Boolean(signatures.buyer),
               co_buyer: Boolean(signatures.co_buyer),
               dealer: Boolean(signatures.dealer),
@@ -772,6 +792,7 @@ const WEB_FORMS = new Set<ContractId>([
   "credit_application",
   "gps_disclosure",
   "delivery_checklist",
+  "insurance_agreement",
 ]);
 
 function pdfUrl(pdf: string): string {

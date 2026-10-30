@@ -14,6 +14,7 @@ import { parseCents } from "./money";
 import { CREDIT_APPLICATION_FIELD_DEFS } from "./credit-application-fields";
 import { DELIVERY_CHECKLIST_FIELD_DEFS } from "./delivery-checklist-fields";
 import { GPS_DISCLOSURE_FIELD_DEFS } from "./gps-disclosure-fields";
+import { INSURANCE_AGREEMENT_FIELD_DEFS } from "./insurance-agreement-fields";
 import { RETAIL_INSTALLMENT_FIELD_DEFS } from "./retail-installment-fields";
 
 export type FieldSource =
@@ -152,8 +153,12 @@ export const DEAL_FIELD_DEFS: readonly FieldDef[] = [
     kind: "choice",
     options: [
       { value: "not_provided", label: "Not provided" },
-      { value: "provided_unverified", label: "Provided — not verified" },
+      { value: "information_entered", label: "Information entered" },
+      { value: "provided_unverified", label: "Document uploaded — not verified" },
+      { value: "pending_verification", label: "Pending verification" },
       { value: "verified", label: "Verified by staff" },
+      { value: "expired", label: "Expired" },
+      { value: "rejected", label: "Verification rejected" },
     ],
   },
   // Trade-ins
@@ -179,6 +184,8 @@ export const DEAL_FIELD_DEFS: readonly FieldDef[] = [
   ...GPS_DISCLOSURE_FIELD_DEFS,
   // Form 5 — Delivery Checklist (see delivery-checklist-fields.ts)
   ...DELIVERY_CHECKLIST_FIELD_DEFS,
+  // Form 6 — Insurance Agreement (see insurance-agreement-fields.ts)
+  ...INSURANCE_AGREEMENT_FIELD_DEFS,
 ];
 
 const DEF_BY_KEY = new Map(DEAL_FIELD_DEFS.map((d) => [d.key, d]));
@@ -426,6 +433,8 @@ export function buildDealFromApplication(src: DealSource): Deal {
     "document",
     src.insuranceDocument.status === "verified",
   );
+  if (src.insuranceDocument.documentId !== null)
+    set("insurance.documentId", String(src.insuranceDocument.documentId), "document");
   return { applicationId: src.applicationId, coBuyerIncluded, financialsLocked: false, fields };
 }
 
