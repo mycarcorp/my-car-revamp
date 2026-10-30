@@ -1,58 +1,55 @@
 import { useState, type ReactNode } from "react";
-import { CircleAlert, FileLock2, Lock, ShieldCheck } from "lucide-react";
+import { CircleAlert, FileLock2, Lock } from "lucide-react";
 
 import {
   BILL_OF_SALE_LAYOUT,
   BILL_OF_SALE_SECTION_TITLES,
   computeBillOfSale,
 } from "@/lib/bill-of-sale";
-import {
-  fieldDef,
-  missingRequiredFields,
-  text,
-  type Deal,
-  type EditActor,
-  type FieldSource,
-} from "@/lib/deal-model";
+import { fieldDef, missingRequiredFields, text, type Deal, type EditActor } from "@/lib/deal-model";
 import { formatCents } from "@/lib/money";
 import { cn } from "@/lib/utils";
-
-const SOURCE_LABELS: Record<FieldSource, string> = {
-  application: "Application",
-  inventory: "Inventory",
-  package: "Package",
-  dealer_profile: "Dealer profile",
-  document: "Document",
-  staff: "Staff entry",
-  demo: "Demo",
-  none: "Not provided",
-};
+import {
+  Bar,
+  CheckField,
+  MoneyInput,
+  PageHeading,
+  PendingNote,
+  PendingText,
+  Provenance,
+  Section,
+  TextField,
+} from "./ContractFormParts";
 
 /**
- * Form 1 — Bill of Sale / Buyer's Order editor, laid out like page 1 of the
- * reference (left: dealer, references, vehicle, insurance, trade-ins; right:
- * buyers, itemization lines 1–31, acknowledgment, signatures).
+ * Form 1 — Bill of Sale / Buyer's Order as a web form, in the reference's three
+ * pages:
+ *   1. dealer, references, vehicle, insurance, trade-ins | buyers, itemization
+ *      lines 1–31, "AS IS" acknowledgment, Buyer/Co-Buyer signatures;
+ *   2. Additional Terms;
+ *   3. Warranty Information and Notices | financing notice, Signatures.
  *
  * Presentation only: every change goes through `onEdit`, which enforces who
  * may edit what (see editDealField). Calculated lines are always computed and
- * never editable. Signing is not performed here: signatures appear only in the
- * document itself (see `signaturesNote`).
+ * never editable. Legal wording is never written here: each place it belongs
+ * is marked pending until the approved template supplies it. Signing is not
+ * performed here; `signatureBlocks` only displays each signature location.
  */
 export function BillOfSaleEditor({
   deal,
   actor,
   onEdit,
-  signaturesNote,
+  signatureBlocks,
 }: {
   deal: Deal;
   actor: EditActor;
   /** Returns an error message when the edit is refused. */
   onEdit: (key: string, value: string | boolean) => string | undefined;
-  /** Replaces the "not available" signatures note (e.g. where signatures appear instead). */
-  signaturesNote?: ReactNode;
+  /** Signature locations for page 1 (Buyer/Co-Buyer) and page 3 (all signers). */
+  signatureBlocks?: { page1: ReactNode; page3: ReactNode };
 }) {
   const [errors, setErrors] = useState<Record<string, string>>({});
-  const { lines } = computeBillOfSale(deal);
+  const { lines, negativeEquityCents } = computeBillOfSale(deal);
   const missing = missingRequiredFields(deal);
   const canEdit = actor === "staff";
 
@@ -113,7 +110,8 @@ export function BillOfSaleEditor({
         </div>
       )}
 
-      <div className="mt-5 grid gap-6 lg:grid-cols-2">
+      <PageHeading page={1} total={3} title="Vehicle, parties and itemization of sale" />
+      <div className="mt-3 grid gap-6 lg:grid-cols-2">
         {/* Left column */}
         <div className="space-y-5">
           <Section title="Dealer/Seller Name and Address">
@@ -268,22 +266,22 @@ export function BillOfSaleEditor({
             </ol>
           </section>
 
-          <label className="flex items-start gap-2 rounded-lg border border-slate-200 p-3 text-xs">
-            <input
-              type="checkbox"
-              checked={deal.fields["asIs"]?.value === true}
-              disabled={!canEdit}
-              onChange={(e) => edit("asIs", e.target.checked)}
-              className="mt-0.5"
-            />
-            <span>
-              <strong>"AS IS" acknowledgment</strong> — the approved wording from the authorized
-              template appears here. (See the Used Car Buyer Notice and Additional Virginia Notice
-              on page 3.)
-            </span>
-          </label>
+          <CheckField
+            deal={deal}
+            fieldKey="asIs"
+            canEdit={canEdit}
+            onEdit={edit}
+            label={<strong>"AS IS" acknowledgment</strong>}
+          />
 
-          {signaturesNote ?? (
+          {signatureBlocks ? (
+            <div className="rounded-lg border border-slate-200 p-3">
+              <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-slate-600">
+                Buyer / Co-Buyer signatures (page 1)
+              </p>
+              {signatureBlocks.page1}
+            </div>
+          ) : (
             <div className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-600">
               <p className="flex items-center gap-1.5 font-bold text-slate-800">
                 <Lock className="size-3.5" aria-hidden="true" /> Signatures (page 1: Buyer,
@@ -298,149 +296,100 @@ export function BillOfSaleEditor({
         </div>
       </div>
 
-      <section aria-labelledby="bos-pages" className="mt-6 border-t border-slate-200 pt-4">
-        <h5 id="bos-pages" className="text-sm font-bold">
-          Document pages
-        </h5>
-        <ol className="mt-2 grid gap-3 md:grid-cols-3">
-          {BILL_OF_SALE_LAYOUT.map((page) => (
-            <li key={page.page} className="rounded-lg border border-slate-200 p-3 text-xs">
-              <p className="font-bold">Page {page.page} of 3</p>
-              <ul className="mt-1 space-y-0.5 text-slate-600">
-                {page.sections.map((s) => (
-                  <li key={s.id}>
-                    {s.title}
-                    {s.legalTextRequired && (
-                      <span className="ml-1 text-[10px] font-semibold text-amber-700">
-                        · approved text required
-                      </span>
-                    )}
-                  </li>
-                ))}
-              </ul>
-            </li>
-          ))}
-        </ol>
-      </section>
+      <PageHeading page={2} total={3} title="Additional Terms" />
+      <div className="mt-3 grid gap-3 sm:grid-cols-2">
+        {ADDITIONAL_TERMS.map((title) => (
+          <PendingText key={title} title={title} />
+        ))}
+      </div>
+      <p className="mt-2 text-[11px] text-slate-500">
+        Any acknowledgments or initials within these terms are added from the approved template.
+      </p>
+
+      <PageHeading page={3} total={3} title="Warranty Information, Notices & Signatures" />
+      <div className="mt-3 grid gap-6 lg:grid-cols-2">
+        <div className="space-y-4">
+          <Bar>Warranty Information</Bar>
+          <PendingText title="Warranty" />
+          <PendingText title="Used Car Buyer Notice" />
+          <PendingText title="Used Car Buyer Notice (Spanish)" />
+          <PendingText title="Additional Virginia Notice" />
+          <Bar>Notices</Bar>
+          <div className="space-y-1 rounded-lg border border-slate-200 p-3 text-xs">
+            <label className="flex items-start gap-2">
+              <input
+                type="checkbox"
+                checked={Boolean(negativeEquityCents)}
+                disabled
+                className="mt-0.5"
+              />
+              <span>
+                <strong>Negative equity notice</strong> — amount:{" "}
+                <output
+                  aria-label="Negative equity amount (from line 27)"
+                  className="font-semibold tabular-nums"
+                >
+                  {negativeEquityCents ? `$${formatCents(negativeEquityCents)}` : "N/A"}
+                </output>{" "}
+                <span className="text-slate-500">(calculated from line 27)</span>
+              </span>
+            </label>
+            <PendingNote />
+          </div>
+          <CheckField
+            deal={deal}
+            fieldKey="notice.demonstrator"
+            canEdit={canEdit}
+            onEdit={edit}
+            label={<strong>Demonstrator mileage notice</strong>}
+          />
+          <CheckField
+            deal={deal}
+            fieldKey="notice.financing"
+            canEdit={canEdit}
+            onEdit={edit}
+            label={<strong>Financing notice (retail installment sales contract)</strong>}
+          />
+        </div>
+
+        <div className="space-y-4">
+          <Bar>Signatures</Bar>
+          <PendingText title="Dealer acceptance statement" />
+          <PendingText title="Signer acknowledgment" />
+          <CheckField
+            deal={deal}
+            fieldKey="notice.arbitration"
+            canEdit={canEdit}
+            onEdit={edit}
+            label={<strong>Separate arbitration agreement</strong>}
+          />
+          {signatureBlocks ? (
+            <div className="rounded-lg border border-slate-200 p-3">{signatureBlocks.page3}</div>
+          ) : (
+            <p className="rounded-lg border border-dashed border-slate-300 p-3 text-xs text-slate-600">
+              Buyer, Co-Buyer and Dealer/Seller signature lines appear here once signing is
+              available.
+            </p>
+          )}
+          <address className="text-xs not-italic text-slate-700">
+            <strong>{text(deal, "dealer.legalName") || "Dealer legal name missing"}</strong>
+            <br />
+            {text(deal, "dealer.street")}
+            <br />
+            {[text(deal, "dealer.city"), text(deal, "dealer.state")]
+              .filter(Boolean)
+              .join(", ")}{" "}
+            {text(deal, "dealer.zip")}
+          </address>
+        </div>
+      </div>
     </div>
   );
 }
 
-function Section({ title, children }: { title: string; children: ReactNode }) {
-  return (
-    <section className="rounded-lg border border-slate-200">
-      <h5 className="rounded-t-lg bg-slate-900 px-3 py-1.5 text-xs font-bold uppercase tracking-wide text-white">
-        {title}
-      </h5>
-      <div className="grid gap-x-3 gap-y-2 p-3 sm:grid-cols-2">{children}</div>
-    </section>
-  );
-}
-
-function Provenance({ deal, fieldKey }: { deal: Deal; fieldKey: string }) {
-  const f = deal.fields[fieldKey];
-  if (!f) return null;
-  return (
-    <span className="ml-1 inline-flex items-center gap-1 text-[10px] font-medium text-slate-500">
-      · {SOURCE_LABELS[f.source]}
-      {f.verified && <ShieldCheck className="size-3 text-emerald-600" aria-label="verified" />}
-      {f.edited && <span className="text-sky-700">· edited</span>}
-    </span>
-  );
-}
-
-function TextField({
-  deal,
-  fieldKey,
-  label,
-  canEdit,
-  error,
-  onEdit,
-  className,
-}: {
-  deal: Deal;
-  fieldKey: string;
-  label: string;
-  canEdit: boolean;
-  error?: string;
-  onEdit: (key: string, value: string) => void;
-  className?: string;
-}) {
-  const f = deal.fields[fieldKey];
-  const id = `bos-${fieldKey.replace(/\./g, "-")}`;
-  const missing = f?.required && !text(deal, fieldKey);
-  return (
-    <div className={cn("space-y-0.5", className)}>
-      <label htmlFor={id} className="block text-[11px] font-semibold text-slate-700">
-        {label}
-        {f?.required && <span className="text-red-600"> *</span>}
-        <Provenance deal={deal} fieldKey={fieldKey} />
-      </label>
-      <input
-        id={id}
-        type={fieldDef(fieldKey)?.kind === "date" ? "date" : "text"}
-        value={text(deal, fieldKey)}
-        readOnly={!canEdit}
-        onChange={(e) => onEdit(fieldKey, e.target.value)}
-        aria-invalid={Boolean(error || missing) || undefined}
-        className={cn(
-          "w-full rounded border px-2 py-1 text-xs",
-          canEdit ? "border-slate-300 bg-white" : "border-slate-200 bg-slate-50 text-slate-700",
-          missing && "border-amber-400 bg-amber-50",
-        )}
-      />
-      {error && <p className="text-[11px] text-red-600">{error}</p>}
-    </div>
-  );
-}
-
-/** Amount input: free typing while focused, formatted cents otherwise. */
-function MoneyInput({
-  deal,
-  fieldKey,
-  label,
-  canEdit,
-  error,
-  onEdit,
-}: {
-  deal: Deal;
-  fieldKey: string;
-  label: string;
-  canEdit: boolean;
-  error?: string;
-  onEdit: (key: string, value: string) => void;
-}) {
-  const value = deal.fields[fieldKey]?.value;
-  const formatted = typeof value === "number" ? formatCents(value) : "";
-  const [draft, setDraft] = useState<string | null>(null);
-  const f = deal.fields[fieldKey];
-  return (
-    <span className="flex items-center justify-end gap-1">
-      <span className="text-slate-400">$</span>
-      <input
-        aria-label={label}
-        inputMode="decimal"
-        value={draft ?? formatted}
-        placeholder="N/A"
-        readOnly={!canEdit}
-        onFocus={() => canEdit && setDraft(formatted)}
-        onChange={(e) => setDraft(e.target.value)}
-        onBlur={() => {
-          if (draft !== null && draft !== formatted) onEdit(fieldKey, draft);
-          setDraft(null);
-        }}
-        onKeyDown={(e) => e.key === "Enter" && (e.target as HTMLInputElement).blur()}
-        aria-invalid={Boolean(error) || undefined}
-        title={f ? `Source: ${SOURCE_LABELS[f.source]}${f.edited ? " (edited)" : ""}` : undefined}
-        className={cn(
-          "w-24 rounded border px-1.5 py-0.5 text-right tabular-nums",
-          canEdit ? "border-slate-300 bg-white" : "border-slate-200 bg-slate-50",
-          f?.edited && "border-sky-400",
-        )}
-      />
-    </span>
-  );
-}
+const ADDITIONAL_TERMS = BILL_OF_SALE_LAYOUT.find((p) => p.page === 2)!.sections.map((s) =>
+  s.title.replace(/^Additional Terms — /, ""),
+);
 
 function ConditionField({
   deal,

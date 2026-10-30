@@ -15,6 +15,9 @@ export type ResolvedContractDocument = {
   state: ContractViewerState;
   missingMessage?: string;
   downloadName?: string;
+  /** "actions" shows Preview/Download/Print instead of an embedded viewer. */
+  display?: "embedded" | "actions";
+  actionsNote?: string;
 };
 
 /**
@@ -233,6 +236,8 @@ export const ContractSuite = forwardRef<
             state={doc.state}
             missingMessage={doc.missingMessage}
             downloadName={doc.downloadName}
+            display={doc.display}
+            actionsNote={doc.actionsNote}
           />
         </div>
         {renderFooter && <div className="mt-6 space-y-6">{renderFooter(active)}</div>}

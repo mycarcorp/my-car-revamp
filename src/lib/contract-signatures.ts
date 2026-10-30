@@ -12,17 +12,33 @@
  */
 import {
   BILL_OF_SALE_SIGNATURES,
+  type SignatureCondition,
   type SignatureRequirement,
   type SignerRole,
 } from "./bill-of-sale";
 import { fullName, text, type Deal } from "./deal-model";
+import {
+  CREDIT_APPLICATION_SIGNATURES,
+  jointCreditRequested,
+  wisconsinSpouseSigns,
+} from "./credit-application";
+import { DELIVERY_CHECKLIST_SIGNATURES } from "./delivery-checklist";
+import { GPS_DISCLOSURE_SIGNATURES } from "./gps-disclosure";
 import { CONTRACT_TEMPLATES, type ContractId, type DealContract } from "./lease-contracts";
+import {
+  creditInsuranceElected,
+  protectionSelected,
+  RETAIL_INSTALLMENT_SIGNATURES,
+  thirdPartyOwnerIncluded,
+} from "./retail-installment";
 
 export type { SignerRole };
 
 export const SIGNER_ROLE_LABELS: Record<SignerRole, string> = {
   buyer: "Buyer",
   co_buyer: "Co-Buyer",
+  third_party_owner: "Third Party Owner",
+  non_joint_spouse: "Non-Joint Applicant Spouse",
   dealer: "Dealer/Seller",
 };
 
@@ -37,12 +53,39 @@ export type ContractSignatureSlot = SignatureRequirement & {
   locationConfirmed: boolean;
 };
 
-/** Signature locations for one contract. Co-Buyer lines exist only when a Co-Buyer is on the deal. */
+const CONDITIONS: Record<SignatureCondition, (deal: Deal) => boolean> = {
+  co_buyer_included: (deal) => deal.coBuyerIncluded,
+  credit_insurance_elected: creditInsuranceElected,
+  protection_selected: protectionSelected,
+  third_party_owner: thirdPartyOwnerIncluded,
+  assignment_entered: (deal) => Boolean(text(deal, "ric.assign.assigneeName")),
+  joint_credit: jointCreditRequested,
+  wisconsin_spouse: wisconsinSpouseSigns,
+};
+
+/** Whether a signature line applies to this deal. Co-Buyer lines need a Co-Buyer on the deal. */
+export function signatureApplies(s: SignatureRequirement, deal: Deal): boolean {
+  if (s.role === "co_buyer" && !deal.coBuyerIncluded) return false;
+  return !s.conditional || CONDITIONS[s.conditional](deal);
+}
+
+/** Signature locations for one contract that apply to this deal. */
 export function signatureSlotsFor(contractId: ContractId, deal: Deal): ContractSignatureSlot[] {
-  const applies = (s: SignatureRequirement) =>
-    s.conditional !== "co_buyer_included" || deal.coBuyerIncluded;
-  if (contractId === "bill_of_sale")
-    return BILL_OF_SALE_SIGNATURES.filter(applies).map((s) => ({
+  const applies = (s: SignatureRequirement) => signatureApplies(s, deal);
+  const confirmed =
+    contractId === "bill_of_sale"
+      ? BILL_OF_SALE_SIGNATURES
+      : contractId === "retail_installment"
+        ? RETAIL_INSTALLMENT_SIGNATURES
+        : contractId === "credit_application"
+          ? CREDIT_APPLICATION_SIGNATURES
+          : contractId === "gps_disclosure"
+            ? GPS_DISCLOSURE_SIGNATURES
+            : contractId === "delivery_checklist"
+              ? DELIVERY_CHECKLIST_SIGNATURES
+              : null;
+  if (confirmed)
+    return confirmed.filter(applies).map((s) => ({
       ...s,
       contractId,
       locationConfirmed: true,
@@ -69,7 +112,9 @@ export function allSignatureSlots(deal: Deal): ContractSignatureSlot[] {
 /** Roles that must sign at least one document on this deal. */
 export function requiredSignerRoles(deal: Deal): SignerRole[] {
   const roles = new Set(allSignatureSlots(deal).map((s) => s.role));
-  return (["buyer", "co_buyer", "dealer"] as const).filter((r) => roles.has(r));
+  return (["buyer", "co_buyer", "third_party_owner", "non_joint_spouse", "dealer"] as const).filter(
+    (r) => roles.has(r),
+  );
 }
 
 export type SignerIdentity = {
@@ -90,6 +135,18 @@ export function signerIdentity(deal: Deal, role: SignerRole): SignerIdentity {
     };
   if (role === "co_buyer" && !deal.coBuyerIncluded)
     return { role, printedName: null, organization: null };
+  if (role === "non_joint_spouse")
+    return {
+      role,
+      printedName: (wisconsinSpouseSigns(deal) && text(deal, "credit.wi.spouseName")) || null,
+      organization: null,
+    };
+  if (role === "third_party_owner")
+    return {
+      role,
+      printedName: (thirdPartyOwnerIncluded(deal) && text(deal, "ric.thirdParty.name")) || null,
+      organization: null,
+    };
   return {
     role,
     printedName: fullName(deal, role === "buyer" ? "buyer" : "coBuyer") || null,

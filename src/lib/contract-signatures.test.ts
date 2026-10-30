@@ -67,8 +67,8 @@ describe("signature locations", () => {
     expect(requiredSignerRoles(solo)).toEqual(["buyer", "dealer"]);
   });
 
-  it("Forms 2–10 use placeholder Buyer/Co-Buyer locations and never a dealer line yet", () => {
-    const slots = signatureSlotsFor("gps_disclosure", deal());
+  it("Forms 6–10 use placeholder Buyer/Co-Buyer locations and never a dealer line yet", () => {
+    const slots = signatureSlotsFor("insurance_agreement", deal());
     expect(slots.map((s) => s.role)).toEqual(["buyer", "co_buyer"]);
     expect(slots.every((s) => !s.locationConfirmed)).toBe(true);
   });
@@ -109,7 +109,7 @@ describe("demo signature adoption", () => {
     if (!result.ok) throw new Error(result.error);
     expect(result.appliedTo.every((s) => s.role === "buyer")).toBe(true);
     expect(new Set(result.appliedTo.map((s) => s.contractId)).size).toBe(10);
-    expect(result.appliedTo).toHaveLength(11); // 2 on Form 1 + 1 on each of Forms 2–10
+    expect(result.appliedTo).toHaveLength(16); // Form 1: 2, Form 2: 2 (page 5), Form 3: 2 + 3 page initials, Forms 4–10: 1 each
     expect(Object.keys(result.signatures)).toEqual(["buyer"]);
     expect(contractDemoSigned("bill_of_sale", deal(), result.signatures)).toBe(false);
   });
@@ -224,5 +224,17 @@ describe("typed-name signatures", () => {
     expect(pdf).toContain("(10/29/2026)");
     expect(pdf).toContain("DEMO 10/29/2026 3:07 PM");
     expect(pdf).toContain("(Demo Buyer) Tj");
+  });
+});
+
+describe("Bill of Sale page 3 notices", () => {
+  it("staff-marked notices show as checked in the PDF; customers cannot mark them", () => {
+    const d = deal();
+    expect(editDealField(d, "notice.financing", true, "customer").error).toBeTruthy();
+    const marked = editDealField(d, "notice.financing", true, "staff").deal;
+    const pdf = buildDemoPdfPages(billOfSaleDemoPages(marked));
+    expect(pdf).toContain("[ X ] Financing notice");
+    expect(pdf).toContain("[   ] Demonstrator mileage notice");
+    expect(pdf).toContain("[   ] Separate arbitration agreement");
   });
 });

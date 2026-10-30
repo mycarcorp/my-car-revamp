@@ -30,17 +30,25 @@ import {
   billOfSaleDemoPages,
   buildDemoPdf,
   buildDemoPdfPages,
+  creditApplicationDemoPages,
   DEMO_DEAL,
+  deliveryChecklistDemoPages,
+  gpsDisclosureDemoPages,
   demoContractLines,
+  retailInstallmentDemoPages,
 } from "@/lib/demo-contract-pdf";
 import {
+  adoptDemoInitial,
   adoptDemoSignature,
+  clearDemoInitial,
   contractDemoSigned,
   demoCompletionMissing,
+  demoSignatureFor,
   removeDemoSignature,
+  type DemoInitials,
   type DemoSignatures,
 } from "@/lib/demo-signatures";
-import type { DealContract } from "@/lib/lease-contracts";
+import type { ContractId, DealContract } from "@/lib/lease-contracts";
 import {
   DEMO_PROGRESS_PERCENT,
   demoDeal,
@@ -49,6 +57,11 @@ import {
 } from "@/lib/lease-to-own-demo";
 import { formatCents } from "@/lib/money";
 import { BillOfSaleEditor } from "./BillOfSaleEditor";
+import { CreditApplicationEditor } from "./CreditApplicationEditor";
+import { DeliveryChecklistEditor } from "./DeliveryChecklistEditor";
+import { GpsDisclosureEditor } from "./GpsDisclosureEditor";
+import { RetailInstallmentEditor } from "./RetailInstallmentEditor";
+import { ContractSignatureBlocks, type SignatureBlockEntry } from "./ContractSignatureBlocks";
 import { ContractSuite } from "./ContractSuite";
 import { DigitalSignaturePanel } from "./DigitalSignaturePanel";
 
@@ -272,13 +285,32 @@ function DemoContracts({
   const [actor, setActor] = useState<EditActor>("customer");
   const [chosenSigner, setChosenSigner] = useState<SignerRole>("buyer");
   const [completeError, setCompleteError] = useState<string | null>(null);
+  // Forms 4–5 numbered acknowledgments: page memory only, each initialled separately.
+  const [ackInitials, setAckInitials] = useState<DemoInitials>({});
+  const initialHandlers = (contractId: ContractId) => ({
+    initials: ackInitials,
+    actingRole: selectedRole,
+    onInitial: (item: number, value: string) => {
+      const r = adoptDemoInitial(ackInitials, deal, {
+        contractId,
+        item,
+        role: selectedRole,
+        initials: value,
+      });
+      if (!r.ok) return r.error;
+      setAckInitials(r.initials);
+      return undefined;
+    },
+    onClearInitial: (item: number) =>
+      setAckInitials(clearDemoInitial(ackInitials, contractId, item, selectedRole)),
+  });
 
-  // Forms 2–10: one watermarked placeholder each (with any demo signatures), freed on change.
+  // Forms 3–10: one watermarked placeholder each (with any demo signatures), freed on change.
   const [urls, setUrls] = useState<Map<string, string>>(() => new Map());
   useEffect(() => {
     const made = new Map(
       contracts
-        .filter((c) => c.id !== "bill_of_sale")
+        .filter((c) => !WEB_FORMS.has(c.id))
         .map((c) => [
           c.id as string,
           pdfUrl(buildDemoPdf(demoContractLines(c, { deal, signatures }))),
@@ -288,19 +320,41 @@ function DemoContracts({
     return () => made.forEach((url) => URL.revokeObjectURL(url));
   }, [contracts, deal, signatures]);
 
-  // Form 1: 3-page preview rebuilt shortly after the deal or signatures change.
-  const [billOfSaleUrl, setBillOfSaleUrl] = useState<string | null>(null);
+  // Web forms: PDF previews rebuilt shortly after the deal or signatures change.
+  const [formUrls, setFormUrls] = useState<Partial<Record<ContractId, string>>>({});
   useEffect(() => {
-    let made: string | null = null;
+    let made: string[] = [];
     const timer = window.setTimeout(() => {
-      made = pdfUrl(buildDemoPdfPages(billOfSaleDemoPages(deal, signatures)));
-      setBillOfSaleUrl(made);
+      const next = {
+        bill_of_sale: pdfUrl(buildDemoPdfPages(billOfSaleDemoPages(deal, signatures))),
+        retail_installment: pdfUrl(buildDemoPdfPages(retailInstallmentDemoPages(deal, signatures))),
+        credit_application: pdfUrl(buildDemoPdfPages(creditApplicationDemoPages(deal, signatures))),
+        gps_disclosure: pdfUrl(
+          buildDemoPdfPages(gpsDisclosureDemoPages(deal, signatures, ackInitials)),
+        ),
+        delivery_checklist: pdfUrl(
+          buildDemoPdfPages(deliveryChecklistDemoPages(deal, signatures, ackInitials)),
+        ),
+      };
+      made = Object.values(next);
+      setFormUrls(next);
     }, 300);
     return () => {
       window.clearTimeout(timer);
-      if (made) URL.revokeObjectURL(made);
+      made.forEach((url) => URL.revokeObjectURL(url));
     };
-  }, [deal, signatures]);
+  }, [deal, signatures, ackInitials]);
+
+  // Edits build on the latest deal, so several edits in one action all apply.
+  const latestDeal = useRef(deal);
+  latestDeal.current = deal;
+  const onEdit = (key: string, value: string | boolean) => {
+    const result = editDealField(latestDeal.current, key, value, actor);
+    if (result.error) return result.error;
+    latestDeal.current = result.deal;
+    setDeal(result.deal);
+    return undefined;
+  };
 
   // Bring the suite heading into view once the route change (which resets scroll) settles.
   useEffect(() => {
@@ -330,6 +384,23 @@ function DemoContracts({
     signers.find((s) => s.role === chosenSigner && s.available)?.role ??
     signers.find((s) => s.available)?.role ??
     "buyer";
+
+  const blockEntries = (
+    contractId: ContractId,
+    include: (slot: ContractSignatureSlot) => boolean,
+  ): SignatureBlockEntry[] =>
+    signatureSlotsFor(contractId, deal)
+      .filter(include)
+      .map((slot) => {
+        const sig = demoSignatureFor(slot, signatures);
+        return {
+          slot,
+          printedName: signerIdentity(deal, slot.role).printedName,
+          status: sig ? "demo_applied" : "awaiting",
+          capture: sig?.capture ?? null,
+          signedAt: sig?.adoptedAt ?? null,
+        };
+      });
 
   function complete() {
     const missing = demoCompletionMissing(deal, signatures);
@@ -381,11 +452,19 @@ function DemoContracts({
         </div>
       }
       resolveDocument={(c) => {
-        const src = c.id === "bill_of_sale" ? billOfSaleUrl : (urls.get(c.id) ?? null);
+        const src = WEB_FORMS.has(c.id) ? (formUrls[c.id] ?? null) : (urls.get(c.id) ?? null);
         return {
           src,
           state: src ? "ready" : "loading",
           downloadName: `DEMO-${c.number}-${c.id}-NOT-A-LEGAL-CONTRACT.pdf`,
+          // Forms 1–2: the web form is the main view; the PDF is offered as actions only.
+          ...(WEB_FORMS.has(c.id)
+            ? {
+                display: "actions" as const,
+                actionsNote:
+                  "Watermarked demo preview — not a legal contract. A final PDF requires the approved template.",
+              }
+            : {}),
         };
       }}
       tabBadge={(c) =>
@@ -408,21 +487,66 @@ function DemoContracts({
           <BillOfSaleEditor
             deal={deal}
             actor={actor}
-            onEdit={(key, value) => {
-              const result = editDealField(deal, key, value, actor);
-              if (!result.error) setDeal(result.deal);
-              return result.error;
+            onEdit={onEdit}
+            signatureBlocks={{
+              page1: (
+                <ContractSignatureBlocks
+                  entries={blockEntries("bill_of_sale", (s) => s.page === 1)}
+                />
+              ),
+              page3: (
+                <ContractSignatureBlocks
+                  entries={blockEntries("bill_of_sale", (s) => s.page === 3)}
+                />
+              ),
             }}
-            signaturesNote={
-              <p className="flex items-start gap-1.5 rounded-lg border border-slate-200 bg-slate-50 p-3 text-xs text-slate-700">
-                <PenLine className="mt-0.5 size-3.5 shrink-0" aria-hidden="true" />
-                <span>
-                  <strong>Signatures appear in the document.</strong> Buyer and Co-Buyer sign on
-                  pages 1 and 3; the Dealer/Seller signs on page 3. Each signer adopts their own
-                  typed signature in the panel below the document.
-                </span>
-              </p>
-            }
+          />
+        ) : c.id === "retail_installment" ? (
+          <RetailInstallmentEditor
+            deal={deal}
+            actor={actor}
+            onEdit={onEdit}
+            renderSignatures={(ids) => {
+              const entries = blockEntries("retail_installment", (s) => ids.includes(s.id));
+              return entries.length ? <ContractSignatureBlocks entries={entries} /> : null;
+            }}
+          />
+        ) : c.id === "credit_application" ? (
+          <CreditApplicationEditor
+            deal={deal}
+            actor={actor}
+            onEdit={onEdit}
+            renderSignatures={(ids) => {
+              const entries = blockEntries("credit_application", (s) => ids.includes(s.id));
+              return entries.length ? <ContractSignatureBlocks entries={entries} /> : null;
+            }}
+          />
+        ) : c.id === "gps_disclosure" ? (
+          <GpsDisclosureEditor
+            deal={deal}
+            actor={actor}
+            onEdit={onEdit}
+            renderSignatures={(ids) => {
+              const entries = blockEntries("gps_disclosure", (s) => ids.includes(s.id));
+              return entries.length ? <ContractSignatureBlocks entries={entries} /> : null;
+            }}
+            {...initialHandlers("gps_disclosure")}
+          />
+        ) : c.id === "delivery_checklist" ? (
+          <DeliveryChecklistEditor
+            deal={deal}
+            actor={actor}
+            onEdit={onEdit}
+            renderSignatures={(ids) => {
+              const entries = blockEntries("delivery_checklist", (s) => ids.includes(s.id));
+              return entries.length ? <ContractSignatureBlocks entries={entries} /> : null;
+            }}
+            {...initialHandlers("delivery_checklist")}
+            signatureState={{
+              buyer: Boolean(signatures.buyer),
+              co_buyer: Boolean(signatures.co_buyer),
+              dealer: Boolean(signatures.dealer),
+            }}
           />
         ) : null
       }
@@ -640,6 +764,15 @@ function DemoPortal({
     </section>
   );
 }
+
+/** Contracts shown as web forms, with their PDF offered as Preview/Download/Print only. */
+const WEB_FORMS = new Set<ContractId>([
+  "bill_of_sale",
+  "retail_installment",
+  "credit_application",
+  "gps_disclosure",
+  "delivery_checklist",
+]);
 
 function pdfUrl(pdf: string): string {
   return URL.createObjectURL(new Blob([pdf], { type: "application/pdf" }));

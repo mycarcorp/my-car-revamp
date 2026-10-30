@@ -1,10 +1,12 @@
-import { CircleAlert, CircleCheck, Clock } from "lucide-react";
+import { CircleAlert } from "lucide-react";
 
 import {
+  formatSignatureDate,
   SIGNER_ROLE_LABELS,
   type ContractSignatureSlot,
   type SignatureCapture,
 } from "@/lib/contract-signatures";
+import { initialsOf } from "@/lib/credit-application";
 import { cn } from "@/lib/utils";
 
 export type SignatureBlockStatus = "awaiting" | "demo_applied" | "signed";
@@ -13,27 +15,29 @@ export type SignatureBlockEntry = {
   slot: ContractSignatureSlot;
   /** From the application or dealer record; null shows a missing-information state. */
   printedName: string | null;
-  organization?: string | null;
   status: SignatureBlockStatus;
   /** Shown only for this slot's own signer. */
   capture?: SignatureCapture | null;
-  date?: string | null;
+  /** ISO timestamp of the signature. */
+  signedAt?: string | null;
 };
 
 const STATUS_TEXT: Record<SignatureBlockStatus, string> = {
   awaiting: "Awaiting signature",
-  demo_applied: "Demo signature shown — not legally signed",
+  demo_applied: "Demo signature — not legally signed",
   signed: "Signed (verified by provider)",
 };
+
+/** Browser-installed script faces only; no font files are downloaded. */
+const SCRIPT_STYLE = {
+  fontFamily: '"Brush Script MT", "Segoe Script", "Lucida Handwriting", cursive',
+} as const;
 
 /** Small, non-editable picture of a captured signature. */
 export function SignaturePreview({ capture }: { capture: SignatureCapture }) {
   if (capture.kind === "script")
     return (
-      <span
-        className="truncate text-2xl italic leading-none text-[#10385d]"
-        style={{ fontFamily: '"Brush Script MT", "Segoe Script", cursive' }}
-      >
+      <span className="truncate text-2xl leading-none text-[#0f2a4a]" style={SCRIPT_STYLE}>
         {capture.name}
       </span>
     );
@@ -49,7 +53,7 @@ export function SignaturePreview({ capture }: { capture: SignatureCapture }) {
           key={i}
           points={stroke.map(([x, y]) => `${x},${y}`).join(" ")}
           fill="none"
-          stroke="#10385d"
+          stroke="#0f2a4a"
           strokeWidth={3}
           strokeLinecap="round"
           strokeLinejoin="round"
@@ -59,92 +63,91 @@ export function SignaturePreview({ capture }: { capture: SignatureCapture }) {
   );
 }
 
+function timeOf(iso: string): string {
+  const d = new Date(iso);
+  return `${d.getHours() % 12 || 12}:${String(d.getMinutes()).padStart(2, "0")} ${d.getHours() < 12 ? "AM" : "PM"}`;
+}
+
 /**
- * Labeled signature locations ("X" box, printed name, date, status), laid out
- * like the reference document. Each box shows only its own signer's signature.
+ * Signature lines laid out like the reference document:
+ *   X [signature box]            [date]
+ *     printed name       role    Date
+ * Each box shows only its own signer's signature. Display only — nothing is
+ * signed here.
  */
-export function ContractSignatureBlocks({
-  title,
-  entries,
-}: {
-  title: string;
-  entries: SignatureBlockEntry[];
-}) {
+export function ContractSignatureBlocks({ entries }: { entries: SignatureBlockEntry[] }) {
   return (
-    <div className="rounded-lg border border-slate-200 p-3 text-xs">
-      <p className="font-bold text-slate-800">{title}</p>
-      <ul className="mt-2 space-y-3">
-        {entries.map((entry) => {
-          const label = SIGNER_ROLE_LABELS[entry.slot.role];
-          return (
-            <li key={entry.slot.id} data-signature-slot={entry.slot.id} data-role={entry.slot.role}>
-              <div className="flex items-end gap-2">
-                <span aria-hidden="true" className="pb-1 font-bold text-slate-700">
-                  X
-                </span>
-                <div
-                  className={cn(
-                    "relative flex h-14 min-w-0 flex-1 items-center justify-center overflow-hidden rounded border bg-white px-2",
-                    entry.status === "awaiting"
-                      ? "border-dashed border-slate-300"
-                      : "border-slate-500",
-                  )}
-                  role="img"
-                  aria-label={`${label} signature box: ${STATUS_TEXT[entry.status]}`}
-                >
-                  {entry.capture && entry.status !== "awaiting" ? (
-                    <>
-                      {entry.status === "demo_applied" && (
-                        <span className="absolute left-1 top-0.5 text-[8px] font-bold uppercase tracking-wide text-fuchsia-700">
-                          Demo signature — not valid
-                        </span>
-                      )}
-                      <SignaturePreview capture={entry.capture} />
-                    </>
-                  ) : (
-                    <span className="text-[10px] text-slate-400">{label} signs here</span>
-                  )}
-                </div>
-                <div className="w-20 shrink-0 text-right">
-                  <p className="border-b border-slate-400 pb-0.5 font-mono text-[11px]">
-                    {entry.date ?? " "}
-                  </p>
-                  <p className="text-[10px] text-slate-500">Date</p>
-                </div>
-              </div>
-              <div className="mt-1 flex flex-wrap items-center justify-between gap-2 pl-4">
-                <p>
-                  {entry.printedName ? (
-                    <strong className="text-slate-900">{entry.printedName}</strong>
-                  ) : (
-                    <span className="inline-flex items-center gap-1 font-semibold text-amber-700">
-                      <CircleAlert className="size-3" aria-hidden="true" /> {label} name missing
+    <ul className="space-y-4">
+      {entries.map((entry) => {
+        const label = SIGNER_ROLE_LABELS[entry.slot.role];
+        const shown = entry.status !== "awaiting" && entry.capture;
+        const isInitials = entry.slot.mark === "initials";
+        const mark = isInitials ? "initials" : "signature";
+        const capture =
+          shown && isInitials && entry.capture!.kind === "script"
+            ? { kind: "script" as const, name: initialsOf(entry.capture!.name) }
+            : entry.capture;
+        return (
+          <li key={entry.slot.id} data-signature-slot={entry.slot.id} data-role={entry.slot.role}>
+            <div className="flex items-end gap-2">
+              <span aria-hidden="true" className="pb-0.5 text-sm font-bold">
+                X
+              </span>
+              <div
+                role="img"
+                aria-label={`${label} ${mark}: ${STATUS_TEXT[entry.status]}`}
+                className={cn(
+                  "relative flex h-14 min-w-0 flex-1 items-center justify-center overflow-hidden rounded-sm border px-2",
+                  shown ? "border-slate-700" : "border-slate-300",
+                )}
+              >
+                {shown ? (
+                  <>
+                    <span className="absolute left-1 top-0.5 text-[8px] font-bold uppercase tracking-wide text-fuchsia-700">
+                      {entry.status === "demo_applied" ? "Demo signature — not valid" : "Signed by"}
                     </span>
-                  )}{" "}
-                  <span className="text-slate-500">· {label}</span>
-                  {entry.organization && (
-                    <span className="block text-slate-600">{entry.organization}</span>
-                  )}
-                </p>
-                <p
-                  className={cn(
-                    "inline-flex items-center gap-1 font-semibold",
-                    entry.status === "awaiting" ? "text-slate-500" : "text-fuchsia-700",
-                    entry.status === "signed" && "text-emerald-700",
-                  )}
-                >
-                  {entry.status === "awaiting" ? (
-                    <Clock className="size-3" aria-hidden="true" />
-                  ) : (
-                    <CircleCheck className="size-3" aria-hidden="true" />
-                  )}
-                  {STATUS_TEXT[entry.status]}
-                </p>
+                    <SignaturePreview capture={capture!} />
+                    {entry.signedAt && (
+                      <span className="absolute bottom-0.5 right-1 text-[8px] text-slate-500">
+                        {entry.status === "demo_applied" && "DEMO "}
+                        {formatSignatureDate(entry.signedAt)} {timeOf(entry.signedAt)}
+                      </span>
+                    )}
+                  </>
+                ) : (
+                  <span className="text-[11px] text-slate-400">
+                    {label} {mark}
+                  </span>
+                )}
               </div>
-            </li>
-          );
-        })}
-      </ul>
-    </div>
+              <div className="w-24 shrink-0 text-right">
+                <p className="min-h-5 border-b border-slate-500 pb-0.5 text-sm tabular-nums">
+                  {shown && entry.signedAt ? formatSignatureDate(entry.signedAt) : " "}
+                </p>
+                <p className="text-[10px] text-slate-500">Date</p>
+              </div>
+            </div>
+            <div className="mt-0.5 flex items-baseline justify-between gap-2 pl-5 pr-[6.5rem] text-xs">
+              {entry.printedName ? (
+                <span className="truncate font-semibold">{entry.printedName}</span>
+              ) : (
+                <span className="inline-flex items-center gap-1 font-semibold text-amber-700">
+                  <CircleAlert className="size-3" aria-hidden="true" /> {label} name missing
+                </span>
+              )}
+              <span className="shrink-0 text-slate-500">{label}</span>
+            </div>
+            <p
+              className={cn(
+                "pl-5 text-[10px] font-semibold",
+                entry.status === "awaiting" ? "text-slate-400" : "text-fuchsia-700",
+              )}
+            >
+              Status: {STATUS_TEXT[entry.status]}
+            </p>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

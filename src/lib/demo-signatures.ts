@@ -12,7 +12,9 @@ import {
   type SignatureCapture,
   type SignerRole,
 } from "./contract-signatures";
+import { initialsOf } from "./credit-application";
 import type { Deal } from "./deal-model";
+import { ACKNOWLEDGMENT_SETS, applicableItems, itemApplies } from "./acknowledgments";
 import type { ContractId } from "./lease-contracts";
 
 export type { SignatureCapture };
@@ -106,4 +108,80 @@ export function contractDemoSigned(
 /** The demo deal can be "completed" only after every required signer adopted a demo signature. */
 export function demoCompletionMissing(deal: Deal, signatures: DemoSignatures): SignerRole[] {
   return requiredSignerRoles(deal).filter((r) => !signatures[r]);
+}
+
+// ------------------------------------------------------------
+// Numbered acknowledgments (Forms 4–5). Each item is acknowledged on its own by
+// its own signer; adopting a signature never initials anything.
+// ------------------------------------------------------------
+
+export type DemoInitial = {
+  contractId: ContractId;
+  role: SignerRole;
+  item: number;
+  initials: string;
+  at: string;
+};
+export type DemoInitials = Record<string, DemoInitial>;
+
+export const initialKey = (contractId: ContractId, item: number, role: SignerRole) =>
+  `${contractId}:${item}:${role}`;
+
+export function adoptDemoInitial(
+  current: DemoInitials,
+  deal: Deal,
+  input: { contractId: ContractId; item: number; role: SignerRole; initials: string; now?: Date },
+): { ok: true; initials: DemoInitials } | { ok: false; error: string } {
+  const label = SIGNER_ROLE_LABELS[input.role];
+  const set = ACKNOWLEDGMENT_SETS[input.contractId];
+  const item = set?.items.find((i) => i.number === input.item);
+  if (!set || !item) return { ok: false, error: "Unknown item." };
+  const applies = itemApplies(item, deal);
+  if (!applies.applies)
+    return { ok: false, error: `Not applicable: ${applies.reason ?? ""}`.trim() };
+  if (!set.roles.includes(input.role))
+    return { ok: false, error: `The ${label} does not initial these items.` };
+  const name = signerIdentity(deal, input.role).printedName;
+  if (!name) return { ok: false, error: `The ${label} name is missing from the deal.` };
+  const typed = input.initials.trim().toUpperCase();
+  if (!typed) return { ok: false, error: "Type your initials first." };
+  if (typed !== initialsOf(name))
+    return { ok: false, error: `Type the ${label}'s own initials (${name}).` };
+  return {
+    ok: true,
+    initials: {
+      ...current,
+      [initialKey(input.contractId, input.item, input.role)]: {
+        contractId: input.contractId,
+        role: input.role,
+        item: input.item,
+        initials: typed,
+        at: (input.now ?? new Date()).toISOString(),
+      },
+    },
+  };
+}
+
+export function clearDemoInitial(
+  current: DemoInitials,
+  contractId: ContractId,
+  item: number,
+  role: SignerRole,
+): DemoInitials {
+  const { [initialKey(contractId, item, role)]: _removed, ...rest } = current;
+  return rest;
+}
+
+/** Applicable items each initialling signer has acknowledged on one contract. */
+export function initialsProgress(
+  contractId: ContractId,
+  deal: Deal,
+  initials: DemoInitials,
+): Array<{ role: SignerRole; done: number; total: number }> {
+  const items = applicableItems(contractId, deal);
+  return (ACKNOWLEDGMENT_SETS[contractId]?.roles ?? []).map((role) => ({
+    role,
+    done: items.filter((i) => initials[initialKey(contractId, i.number, role)]).length,
+    total: items.length,
+  }));
 }

@@ -131,6 +131,21 @@ describe("demo isolation", () => {
       "src/components/lease-to-own/LeaseDemoWorkflow.tsx",
       "src/components/lease-to-own/ContractSuite.tsx",
       "src/components/lease-to-own/ContractDocumentViewer.tsx",
+      "src/components/lease-to-own/ContractFormParts.tsx",
+      "src/components/lease-to-own/RetailInstallmentEditor.tsx",
+      "src/lib/retail-installment.ts",
+      "src/lib/retail-installment-fields.ts",
+      "src/lib/credit-application.ts",
+      "src/lib/credit-application-fields.ts",
+      "src/components/lease-to-own/CreditApplicationEditor.tsx",
+      "src/lib/gps-disclosure.ts",
+      "src/lib/gps-disclosure-fields.ts",
+      "src/components/lease-to-own/GpsDisclosureEditor.tsx",
+      "src/lib/acknowledgments.ts",
+      "src/lib/delivery-checklist.ts",
+      "src/lib/delivery-checklist-fields.ts",
+      "src/components/lease-to-own/AcknowledgmentInitials.tsx",
+      "src/components/lease-to-own/DeliveryChecklistEditor.tsx",
     ]) {
       const imports = readFileSync(file, "utf8")
         .split("\n")

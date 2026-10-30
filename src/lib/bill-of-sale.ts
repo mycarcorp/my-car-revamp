@@ -317,15 +317,29 @@ export const BILL_OF_SALE_LAYOUT: ReadonlyArray<{ page: 1 | 2 | 3; sections: Lay
 // Signature locations
 // ------------------------------------------------------------
 
-export type SignerRole = "buyer" | "co_buyer" | "dealer";
+/** Third Party Owner: owns the vehicle with a Buyer but is NOT obligated to pay (Form 2 only). */
+/** Non-joint applicant spouse: signs only the Wisconsin waiver on Form 3; never a Buyer. */
+export type SignerRole = "buyer" | "co_buyer" | "third_party_owner" | "non_joint_spouse" | "dealer";
+
+/** When a signature line applies. Lines without a condition always apply. */
+export type SignatureCondition =
+  | "co_buyer_included"
+  | "credit_insurance_elected"
+  | "protection_selected"
+  | "third_party_owner"
+  | "assignment_entered"
+  | "joint_credit"
+  | "wisconsin_spouse";
 
 export type SignatureRequirement = {
   id: string;
   role: SignerRole;
   page: number;
   location: string;
-  /** Co-Buyer lines apply only when a Co-Buyer is on the deal. */
-  conditional?: "co_buyer_included";
+  /** Co-Buyer lines apply only when a Co-Buyer is on the deal; see SignatureCondition. */
+  conditional?: SignatureCondition;
+  /** Initials instead of a full signature (e.g. page footers). */
+  mark?: "initials";
 };
 
 /** Where Form 1 is signed. Status, identity, provider and signed-PDF references live per deal. */

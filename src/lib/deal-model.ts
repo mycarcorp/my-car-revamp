@@ -11,6 +11,10 @@
  * are never copied into each other.
  */
 import { parseCents } from "./money";
+import { CREDIT_APPLICATION_FIELD_DEFS } from "./credit-application-fields";
+import { DELIVERY_CHECKLIST_FIELD_DEFS } from "./delivery-checklist-fields";
+import { GPS_DISCLOSURE_FIELD_DEFS } from "./gps-disclosure-fields";
+import { RETAIL_INSTALLMENT_FIELD_DEFS } from "./retail-installment-fields";
 
 export type FieldSource =
   | "application" // entered by the applicant (self-reported)
@@ -22,7 +26,12 @@ export type FieldSource =
   | "demo" // fictional local-demo value
   | "none";
 
-export type FieldKind = "text" | "money" | "date" | "choice" | "boolean";
+/**
+ * "money" is cents or blank. "amount" (Form 2) also records an explicit "N/A"
+ * or "INCL.", so a blank stays unknown instead of silently counting as zero.
+ */
+export type FieldKind =
+  "text" | "money" | "amount" | "percent" | "integer" | "date" | "choice" | "boolean";
 /** Who may change a field. Customers never edit contract fields directly. */
 export type FieldEditor = "staff" | "none";
 
@@ -45,6 +54,9 @@ export type FieldDef = {
   required?: boolean;
   editable?: FieldEditor;
   options?: ReadonlyArray<{ value: string; label: string }>;
+  /** Range for "integer" fields (default 1–999). */
+  min?: number;
+  max?: number;
 };
 
 const party = (prefix: "buyer" | "coBuyer", required: boolean): FieldDef[] => [
@@ -155,6 +167,18 @@ export const DEAL_FIELD_DEFS: readonly FieldDef[] = [
     kind: "text" as const,
   })),
   { key: "asIs", label: '"AS IS" acknowledgment', kind: "boolean" },
+  // Page 3 notice checkboxes (staff mark which apply; wording comes from the approved template).
+  { key: "notice.demonstrator", label: "Demonstrator mileage notice applies", kind: "boolean" },
+  { key: "notice.financing", label: "Financing notice applies", kind: "boolean" },
+  { key: "notice.arbitration", label: "Separate arbitration agreement", kind: "boolean" },
+  // Form 2 — Retail Installment Contract (see retail-installment-fields.ts)
+  ...RETAIL_INSTALLMENT_FIELD_DEFS,
+  // Form 3 — Credit Application (see credit-application-fields.ts)
+  ...CREDIT_APPLICATION_FIELD_DEFS,
+  // Form 4 — GPS Disclosure (see gps-disclosure-fields.ts)
+  ...GPS_DISCLOSURE_FIELD_DEFS,
+  // Form 5 — Delivery Checklist (see delivery-checklist-fields.ts)
+  ...DELIVERY_CHECKLIST_FIELD_DEFS,
 ];
 
 const DEF_BY_KEY = new Map(DEAL_FIELD_DEFS.map((d) => [d.key, d]));
@@ -173,7 +197,12 @@ export type Deal = {
 
 function blankField(def: FieldDef, coBuyerIncluded: boolean): DealField {
   return {
-    value: def.kind === "boolean" ? false : def.kind === "money" ? null : "",
+    value:
+      def.kind === "boolean"
+        ? false
+        : ["money", "amount", "percent", "integer"].includes(def.kind)
+          ? null
+          : "",
     source: "none",
     verified: false,
     editable: def.editable ?? "staff",
@@ -191,11 +220,57 @@ export type DealSourceParty = {
   firstName: string;
   lastName: string;
   email: string;
+  /** The applicant's cell phone from the pre-qualification. */
   phone: string;
   street: string;
   city: string;
   state: string;
   zip: string;
+  /** Credit-application details the pre-qualification already collected (Form 3). */
+  credit?: DealSourceCredit;
+};
+
+/**
+ * Applicant details from mc_lease_applicants. Identity numbers arrive masked
+ * only: the license as its last 4 digits, SSN/ITIN as the secure provider's
+ * status and last 4. A raw SSN or full license number is never part of a deal.
+ */
+export type DealSourceCredit = {
+  dateOfBirth: string;
+  dlLast4: string;
+  dlState: string;
+  dlIssueDate: string;
+  dlExpiryDate: string;
+  ssnStatus: "not_collected" | "pending" | "collected" | "verified" | "failed";
+  ssnLast4: string | null;
+  homePhone: string;
+  unit: string;
+  /** Pre-qualification housing type: rent, own, mortgage, family, military, other. */
+  housingType: string;
+  monthlyHousingCents: number | null;
+  previousAddress: { street: string; city: string; state: string; zip: string } | null;
+  employmentStatus: string;
+  /** False for statuses without an employer (retired, unemployed, other). */
+  hasEmployer: boolean;
+  employerName: string;
+  jobTitle: string;
+  employerPhone: string;
+  monthlyIncomeCents: number | null;
+  yearsAtJob: string;
+  monthsAtJob: string;
+  incomeSource: string;
+  previousEmployment: { employerName: string; employerPhone: string } | null;
+  consents: { creditAuthorization: boolean; applicationCertification: boolean };
+};
+
+/** Pre-qualification housing type → credit application residential status (same meaning only). */
+const RESIDENTIAL_STATUS: Record<string, string> = {
+  rent: "rent",
+  own: "own",
+  mortgage: "own",
+  family: "relatives",
+  military: "other",
+  other: "other",
 };
 
 export type DealSource = {
@@ -268,6 +343,53 @@ export function buildDealFromApplication(src: DealSource): Deal {
     set(`${prefix}.city`, p.city, "application");
     set(`${prefix}.state`, p.state, "application");
     set(`${prefix}.zip`, p.zip, "application");
+    const c = p.credit;
+    if (!c) return;
+    const k = (suffix: string) => `${prefix}.${suffix}`;
+    set(k("dob"), c.dateOfBirth, "application");
+    if (c.dlLast4) {
+      set(k("idType"), "drivers_license", "application");
+      set(k("idLast4"), c.dlLast4, "application");
+    }
+    set(k("idIssuedBy"), c.dlState, "application");
+    set(k("idIssueDate"), c.dlIssueDate, "application");
+    set(k("idExpiryDate"), c.dlExpiryDate, "application");
+    set(k("ssnStatus"), c.ssnStatus, "application", c.ssnStatus === "verified");
+    set(k("ssnLast4"), c.ssnLast4, "application", c.ssnStatus === "verified");
+    set(k("phoneCell"), Boolean(p.phone), "application");
+    set(k("secondPhone"), c.homePhone, "application");
+    set(k("unit"), c.unit, "application");
+    set(k("residentialStatus"), RESIDENTIAL_STATUS[c.housingType] ?? "", "application");
+    set(k("monthlyHousing"), c.monthlyHousingCents, "application");
+    if (c.previousAddress) {
+      set(k("prevStreet"), c.previousAddress.street, "application");
+      set(k("prevCity"), c.previousAddress.city, "application");
+      set(k("prevState"), c.previousAddress.state, "application");
+      set(k("prevZip"), c.previousAddress.zip, "application");
+    }
+    set(k("employmentStatus"), c.employmentStatus, "application");
+    if (c.hasEmployer) {
+      set(k("employer"), c.employerName, "application");
+      set(k("jobTitle"), c.jobTitle, "application");
+      set(k("workPhone"), c.employerPhone, "application");
+      set(k("income"), c.monthlyIncomeCents, "application");
+      const yrs = Number(c.yearsAtJob);
+      const mos = Number(c.monthsAtJob);
+      if (c.yearsAtJob !== "" && Number.isInteger(yrs)) set(k("yearsAtJob"), yrs, "application");
+      if (c.monthsAtJob !== "" && Number.isInteger(mos)) set(k("monthsAtJob"), mos, "application");
+    } else if (c.monthlyIncomeCents !== null) {
+      // No employer: the income is other income attributed to this applicant, never a fake job.
+      const row = prefix === "buyer" ? 1 : 2;
+      set(`credit.otherIncome.${row}.party`, prefix === "buyer" ? "a" : "b", "application");
+      set(`credit.otherIncome.${row}.amount`, c.monthlyIncomeCents, "application");
+      set(`credit.otherIncome.${row}.source`, c.incomeSource || c.employmentStatus, "application");
+    }
+    if (c.previousEmployment) {
+      set(k("prevEmployer"), c.previousEmployment.employerName, "application");
+      set(k("prevEmployerPhone"), c.previousEmployment.employerPhone, "application");
+    }
+    set(k("consentCreditAuthorization"), c.consents.creditAuthorization, "application", true);
+    set(k("consentCertification"), c.consents.applicationCertification, "application", true);
   };
   setParty("buyer", src.buyer);
   if (src.coBuyer) setParty("coBuyer", src.coBuyer);
@@ -313,7 +435,17 @@ export function buildDealFromApplication(src: DealSource): Deal {
 
 export type EditActor = "staff" | "customer";
 
-const isFinancialKey = (key: string) => key.startsWith("line.") || key.startsWith("lineLabel.");
+const FINANCIAL_PREFIXES = [
+  "line.",
+  "lineLabel.",
+  "ric.item.",
+  "ric.schedule.",
+  "ric.contractRate",
+  "ric.postMaturityRate",
+  "ric.addlCharge",
+  "credit.dealer.",
+];
+const isFinancialKey = (key: string) => FINANCIAL_PREFIXES.some((p) => key.startsWith(p));
 
 /** Applies one edit, enforcing who may edit and the financial lock. */
 export function editDealField(
@@ -342,8 +474,42 @@ export function editDealField(
       if (cents < 0) return { deal, error: "Amounts can't be negative." };
       value = cents;
     }
+  } else if (def.kind === "amount") {
+    const text = String(raw).trim();
+    if (text === "") value = null;
+    else if (/^n\/?a$/i.test(text)) value = "N/A";
+    else if (/^incl\.?$/i.test(text)) value = "INCL.";
+    else {
+      const cents = parseCents(text);
+      if (cents === null) return { deal, error: "Enter an amount like 1,250.00, or N/A." };
+      if (cents < 0) return { deal, error: "Amounts can't be negative." };
+      value = cents;
+    }
+  } else if (def.kind === "percent") {
+    const text = String(raw).trim().replace(/%$/, "");
+    if (text === "") value = null;
+    else if (!/^\d{1,2}(\.\d{1,3})?$/.test(text))
+      return { deal, error: "Enter a rate like 12.5 (up to 3 decimals)." };
+    else value = Number(text);
+  } else if (def.kind === "integer") {
+    const text = String(raw).trim();
+    if (text === "") value = null;
+    else if (
+      !/^\d{1,3}$/.test(text) ||
+      Number(text) < (def.min ?? 1) ||
+      Number(text) > (def.max ?? 999)
+    )
+      return {
+        deal,
+        error: `Enter a whole number from ${def.min ?? 1} to ${def.max ?? 999}.`,
+      };
+    else value = Number(text);
   } else if (def.kind === "boolean") value = raw === true;
-  else value = String(raw).slice(0, 200);
+  else if (def.kind === "choice") {
+    value = String(raw);
+    if (value !== "" && !def.options?.some((o) => o.value === value))
+      return { deal, error: "Choose one of the listed options." };
+  } else value = String(raw).slice(0, 200);
   return {
     deal: {
       ...deal,
